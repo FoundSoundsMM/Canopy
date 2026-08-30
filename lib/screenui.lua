@@ -1,10 +1,10 @@
 -- screenui.lua
 -- network / meters / cell / edge / lexicon views. (§5.2-5.4)
 
-local topology = include("woodland/lib/topology")
-local patch = include("woodland/lib/patch")
-local lexicon = include("woodland/lib/lexicon")
-local state = include("woodland/lib/state")
+local topology = include("Woodland/lib/topology")
+local patch = include("Woodland/lib/patch")
+local lexicon = include("Woodland/lib/lexicon")
+local state = include("Woodland/lib/state")
 
 local screenui = {}
 

@@ -15,11 +15,11 @@
 -- build phase 1: topology + patching + grid/screen UI. no audio engine yet
 -- (see docs/woodland-spec.md §9 for the full build order).
 
-local topology = include("woodland/lib/topology")
-local patch = include("woodland/lib/patch")
-local state = include("woodland/lib/state")
-local gridui = include("woodland/lib/gridui")
-local screenui = include("woodland/lib/screenui")
+local topology = include("Woodland/lib/topology")
+local patch = include("Woodland/lib/patch")
+local state = include("Woodland/lib/state")
+local gridui = include("Woodland/lib/gridui")
+local screenui = include("Woodland/lib/screenui")
 
 local g = nil
 local screen_metro, grid_metro

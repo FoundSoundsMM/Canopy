@@ -2,7 +2,7 @@
 -- names, descriptions, per-cell defaults. this is the on-device manual
 -- (§5.4 lexicon view reads straight from here).
 
-local topology = include("woodland/lib/topology")
+local topology = include("Woodland/lib/topology")
 
 local lexicon = {}
 

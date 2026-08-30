@@ -17,8 +17,14 @@ persistence.
 
 ## Install
 
-Copy this folder to `~/dust/code/woodland` on norns (or symlink it), then
-select **woodland** from the norns script menu. A grid is required.
+From Maiden (norns' web REPL):
+
+```
+;install https://github.com/FoundSoundsMM/Woodland
+```
+
+or copy this repo to `~/dust/code/Woodland` by hand. Then select
+**Woodland** from the norns script menu. A grid is required.
 
 ## Controls (current)
 
@@ -38,7 +44,7 @@ select **woodland** from the norns script menu. A grid is required.
 ## Layout
 
 ```
-woodland.lua              entry: init, grid/key/enc handlers, redraw loops
+Woodland.lua              entry: init, grid/key/enc handlers, redraw loops
 lib/
   topology.lua             the map: cell records, coords, types, adjacency
   lexicon.lua               names, descriptions, per-cell defaults

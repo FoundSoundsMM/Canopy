@@ -1,10 +1,10 @@
 -- gridui.lua
 -- grid render + hold/tap patching state machine. (§3, §4.2, §5.1)
 
-local topology = include("woodland/lib/topology")
-local patch = include("woodland/lib/patch")
-local lexicon = include("woodland/lib/lexicon")
-local state = include("woodland/lib/state")
+local topology = include("Woodland/lib/topology")
+local patch = include("Woodland/lib/patch")
+local lexicon = include("Woodland/lib/lexicon")
+local state = include("Woodland/lib/state")
 
 local gridui = {}
 
