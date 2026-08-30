@@ -515,7 +515,7 @@ Every Regrow plays.
 
 | Cell type | E2 = | Range |
 |-----------|------|-------|
-| Voice | — the voice has eight parameters, not one; see the sound page (§5.5) | — |
+| Voice | — the voice has nine parameters, not one; see the sound page (§5.5) | — |
 | T socket | strike hardness (mallet) | 0..1 |
 | P socket | **depth** — how far the cabled fields move this voice | 0..2 |
 | M socket | **balance** — inject into the resonator ↔ bend the body | 0..1 |
@@ -615,20 +615,30 @@ patch cap rather than by the patch. `test/soak.lua` asserts both numbers.
 ```
  KNOCKER                            D
  ─────────────────────────────────────
+ metric gait -- locks to the norns...
  metric     ▐▓▓▓▓▓▓▓░░░░░    1 x beat
  rooted · 1/8              coupling 0.42
  ─────────────────────────────────────
  3 cables   ▸ Trod              +0.80
-             Oak·Trig           -0.40
  ─────────────────────────────────────
  K2+K3 sever   K1+E2 gait
 ```
 
-The second row is whatever that cell type has to say about itself: a D cell's
-rooted/wild and the grid Weather is holding it to; an R cell's cables in and
-out and whether its gate is open; an H cell's hop, links and loss; an F cell's
-current degree in semitones; a C cell's reach and current value; and for
-anything with a sound of its own, the decay row.
+Under the title is a one-line, plain-English gloss of what the cell actually
+does (lexicon.lua's `describe`) — word-wrapped and cut to whatever fits one
+line, since the screen has no room for the full sentence on every type. It is
+there so the numbers underneath it mean something the first time you hold a
+cell you have not held before.
+
+The row below that is whatever the cell type has to say about itself: a D
+cell's rooted/wild and the grid Weather is holding it to; an R cell's cables
+in and out and whether its gate is open; an H cell's hop, links and loss; an F
+cell's current degree in semitones; a C cell's reach and current value; and
+for anything with a sound of its own, the decay row.
+
+The cable list is a one-row window onto `patch.edges_at`, following E1's
+focus rather than showing a fixed slice — the description line above took the
+screen space a second row used to have.
 
 Two cells held → an edge view: both names, one bipolar gain bar, and a short
 description of what actually flows across that edge given the two types.
@@ -640,9 +650,9 @@ draws idle brightness as small bars and says so.
 
 ### 5.5 Screen — the voice sound page
 
-Tapping a voice cell replaces the screen with that voice's eight parameters;
+Tapping a voice cell replaces the screen with that voice's nine parameters;
 tapping it again puts the screen back where it was. `E1` picks one, `E2` moves
-it coarsely and `E3` finely — eight knobs on two encoders would otherwise mean
+it coarsely and `E3` finely — nine knobs on two encoders would otherwise mean
 either a slow encoder or an imprecise one, and a resonator's decay wants to be
 swept across two octaves to find the sound and then moved a hair to make it
 sit. `K3` also closes the page, so you never have to remember which cell you
@@ -652,20 +662,23 @@ without taking the encoders off the patch.
 ```
  OAK                             sound
  ─────────────────────────────────────
- Tune     +0.0 st    Bright      0.50
+ Tune     +0.0 st    Damp        1.10
  ▐▓▓▓▓▓▓░░░░░░       ▐▓▓▓▓▓▓░░░░░░
+ Bend        0.00    Bright      0.50
+ ▐░░░░░░░░░░░░       ▐▓▓▓▓▓▓░░░░░░
  Decay     1.20 s    Drive       0.25
  ▐▓▓▓▓▓▓░░░░░░       ▐▓▓▓░░░░░░░░░
  Body        0.55    Strike      0.16
  ▐▓▓▓▓▓▓░░░░░░       ▐▓▓▓▓░░░░░░░░
- Damp        1.10    Level       0.98
- ▐▓▓▓▓▓▓░░░░░░       ▐▓▓▓▓▓▓▓▓░░░░
+                     Level       0.98
+                     ▐▓▓▓▓▓▓▓▓░░░░
  E1 pick  E2/E3 coarse/fine
 ```
 
 | Row | What it is | Range |
 |-----|-----------|-------|
-| Tune | transposition off the voice's own root | ±24 semitones |
+| Tune | transposition off the voice's own root | +24 / −36 semitones |
+| Bend | a pitch drop fired at the strike, decaying to Tune's pitch over ~60 ms | 0..1 (0 is a no-op) |
 | Decay | resonator ring time | ×0.25 .. ×4 of the voice's default |
 | Body | structure: harmonic ↔ free-free bar | ±0.4 around the voice's own |
 | Damp | frequency-dependent damping exponent | ±0.5 around the voice's own |
@@ -673,6 +686,13 @@ without taking the encoders off the patch.
 | Drive | saturation into the tanh | 0..1 |
 | Strike | mallet position, comb-notching modes with a node there | 0.02 .. 0.5 |
 | Level | the voice's own amplitude | 0 .. 1.4 |
+
+Tune's range is asymmetric on purpose: up still tops out at two octaves, but
+down now reaches three, so Oak's 55 Hz root can fall well under 10 Hz — deep
+enough to sit under a kick rather than just below a bass note. Turn Bend up
+on a voice tuned that low and the strike starts a couple of octaves sharp and
+glides down to it, which is the other half of the 808 kick: the low root
+alone is just a sub tone, the pitch drop on top of it is the "thunk".
 
 Body and Damp sweep *around* each voice's baked-in baseline rather than
 replacing it, so a voice keeps its own character at any setting.
@@ -767,7 +787,7 @@ Woodland/
     exciter.lua             -- S-cell control layer (audio side lives in SC)
     heartwood.lua           -- diffusion lattice
     grove.lua               -- pitch fields: modes, coupling, voice retuning
-    voice.lua               -- voice sockets + the eight-parameter sound page
+    voice.lua               -- voice sockets + the nine-parameter sound page
     gridui.lua              -- grid render + hold/tap state machine
     screenui.lua            -- network / meters / cell / edge / voice views
     bridge.lua              -- engine command wrapper, throttling, meter cache
@@ -881,7 +901,7 @@ end
 
 Graph format: a flat list of `{a_id, b_id, gain, oneway}` plus per-cell
 character values, per-cell rule choices (gait / rule / mode / shape, and the
-rooted and snap flags), and the eight sound-page parameters per voice. Cell ids
+rooted and snap flags), and the nine sound-page parameters per voice. Cell ids
 are stable strings (`"oak.trig"`, `"d.knocker"`, `"r.sedge"`, `"h.warren"`,
 `"f.cuckoo"`, `"c.moon"`) — never coordinates — which is what let the whole
 panel be re-cut at phase 6 without the format changing. The climate's own
@@ -1047,7 +1067,7 @@ Each phase ends in something testable on the device.
 1. **Grid 64.** The layout needs 16x8, and the re-cut needs it more than the
    original did. 128 only.
 2. **Arc.** An arc would be a natural fit for the four attenuverters of a
-   focused cell, or for the eight rows of the sound page. Out of scope for v1?
+   focused cell, or for the nine rows of the sound page. Out of scope for v1?
 3. **Regrow** — seeded patching. It now seeds cell settings as well as cables
    (§4.1), which makes it closer to a "surprise me" button than to a randomiser.
    Cut it if you would rather the patch always be hand-made.

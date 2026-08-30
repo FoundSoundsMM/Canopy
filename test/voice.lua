@@ -1,5 +1,5 @@
 -- build phase 6: the voices as the re-cut left them. the four sockets, the
--- eight-parameter sound page (§5.5), and the O socket -- which is both an
+-- nine-parameter sound page (§5.5), and the O socket -- which is both an
 -- audio tap and a pulse, and is what finally closes voice<->voice feedback.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
@@ -43,11 +43,11 @@ do
         M.topology.get(OAK).type == "voice")
 end
 
-print("\n-- the sound page pushes all eight at init --")
+print("\n-- the sound page pushes all nine at init --")
 do
   local M = fresh(3)
   M.voice.init()
-  check("eight parameters", M.voice.PARAM_COUNT == 8, "#" .. M.voice.PARAM_COUNT)
+  check("nine parameters", M.voice.PARAM_COUNT == 9, "#" .. M.voice.PARAM_COUNT)
   check("decay went out", last(CALLS.voice_decay, function(c) return c.voice == 0 end))
   check("structure went out", last(CALLS.voice_structure, function(c) return c.voice == 0 end))
   check("pitch went out", last(CALLS.voice_pitch, function(c) return c.voice == 0 end))
@@ -69,8 +69,19 @@ do
   check("and the Hz doubles", math.abs(M.grove.hz(OAK) - root * 2) < 1e-6,
         string.format("%.3f Hz", M.grove.hz(OAK)))
   M.state.set_vparam(OAK, "tune", 0)
-  check("all the way down is two octaves", math.abs(M.grove.hz(OAK) - root / 4) < 1e-6,
+  check("all the way down is three octaves", math.abs(M.grove.hz(OAK) - root / 8) < 1e-6,
         string.format("%.3f Hz", M.grove.hz(OAK)))
+end
+
+print("\n-- Bend is a no-op at 0, and reaches the engine when turned up --")
+do
+  local M = fresh(6)
+  M.voice.init()
+  check("Bend defaults to 0", M.state.get_vparam(OAK, "bend", 0) == 0)
+  M.state.set_vparam(OAK, "bend", 0.6)
+  M.voice.nudge(OAK, 2, 0) -- push without moving it, same as an E2/E3 nudge would
+  local c = last(CALLS.voice_bend, function(x) return x.voice == 0 end)
+  check("bend amount forwarded", c and math.abs(c.v - 0.6) < 1e-9, c and c.v)
 end
 
 print("\n-- Body and Damp sweep around each voice's own baseline --")

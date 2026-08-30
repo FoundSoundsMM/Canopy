@@ -101,7 +101,8 @@ Engine_Woodland : CroneEngine {
 				t_choke=0, chokeDepth=0.9, chokeTime=0.25,
 				modIn=0, modBalance=0.5, tapLevel=0.5,
 				fmRatio=2.0, fmDepth=0, noiseTune=0, exciteQ=0.35,
-				glide=0.02, driftDepth=0.06, driftRate=0.07, driftSeed=0;
+				glide=0.02, driftDepth=0.06, driftRate=0.07, driftSeed=0,
+				bendAmt=0;
 
 			var harmonicRatio = [1, 2, 3, 4, 5, 6];
 			var barRatio = [1, 2.756, 5.404, 8.933, 13.34, 18.64];
@@ -158,8 +159,24 @@ Engine_Woodland : CroneEngine {
 			var driftB = SinOsc.kr(driftRate * 0.53, (driftSeed * 2.9) + 1.1);
 			var driftC = LFNoise2.kr((driftRate * 0.83).max(0.001));
 			var drift = ((driftA * 0.5) + (driftB * 0.3) + (driftC * 0.4)) / 1.2;
+
+			// §5.5 Bend: a short pitch drop on top of everything else, fired by
+			// the same t_trig as the strike -- an 808's glide from a couple of
+			// octaves up down to the fundamental, if you turn it up that far.
+			// \exp can't reach a literal 0, so the envelope settles on a floor
+			// close enough to it that the leftover detuning (~0.003 semitones)
+			// is inaudible -- the same trick the M-socket choke envelope below
+			// uses. bendAmt=0 makes the exponent 0 regardless of the envelope,
+			// so this is a no-op until the knob is turned up.
+			var bendTime = 0.06;
+			var bendFloor = 0.001;
+			var bendEnv = EnvGen.ar(Env([1, bendFloor], [bendTime], \exp), t_trig);
+			var bendOctaves = 2;
+			var bendRatio = 2 ** (bendEnv * bendAmt.clip(0, 1) * bendOctaves);
+
 			var freqBase = Lag.kr(freq, glide.clip(0, 4))
-				* (drift * driftDepth).midiratio;
+				* (drift * driftDepth).midiratio
+				* bendRatio;
 
 			// FM: every voice can be frequency-modulated (engine-level -- not
 			// yet a patchable cable). fmDepth=0 is a no-op, so nothing about
@@ -707,6 +724,13 @@ Engine_Woodland : CroneEngine {
 		this.addCommand("voice_pos", "if", { |msg|
 			var v = msg[1].asInteger;
 			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\position, msg[2]) };
+		});
+
+		// voice_bend(voice, amount) -- §5.5 Bend: depth of the strike-triggered
+		// pitch drop, 0..1. see the SynthDef's bendEnv/bendRatio for the shape.
+		this.addCommand("voice_bend", "if", { |msg|
+			var v = msg[1].asInteger;
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\bendAmt, msg[2]) };
 		});
 
 		this.addCommand("voice_drive", "if", { |msg|

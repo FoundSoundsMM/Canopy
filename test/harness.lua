@@ -40,7 +40,7 @@ local function fresh_calls()
     voice_mod = {}, voice_tap = {}, voice_structure = {},
     heart_conductance = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
-    voice_decay = {}, exciter_decay = {},
+    voice_decay = {}, exciter_decay = {}, voice_bend = {},
   }
 end
 CALLS = fresh_calls()
@@ -85,6 +85,8 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.voice_decay, {t = T, voice = a[1], secs = a[2]})
     elseif k == "exciter_decay" then
       table.insert(CALLS.exciter_decay, {t = T, index = a[1], scale = a[2]})
+    elseif k == "voice_bend" then
+      table.insert(CALLS.voice_bend, {t = T, voice = a[1], v = a[2]})
     end
   end
 end})

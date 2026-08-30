@@ -35,8 +35,19 @@ end
 
 -- how far off its root this voice is tuned, in semitones. grove.lua adds
 -- whatever the cabled fields are doing on top of this.
+--
+-- the range is asymmetric: up tops out at two octaves, same as it always
+-- has, but down now reaches three -- Oak's 55 Hz root can fall to well
+-- under 10 Hz, deep enough to sit under a kick rather than just below a
+-- bass note. only the down side moved, so a knob already parked above
+-- centre sounds exactly as it did before.
+voice.TUNE_UP_ST = 24
+voice.TUNE_DOWN_ST = 36
+
 function voice.tune_semitones(id)
-  return (state.get_vparam(id, "tune", 0.5) - 0.5) * 48
+  local v = state.get_vparam(id, "tune", 0.5)
+  local span = (v >= 0.5) and voice.TUNE_UP_ST or voice.TUNE_DOWN_ST
+  return (v - 0.5) * 2 * span
 end
 
 -- the eight, in E1 order --------------------------------------------------
@@ -63,6 +74,18 @@ voice.PARAMS = {
       -- field cabled into the voice's P socket, and only grove knows the
       -- second half of that.
       wl("grove").push_voice_now(id)
+    end,
+  },
+  {
+    -- a short pitch drop on top of Tune, like a struck string starting
+    -- sharp and settling, or (turned all the way up) an 808's own glide
+    -- from a couple of octaves up down to the fundamental. 0 is a no-op --
+    -- Tune alone still gives you the plain pitched hit it always has.
+    key = "bend", label = "Bend", default = 0,
+    get = vp_get("bend", 0), set = vp_set("bend"),
+    text = function(id) return string.format("%.2f", state.get_vparam(id, "bend", 0)) end,
+    push = function(id)
+      bridge.voice_bend(topology.get(id).index - 1, state.get_vparam(id, "bend", 0))
     end,
   },
   {

@@ -77,6 +77,13 @@ function bridge.voice_pos(voice_index, v)
   engine.voice_pos(voice_index, v)
 end
 
+-- §5.5 Bend: a pitch envelope on top of Tune, fired the same instant as the
+-- strike. 0 is a no-op; turned up, the voice starts sharp and glides down
+-- to its tuned pitch over a short, fixed time (see Engine_Woodland.sc).
+function bridge.voice_bend(voice_index, v)
+  engine.voice_bend(voice_index, v)
+end
+
 function bridge.voice_drive(voice_index, v)
   engine.voice_drive(voice_index, v)
 end

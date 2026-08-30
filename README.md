@@ -67,12 +67,21 @@ reach. The shape of what is left is what makes the panel readable.
   flint (click), husk (scrape), tinder (fizz), mire (sub), glim (ping),
   rasp (buzz), cicada (chirr), hail (impacts), reed (breath).
 - **A sound page per voice** (§5.5). Tap a voice cell and the screen
-  becomes eight parameters — Tune, Decay, Body, Damp, Bright, Drive,
+  becomes nine parameters — Tune, Bend, Decay, Body, Damp, Bright, Drive,
   Strike, Level — with `E1` picking one and `E2`/`E3` moving it coarsely
   and finely. Tap it again to go back. The old Grain macro is gone: it
   morphed four of these together behind one knob because there was nowhere
   to put four knobs, and a drum you can only shape through a macro is a
   drum you cannot tune.
+- **Tune reaches lower, and Bend is new.** Tune's down side now spans three
+  octaves instead of two — Oak's root can fall well under 10 Hz — and Bend
+  is a strike-triggered pitch drop, decaying to Tune's pitch over ~60 ms.
+  Bend at 0 is a no-op; turned up on a voice tuned low, it's most of the way
+  to an 808 kick.
+- **Held cells now name themselves.** The cell view prints a one-line,
+  plain-English gloss of what the cell does, right under its name — pulled
+  from `lexicon.lua`'s `describe`, which existed but was never wired into a
+  screen. The numbers below it mean more once you know what they belong to.
 - **A new eighth gait, `figure`** — a bank of sixteen-step patterns on the
   clock (four, backbeat, offbeat, tresillo, son, rumba, bossa, shiko).
   Euclidean gives an even spread of k in n and nothing else; this is where
@@ -122,7 +131,7 @@ or copy this repo to `~/dust/code/Woodland` by hand. Then select
   exciter's envelopes as a ratio. Holding any of a voice's four sockets
   moves that voice's decay, since a socket is part of the voice rather than
   a sound of its own.
-- Tap a **voice** cell: open its sound page. `E1` picks one of eight
+- Tap a **voice** cell: open its sound page. `E1` picks one of nine
   parameters, `E2`/`E3` move it coarsely and finely. Tap the cell again (or
   press `K3`) to go back. Holding the cell shows the same page without
   taking the encoders off the patch.
@@ -168,7 +177,7 @@ lib/
                              and the shared pulse bus everything emits through
   weave.lua                 the twenty R-cell pulse transforms
   climate.lua               the eight C-cell slow modulators
-  voice.lua                 voice sockets + the eight-parameter sound page
+  voice.lua                 voice sockets + the nine-parameter sound page
   exciter.lua               S-cell control layer: lazy alloc, gating, Colour
   heartwood.lua             the diffusion lattice's discrete-event side
   grove.lua                 the pitch fields: modes, coupling, voice retuning
@@ -234,7 +243,7 @@ to actually render audio.
   struck, F↔F converges at positive gain, severing hands the voice back its
   fundamental, and a bare voice still never plays the same pitch twice.
 - `voice.lua` — the four sockets and the dark corners of a cluster, the
-  sound page pushing all eight at init, Tune as a real transposition, Body
+  sound page pushing all nine at init, Tune as a real transposition, Body
   and Damp sweeping around each voice's own baseline, the P socket's depth,
   the O socket answering with a pulse on every strike and resolving to an
   audio tap, and the refractory bounding a self-loop.

@@ -112,7 +112,7 @@ do
         string.format("%.5f vs %.5f", fine, coarse))
 
   enc(1, 1)
-  check("E1 walks the eight", M.state.vparam_focus == 2,
+  check("E1 walks the nine", M.state.vparam_focus == 2,
         tostring(M.state.vparam_focus))
 
   ok, err = pcall(redraw)

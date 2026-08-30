@@ -244,14 +244,31 @@ local function bar(x, y, w, h, frac, lvl)
   end
 end
 
--- §5.5 voice page ---------------------------------------------------------------
--- eight parameters, two columns of four. E1 walks them, E2 moves the one
--- under the cursor coarsely and E3 finely. reached by tapping the voice cell
--- (which keeps it open and gives it the encoders) or by holding it (which
--- shows the same page for as long as you hold, without taking the encoders
--- off the patch).
+-- naive word wrap for the small screen font (~26 chars fit at 128px wide)
+local function wrap(str, max_chars)
+  local lines, line = {}, ""
+  for word in str:gmatch("%S+") do
+    local candidate = (line == "") and word or (line .. " " .. word)
+    if #candidate > max_chars then
+      table.insert(lines, line)
+      line = word
+    else
+      line = candidate
+    end
+  end
+  if line ~= "" then table.insert(lines, line) end
+  return lines
+end
 
-local VP_ROWS = 4
+-- §5.5 voice page ---------------------------------------------------------------
+-- nine parameters, two columns -- five in the first (Tune and Bend are both
+-- pitch, so they sit together), four in the second. E1 walks them, E2 moves
+-- the one under the cursor coarsely and E3 finely. reached by tapping the
+-- voice cell (which keeps it open and gives it the encoders) or by holding
+-- it (which shows the same page for as long as you hold, without taking the
+-- encoders off the patch).
+
+local VP_ROWS = 5
 local VP_COL_X = {2, 66}
 local VP_COL_W = 60
 
@@ -274,9 +291,9 @@ function screenui.draw_voice(id, live)
     local col = (i <= VP_ROWS) and 1 or 2
     local row = ((i - 1) % VP_ROWS)
     local x = VP_COL_X[col]
-    -- 10px rows starting at 20: the fourth bar ends at 54, which leaves the
-    -- hint line at 63 its own space on a 64px panel.
-    local y = 20 + row * 10
+    -- 8px rows starting at 20: the fifth bar ends at 56, which still leaves
+    -- the hint line at 63 its own space on a 64px panel.
+    local y = 20 + row * 8
     local on = (i == focus)
     screen.level(on and 15 or 6)
     screen.move(x, y)
@@ -311,6 +328,17 @@ function screenui.draw_cell(id)
   screen.line(126, 12)
   screen.stroke()
 
+  -- a plain-English line on what this cell actually is, right under the
+  -- title -- everything below it is numbers, and the numbers mean nothing
+  -- until you know that. one line only (the screen has no room for lexicon's
+  -- full sentence on every type), word-wrapped so it never splits mid-word.
+  local desc = lexicon.describe(id)
+  if desc then
+    screen.level(8)
+    screen.move(2, 19)
+    screen.text(wrap(desc, 26)[1])
+  end
+
   -- for a D cell the E2 knob means whatever its current gait says it means,
   -- so the gait names the row and supplies its own units (§4.2) -- and the
   -- same is true one type over for R's rule, F's mode and C's shape.
@@ -328,18 +356,18 @@ function screenui.draw_cell(id)
   local base = state.base_character(id, lo, hi)
   local eff = state.get_character(id, cell, lo, hi)
   screen.level(12)
-  screen.move(2, 22)
+  screen.move(2, 27)
   screen.text(info and info.gait or winfo and winfo.rule or finfo and finfo.mode
               or cinfo and cinfo.shape or (ch and ch.label or "character"))
-  screen.move(126, 22)
+  screen.move(126, 27)
   screen.text_right(info and info.param or winfo and winfo.param
                     or finfo and finfo.param or cinfo and cinfo.param
                     or string.format("%.2f", eff))
-  bar(2, 25, 124, 3, (base - lo) / (hi - lo))
+  bar(2, 30, 124, 3, (base - lo) / (hi - lo))
   if math.abs(eff - base) > 1e-4 then
     -- a single bright pixel where the weather currently has it.
     screen.level(15)
-    screen.pixel(2 + math.floor(124 * util.clamp((eff - lo) / (hi - lo), 0, 1)), 24)
+    screen.pixel(2 + math.floor(124 * util.clamp((eff - lo) / (hi - lo), 0, 1)), 29)
     screen.fill()
   end
 
@@ -349,52 +377,52 @@ function screenui.draw_cell(id)
     local mode = (info.rooted_ok and info.rooted) and "rooted" or "wild"
     mode = mode .. " \xC2\xB7 " .. (info.grid or "free")
     screen.level(12)
-    screen.move(2, 36)
+    screen.move(2, 41)
     screen.text(mode)
-    screen.move(126, 36)
+    screen.move(126, 41)
     screen.text_right(string.format("coupling %.2f", info.energy))
-    bar(2, 39, 124, 3, info.phase or 0, 6)
+    bar(2, 44, 124, 3, info.phase or 0, 6)
   elseif winfo then
     -- an R cell has nothing of its own to show -- it is silent until spoken
     -- to -- so what the row reads out is its place in the chain: how much
     -- reaches it, how many ways out it has, and whether its gate is open.
     screen.level(12)
-    screen.move(2, 36)
+    screen.move(2, 41)
     screen.text(string.format("%d in \xC2\xB7 %d out", winfo.ins, winfo.outs))
-    screen.move(126, 36)
+    screen.move(126, 41)
     screen.text_right(winfo.open and "open" or "shut")
   elseif hinfo then
     -- conductance is one knob standing for two quantities (§2.5), so the row
     -- under it reads out both, and the bar is what is actually still moving
     -- around the lattice rather than anything the player set.
     screen.level(12)
-    screen.move(2, 36)
+    screen.move(2, 41)
     screen.text(string.format("%.0f ms hop \xC2\xB7 %d links",
                               hinfo.hop * 1000, hinfo.links))
-    screen.move(126, 36)
+    screen.move(126, 41)
     screen.text_right(string.format("loss %.2f", 1 - hinfo.loss))
-    bar(2, 39, 124, 3, hinfo.charge, 6)
+    bar(2, 44, 124, 3, hinfo.charge, 6)
   elseif finfo then
     -- where the field is *right now*, in semitones off the root, and the bar
     -- is its position across the whole range rather than anything set: the
     -- point of an F cell is that it is somewhere different every time you look.
     screen.level(12)
-    screen.move(2, 36)
+    screen.move(2, 41)
     screen.text(string.format("%+.2f st \xC2\xB7 %d voice%s",
                               finfo.degree, finfo.voices,
                               finfo.voices == 1 and "" or "s"))
-    screen.move(126, 36)
+    screen.move(126, 41)
     screen.text_right(finfo.snap and "snapped" or "free")
-    bar(2, 39, 124, 3, util.clamp((finfo.pos + 1) / 2, 0, 1), 6)
+    bar(2, 44, 124, 3, util.clamp((finfo.pos + 1) / 2, 0, 1), 6)
   elseif cinfo then
     -- a climate cell's value is the whole of what it is, so it gets the bar,
     -- centred: half-full is "doing nothing right now".
     screen.level(12)
-    screen.move(2, 36)
+    screen.move(2, 41)
     screen.text(string.format("reaches %d", cinfo.reaches))
-    screen.move(126, 36)
+    screen.move(126, 41)
     screen.text_right(string.format("%+.2f", cinfo.value))
-    bar(2, 39, 124, 3, (cinfo.value + 1) / 2, 6)
+    bar(2, 44, 124, 3, (cinfo.value + 1) / 2, 6)
   else
     -- §4.2 E3 with no cable focused. a socket hands the gesture to its voice,
     -- so the row names whose decay is actually moving. a voice can be read
@@ -413,31 +441,31 @@ function screenui.draw_cell(id)
       readout = string.format("x%.2f", exciter.decay_scale(target))
     end
     screen.level(12)
-    screen.move(2, 36)
+    screen.move(2, 41)
     screen.text(label)
     if tcell then
-      screen.move(126, 36)
+      screen.move(126, 41)
       screen.text_right(readout)
-      bar(2, 39, 124, 3, d)
+      bar(2, 44, 124, 3, d)
     end
   end
 
   screen.level(4)
-  screen.move(2, 44)
-  screen.line(126, 44)
+  screen.move(2, 49)
+  screen.line(126, 49)
   screen.stroke()
 
   local edges = patch.edges_at(id)
   local focus = state.get_focus(id)
   screen.level(12)
-  screen.move(2, 50)
+  screen.move(2, 55)
   screen.text(#edges .. " cable" .. (#edges == 1 and "" or "s"))
 
-  -- §5.3 draws three cable rows, but only two baselines clear the hint line
-  -- on a 64px screen, so the list is a two-row window that follows E1's focus
-  -- instead of a fixed top-of-list slice -- otherwise focusing cable 3+ would
-  -- attenuvert something you cannot see.
-  local CABLE_ROWS = 2
+  -- §5.3 draws three cable rows, but the description line above now takes
+  -- the vertical room that used to hold a second one, so this is a one-row
+  -- window that follows E1's focus instead of a fixed top-of-list slice --
+  -- otherwise focusing cable 2+ would attenuvert something you cannot see.
+  local CABLE_ROWS = 1
   local first = 1
   if focus > CABLE_ROWS then first = focus - CABLE_ROWS + 1 end
   for row = 0, CABLE_ROWS - 1 do
@@ -445,7 +473,7 @@ function screenui.draw_cell(id)
     local edge = edges[i]
     if not edge then break end
     local other = topology.get(patch.other(edge, id))
-    local y = 50 + row * 6
+    local y = 55 + row * 6
     screen.level(i == focus and 15 or 6)
     screen.move(52, y)
     screen.text((i == focus and "> " or "  ") .. (other and other.name or "?"))
@@ -498,22 +526,6 @@ local function interaction_text(ta, tb)
   local a, b = ta, tb
   if (order[a] or 9) > (order[b] or 9) then a, b = b, a end
   return INTERACTION_DESC[a .. "|" .. b] or "no direct interaction defined"
-end
-
--- naive word wrap for the small screen font (~26 chars fit at 128px wide)
-local function wrap(str, max_chars)
-  local lines, line = {}, ""
-  for word in str:gmatch("%S+") do
-    local candidate = (line == "") and word or (line .. " " .. word)
-    if #candidate > max_chars then
-      table.insert(lines, line)
-      line = word
-    else
-      line = candidate
-    end
-  end
-  if line ~= "" then table.insert(lines, line) end
-  return lines
 end
 
 function screenui.draw_edge(id_a, id_b)
