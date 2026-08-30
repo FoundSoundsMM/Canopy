@@ -45,6 +45,7 @@ local screenui = wl("screenui")
 local bridge   = wl("bridge")
 local voice    = wl("voice")
 local rambler  = wl("rambler")
+local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
 
 -- fixed for now; only the overall wet amount (E1: Canopy) is exposed yet.
 local CANOPY_SIZE = 0.6

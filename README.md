@@ -3,38 +3,41 @@
 A monome norns script for grid (128). Full design in
 [`docs/woodland-spec.md`](docs/woodland-spec.md).
 
-## Status: build phase 3 — "rhythm"
+## Status: build phase 4 — "exciters"
 
 Phase 1 (topology, lexicon, the patch graph, grid render, hold/tap
-patching, the network/cell/edge/lexicon/meters screens) and phase 2 (the
-SC engine: six modal voices per the §8 woodiness recipe, `strike`, the
-Grain macro, Canopy/master level) are done.
+patching, the network/cell/edge/lexicon/meters screens), phase 2 (the SC
+engine: six modal voices per the §8 woodiness recipe, `strike`, the Grain
+macro, Canopy/master level), and phase 3 (all ten D-cell gaits, D↔D
+Kuramoto coupling, the 2 ms scheduler, rooted/wild, Moss chokes) are done.
 
-Phase 3 makes it an instrument that keeps time:
+Phase 4 makes the ten S cells real, and wires them into the rest of the
+patch:
 
-- **All ten gaits.** metric, euclidean, divider, slow, burst, drifter,
-  coincidence, echo, stochastic, accelerando. Seven free-run on a phase;
-  three (divider, echo, coincidence) are purely reactive and only speak
-  when spoken to.
-- **D↔D Kuramoto coupling.** Cabled pulse cells phase-pull each other;
-  positive gain locks in phase, negative gain locks anti-phase. Weather
-  (E2) scales the coupling constant *and* a slow drift on every free
-  rate. This is the whole rhythm engine — there is no step sequencer.
-- **The 2 ms scheduler.** One metro advancing every phase, applying
-  coupling, and draining scheduled taps (burst ratchets, echo repeats).
-- **Rooted vs wild.** Metric and euclidean gaits lock to `clock.get_beats()`
-  exactly rather than integrating a rate, so they stay tight to the
-  transport. `K1` + tap a D cell toggles it.
-- **Moss chokes.** A pulse into a Moss node ducks that voice
-  (`voice_choke`, new in the engine), which is the second of the two
-  things §6 says a pulse can do to a voice node.
-- D cells are now live on the grid: flash 15 on a pulse decaying over
-  ~120 ms, over a base that rises with coupling strength. Pulses render
-  as dots travelling their cables on the network screen.
+- **Ten exciter recipes.** Bracken, Gorse, Ember, Windfall, Mistle, Wisp,
+  Hollow, Drizzle, Loam, Beck — each its own SC SynthDef per the §2.4
+  table, not one shared macro. Lazily allocated: an S cell only runs
+  while it has at least one cable (`exciter.lua`).
+- **D → S gating.** An S cell free-runs until a D cell is cabled to it;
+  once it is, the exciter goes silent between pulses and fires a short
+  grain on each one (§2.4's "man with red steam" move).
+- **The audio-rate patch matrix.** A generic pair of SC synths
+  (`\wl_patch_aa`, `\wl_patch_ak`) realise the continuous half of the §6
+  matrix: S → Sap injects a stream audio-rate into a voice's resonator,
+  S → Sway bends pitch↔structure, S → Moss sets damping↔brightness, and
+  S↔S cross-modulates colour. Driven by the patch graph, not a per-tick
+  loop — a synth is added/freed/re-gained only when a cable actually
+  changes (`dispatch.resync_matrix`).
+- **Sap/Sway/Moss's own E2** (injection level, bend depth/balance, damping
+  curve) now forwards to the engine (`voice.lua`), separate from Moss's
+  existing pulse-choke path.
+- **Colour** (E2 on an S cell) forwards live, same shape as Grain.
 
-Not yet built: S-cell audio and the audio-rate patch matrix, the
-heartwood lattice, voice↔voice feedback, the metering back-channel,
-PARAMS/PSET persistence.
+Not yet built: node *outputs* (Sway's amplitude-envelope tap, Moss's
+spectral centroid, Sap's audio tap for voice↔voice feedback — so
+node↔node cables and the "S↔S also modulates level" half of §6 are still
+no-ops), the heartwood lattice, voice↔voice feedback itself, the metering
+back-channel, PARAMS/PSET persistence.
 
 ## Install
 
@@ -76,16 +79,19 @@ lib/
   state.lua                 shared runtime UI state
   gridui.lua                grid render + hold/tap state machine
   screenui.lua              network / cell / edge / lexicon / meters views
-  dispatch.lua              §6 type-interaction matrix (the pulse half)
+  dispatch.lua              §6 type-interaction matrix: pulse events (D->
+                             Knock/Moss/S) and the continuous patch matrix
+                             (S<->S, S<->Sap/Sway/Moss)
   rambler.lua               all ten D-cell gaits + the coupling scheduler
-  voice.lua                 voice state: forwards Grain to the engine
+  voice.lua                 voice state: Grain + Sap/Sway/Moss's own E2
+  exciter.lua               S-cell control layer: lazy alloc, gating, Colour
   bridge.lua                Lua-side wrapper around the engine commands
-  Engine_Woodland.sc        SC: six modal voices, strike, choke, canopy
+  Engine_Woodland.sc        SC: six modal voices, ten exciters, patch matrix
 test/
   run.sh                    offline test run (needs `lua`, no hardware)
 ```
 
-(`exciter.lua` and `heartwood.lua` land in later phases.)
+(`heartwood.lua` lands in a later phase.)
 
 ## A note on `include`
 
@@ -106,11 +112,15 @@ sh test/run.sh
 Stubs norns (`util`, `clock`, `metro`, `screen`, `grid`, `engine`) and
 drives the scheduler on a virtual clock, so gait rates, clock rooting,
 Kuramoto locking, Still, and runaway-resistance on a densely cross-patched
-graph are all checkable on a laptop. `smoke.lua` loads `Woodland.lua`
-itself and exercises every screen view and control. `perf.lua` reports
-what the 2 ms tick costs — cheap on a dev machine, but the CM3 is the
-budget that matters, so re-check it there if the scheduler ever feels
-like the thing making the UI stutter.
+graph are all checkable on a laptop. `exciter.lua` (the test, not the lib
+of the same name) checks lazy alloc/off, D-cable gating, Colour
+forwarding, and that the patch matrix resolves cables to the right SC bus
+numbers and cleans up on removal — all against the stubbed `engine.*`
+call log, since there's no SC to actually render audio here. `smoke.lua`
+loads `Woodland.lua` itself and exercises every screen view and control.
+`perf.lua` reports what the 2 ms tick costs — cheap on a dev machine, but
+the CM3 is the budget that matters, so re-check it there if the scheduler
+ever feels like the thing making the UI stutter.
 
 The `.sc` engine still needs SuperCollider to compile it; there is no SC
 install in the dev environment, so Maiden's compile log is the first

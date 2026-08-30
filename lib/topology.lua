@@ -105,12 +105,16 @@ local S_CELLS = {
   {id = "beck",     x = 5,  y = 6, source = "burble",  counterpart = "bracken"},
 }
 
-for _, s in ipairs(S_CELLS) do
+for i, s in ipairs(S_CELLS) do
   local id = "s." .. s.id
   local name = s.id:sub(1, 1):upper() .. s.id:sub(2)
+  -- index is this cell's channel in the engine's exciter bus block AND its
+  -- position in Engine_Woodland.sc's `excDefs` array -- the two lists must
+  -- stay in the same order (they do: both follow the §2.4 table).
   reg("S", id, name, {{s.x, s.y}}, {
     source = s.source,
     counterpart = "s." .. s.counterpart,
+    index = i - 1,
   })
 end
 

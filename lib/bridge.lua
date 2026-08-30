@@ -8,6 +8,23 @@
 
 local bridge = {}
 
+-- offsets into Engine_Woodland.sc's single 38-channel `patchBus` (see the
+-- classvar block at the top of that file). dispatch.lua resolves a cabled
+-- pair's endpoints to {bus name, per-cell index} and calls bridge.bus() to
+-- get the absolute number patch_add/patch_gain/patch_free expect. keep the
+-- base/n pairs here identical to the .sc file's excBase/excInBase/etc.
+bridge.BUS = {
+  exc        = {base = 0,  n = 10}, -- S cell raw outputs
+  exc_in     = {base = 10, n = 6},  -- per-voice Sap injection sum
+  sway       = {base = 16, n = 6},  -- per-voice Sway stream sum
+  moss       = {base = 22, n = 6},  -- per-voice Moss stream sum
+  colour_mod = {base = 28, n = 10}, -- per-S colour cross-mod sum
+}
+
+function bridge.bus(name, index)
+  return bridge.BUS[name].base + index
+end
+
 function bridge.strike(voice_index, force, hardness, position)
   engine.strike(voice_index, force, hardness, position)
 end
@@ -48,6 +65,57 @@ end
 -- only says when, how deep, and for how long.
 function bridge.voice_choke(voice_index, depth, time)
   engine.voice_choke(voice_index, depth, time)
+end
+
+-- §2.2 stream-modulation half of Sap/Sway/Moss (as opposed to the
+-- pulse-choke path voice_choke covers): each node's own E2 character.
+function bridge.voice_sap(voice_index, level)
+  engine.voice_sap(voice_index, level)
+end
+
+function bridge.voice_sway(voice_index, balance)
+  engine.voice_sway(voice_index, balance)
+end
+
+function bridge.voice_moss(voice_index, curve)
+  engine.voice_moss(voice_index, curve)
+end
+
+-- §2.4 exciter cells: lazy on/off, Colour (E2), the gated flag (has this S
+-- cell got an incoming D cable?), and the D->S grain trigger itself.
+function bridge.exciter_on(index)
+  engine.exciter_on(index)
+end
+
+function bridge.exciter_off(index)
+  engine.exciter_off(index)
+end
+
+function bridge.exciter_colour(index, v)
+  engine.exciter_colour(index, v)
+end
+
+function bridge.exciter_gated(index, flag)
+  engine.exciter_gated(index, flag and 1 or 0)
+end
+
+function bridge.exciter_gate(index, dur, amp)
+  engine.exciter_gate(index, dur, amp)
+end
+
+-- §7.3/§8 generic audio-rate patch matrix. `src`/`dst` are absolute
+-- patchBus numbers -- callers build them with bridge.bus(). `kind` is "aa"
+-- (straight pass) or "ak" (amplitude-follow into the target).
+function bridge.patch_add(id, kind, src, dst, gain)
+  engine.patch_add(id, kind, src, dst, gain)
+end
+
+function bridge.patch_gain(id, gain)
+  engine.patch_gain(id, gain)
+end
+
+function bridge.patch_free(id)
+  engine.patch_free(id)
 end
 
 function bridge.canopy(size, damp, mix)
