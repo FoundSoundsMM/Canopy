@@ -12,14 +12,24 @@
 -- K1+K2 (hold): Regrow — seeded random patch.
 -- K1+K3 (hold): Clearing — cut every cable.
 --
--- build phase 1: topology + patching + grid/screen UI. no audio engine yet
+-- build phase 2: the SC engine's six modal voices + strike, with Knocker
+-- (the one D cell whose gait is implemented so far) driving them from Lua.
 -- (see docs/woodland-spec.md §9 for the full build order).
+
+engine.name = "Woodland"
 
 local topology = include("Woodland/lib/topology")
 local patch = include("Woodland/lib/patch")
 local state = include("Woodland/lib/state")
 local gridui = include("Woodland/lib/gridui")
 local screenui = include("Woodland/lib/screenui")
+local bridge = include("Woodland/lib/bridge")
+local voice = include("Woodland/lib/voice")
+local rambler = include("Woodland/lib/rambler")
+
+-- fixed for now; only the overall wet amount (E1: Canopy) is exposed yet.
+local CANOPY_SIZE = 0.6
+local CANOPY_DAMP = 0.5
 
 local g = nil
 local screen_metro, grid_metro
@@ -128,10 +138,12 @@ function enc(n, d)
   if gridui.on_norns_enc(n, d, keystate) then return end
   if n == 1 then
     state.global.canopy = util.clamp(state.global.canopy + d / 500, 0, 1)
+    bridge.canopy(CANOPY_SIZE, CANOPY_DAMP, state.global.canopy)
   elseif n == 2 then
     state.global.weather = util.clamp(state.global.weather + d / 500, 0, 1)
   elseif n == 3 then
     state.global.level = util.clamp(state.global.level + d / 500, 0, 1)
+    bridge.master_level(state.global.level)
   end
 end
 
@@ -152,10 +164,16 @@ function init()
     if g then gridui.grid_redraw(g) end
   end, 1 / 30, -1)
   grid_metro:start()
+
+  voice.init()
+  bridge.canopy(CANOPY_SIZE, CANOPY_DAMP, state.global.canopy)
+  bridge.master_level(state.global.level)
+  rambler.start()
 end
 
 function cleanup()
   if screen_metro then screen_metro:stop() end
   if grid_metro then grid_metro:stop() end
+  rambler.stop()
   cancel_confirm()
 end

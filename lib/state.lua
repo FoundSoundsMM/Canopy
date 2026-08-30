@@ -59,6 +59,16 @@ function state.get_character2(id)
   return state.character2[id]
 end
 
+-- fires when a cell's primary character (E2) changes, so voice.lua etc. can
+-- forward the new value to the engine without gridui knowing about audio.
+state._character_listeners = {}
+function state.on_character_change(fn)
+  table.insert(state._character_listeners, fn)
+end
+function state.notify_character_change(id)
+  for _, fn in ipairs(state._character_listeners) do fn(id) end
+end
+
 function state.is_held(id)
   for _, hid in ipairs(state.held) do
     if hid == id then return true end

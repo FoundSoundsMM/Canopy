@@ -119,6 +119,7 @@ function gridui.on_norns_enc(n, d, keystate)
       local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
       local v = state.get_character(id, cell, lo, hi)
       state.character[id] = util.clamp(v + delta * (hi - lo), lo, hi)
+      state.notify_character_change(id)
     end
   elseif n == 3 then
     local delta = d / 100
