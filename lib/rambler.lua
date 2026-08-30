@@ -304,7 +304,7 @@ end
 -- per hop is inaudible, and it makes runaway impossible by construction rather
 -- than by a depth counter.
 
-local PULSE_CELL = {D = true, R = true}
+local PULSE_CELL = topology.PULSE_TYPES
 local out_cache = {}
 
 local function build_out_links(id)
@@ -325,10 +325,6 @@ end
 
 function rambler.out_links(id)
   return out_cache[id] or build_out_links(id)
-end
-
-function rambler.is_pulse_cell(cell)
-  return cell and PULSE_CELL[cell.type] or false
 end
 
 local function rebuild_links()
@@ -418,30 +414,33 @@ function rambler.emit_from(id, weight, only, except)
 
   -- `eligible` counts only the cables this pulse may leave by, so `only`
   -- indexes the same list hocket asked out_degree() about.
-  local function send(link)
-    if link.pulse then
-      if #inbox < MAX_SCHEDULED then
-        table.insert(inbox, {
-          id = link.id,
-          w = weight * math.abs(link.edge.gain),
-          -- sign is carried separately: a reactive cell wants the magnitude,
-          -- but a phase nudge has to respect §3's "negative gain ... pulse
-          -- coupling becomes repulsion" the same way the Kuramoto term does.
-          sign = link.edge.gain < 0 and -1 or 1,
-          src = id,
-        })
-      end
-    else
-      dispatch.on_pulse(id, link.id, link.edge, weight)
-    end
-    rambler.trail(id, link.id, now)
-    sent = sent + 1
-  end
-
+  --
+  -- written flat rather than with a `send` helper closure: this runs on every
+  -- pulse of every cell, and a closure per emission is real garbage to collect
+  -- on a CM3 for no benefit.
   for _, link in ipairs(links) do
     if link.id ~= except then
       eligible = eligible + 1
-      if (not only) or only == eligible then send(link) end
+      if (not only) or only == eligible then
+        if link.pulse then
+          if #inbox < MAX_SCHEDULED then
+            table.insert(inbox, {
+              id = link.id,
+              w = weight * math.abs(link.edge.gain),
+              -- sign is carried separately: a reactive cell wants the
+              -- magnitude, but a phase nudge has to respect §3's "negative
+              -- gain ... pulse coupling becomes repulsion" the same way the
+              -- Kuramoto term does.
+              sign = link.edge.gain < 0 and -1 or 1,
+              src = id,
+            })
+          end
+        else
+          dispatch.on_pulse(id, link.id, link.edge, weight)
+        end
+        rambler.trail(id, link.id, now)
+        sent = sent + 1
+      end
     end
   end
   return sent, eligible

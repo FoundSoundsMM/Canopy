@@ -108,9 +108,12 @@ local function rebuild_links()
           -- `pulse` means the far end has a phase or a rule of its own (a D
           -- or an R cell), so what emerges there has to go through rambler's
           -- inbox rather than straight down dispatch, or a D->H->D loop would
-          -- recurse where a D->D one does not.
+          -- recurse where a D->D one does not. asked of topology, not of
+          -- rambler: this runs at load time, and rambler is mid-load when it
+          -- does -- wl() memoises only on return, so reaching for it here
+          -- would re-enter this file through a second copy of rambler.
           table.insert(n.out_links, {
-            id = other, edge = edge, pulse = wl("rambler").is_pulse_cell(ocell),
+            id = other, edge = edge, pulse = topology.is_pulse_cell(ocell),
           })
         end
       end

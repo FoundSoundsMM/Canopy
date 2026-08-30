@@ -32,6 +32,58 @@ local function cell_xy(x, y)
   return OX + (x - 1) * PITCH + PITCH / 2, OY + (y - 1) * PITCH + PITCH / 2
 end
 
+-- batching -------------------------------------------------------------------
+--
+-- everything on the network view is a dot at a brightness, and there are a lot
+-- of them: 92 cells, up to a few hundred cable dots, and up to 48 pulse dots.
+-- drawn one at a time -- level, shape, fill, level, shape, fill -- that is
+-- ~600 screen commands a frame, and about 120 of them are cairo *paint* calls,
+-- which is what actually costs. At 15 fps that fills matron's screen queue
+-- faster than it drains, and a full queue blocks the Lua thread: the screen
+-- stops updating and the front panel stops responding while the grid, on its
+-- own callback, carries on -- which is exactly what it looks like from the
+-- outside.
+--
+-- so points are bucketed by brightness and painted once per distinct level:
+-- the same picture in ~12 paint calls instead of ~120.
+--
+-- the bucket tables are reused across frames. rebuilding sixteen of them at
+-- 15 fps is pointless garbage on a CM3, and this is the hot path.
+
+local bucket = {}
+for i = 0, 15 do bucket[i] = {n = 0} end
+
+local function plot(lvl, x, y)
+  lvl = math.floor(lvl)
+  if lvl < 1 then return end          -- level 0 paints nothing
+  if lvl > 15 then lvl = 15 end
+  local b = bucket[lvl]
+  local n = b.n
+  b[n + 1] = math.floor(x)
+  b[n + 2] = math.floor(y)
+  b.n = n + 2
+end
+
+-- `w`/`h` nil draws single pixels; otherwise a rect of that size centred on
+-- the plotted point. empties the buckets as it goes.
+local function flush(w, h)
+  for lvl = 15, 1, -1 do
+    local b = bucket[lvl]
+    local n = b.n
+    if n > 0 then
+      screen.level(lvl)
+      if w then
+        local ox, oy = w / 2, h / 2
+        for i = 1, n, 2 do screen.rect(b[i] - ox, b[i + 1] - oy, w, h) end
+      else
+        for i = 1, n, 2 do screen.pixel(b[i], b[i + 1]) end
+      end
+      screen.fill()
+      b.n = 0
+    end
+  end
+end
+
 -- network view --------------------------------------------------------------
 
 -- cables are drawn dim and dotted. at full brightness and solid, a patch of
@@ -42,10 +94,22 @@ end
 -- with the dots twice as far apart, so you read it as a thinner connection
 -- rather than a different kind of drawing.
 local CABLE_MAX_LEVEL = 5
-local DOT_SPACING = 2.6
-local DOT_SPACING_NEG = 5.0
+local DOT_SPACING = 4.0
+local DOT_SPACING_NEG = 7.0
+local ONEWAY_LEVEL = 8
+
+-- the total number of cable dots is budgeted rather than left to the patch:
+-- 64 cables at one dot every four pixels is over a thousand, and the whole
+-- point of drawing them dim is that they are the least important thing here.
+-- a big patch gets fewer dots per cable, which also reads better -- a wall of
+-- dots is no more legible than a wall of lines was.
+local DOT_BUDGET = 320
 
 local function draw_cables()
+  local cables = patch.count()
+  if cables == 0 then return end
+  local per_cable = util.clamp(math.floor(DOT_BUDGET / cables), 3, 14)
+
   for _, edge in pairs(patch.edges) do
     local ca, cb = topology.get(edge.a), topology.get(edge.b)
     if ca and cb then
@@ -54,54 +118,70 @@ local function draw_cables()
       local dx, dy = bx - ax, by - ay
       local dist = math.sqrt(dx * dx + dy * dy)
       local spacing = (edge.gain < 0) and DOT_SPACING_NEG or DOT_SPACING
-      local n = math.floor(dist / spacing)
-      if n > 1 then
-        screen.level(1 + math.floor(math.abs(edge.gain) * (CABLE_MAX_LEVEL - 1)))
-        -- the endpoints themselves are left alone: the cell's own dot is
-        -- supposed to be the brightest thing at that coordinate.
-        for i = 1, n - 1 do
-          local t = i / n
-          screen.pixel(math.floor(ax + dx * t), math.floor(ay + dy * t))
-        end
-        screen.fill()
-        if edge.oneway then
-          -- one brighter dot three quarters of the way along: enough to read
-          -- the direction, not enough to become an arrow made of five pixels.
-          screen.level(CABLE_MAX_LEVEL + 3)
-          screen.pixel(math.floor(ax + dx * 0.72), math.floor(ay + dy * 0.72))
-          screen.fill()
-        end
+      -- the dots stay evenly spaced *within* a cable; a long one just spreads
+      -- its allowance further apart rather than getting a denser line.
+      local n = util.clamp(math.floor(dist / spacing), 2, per_cable)
+      local lvl = 1 + math.floor(math.abs(edge.gain) * (CABLE_MAX_LEVEL - 1))
+      -- the endpoints themselves are left alone: the cell's own dot is
+      -- supposed to be the brightest thing at that coordinate.
+      for i = 1, n - 1 do
+        local t = i / n
+        plot(lvl, ax + dx * t, ay + dy * t)
       end
+      if edge.oneway then
+        -- one brighter dot three quarters of the way along: enough to read
+        -- the direction, not enough to become an arrow made of five pixels.
+        plot(ONEWAY_LEVEL, ax + dx * 0.72, ay + dy * 0.72)
+      end
+    end
+  end
+  flush()
+end
+
+-- the meters view's bar height is a function of its level, so it gets its own
+-- flush rather than the shared one.
+local function flush_meters()
+  for lvl = 15, 1, -1 do
+    local b = bucket[lvl]
+    local n = b.n
+    if n > 0 then
+      screen.level(lvl)
+      local h = 1 + math.floor((lvl / 15) * 4)
+      for i = 1, n, 2 do screen.rect(b[i] - 2, b[i + 1] + 2 - h, 4, h) end
+      screen.fill()
+      b.n = 0
     end
   end
 end
 
 local function draw_cells(meters_mode)
+  -- voices are squares and everything else is a dot, so they are two passes;
+  -- within each pass every cell at the same brightness is painted together.
   for id, cell in topology.each() do
-    for _, c in ipairs(cell.coords) do
-      local x, y = cell_xy(c[1], c[2])
-      local lvl
-      if meters_mode then
-        -- real meter data arrives with bridge.lua (§7.4); idle brightness stands in for now
-        local degree = patch.degree(id)
-        lvl = cell.type == "voice" and 4 or (degree > 0 and 8 or 3)
-      else
-        lvl = state.is_held(id) and 15 or (cell.type == "voice" and 8 or 4)
-      end
-      screen.level(lvl)
-      if cell.type == "voice" then
-        screen.rect(x - 2, y - 2, 4, 4)
-        screen.fill()
-      elseif meters_mode then
-        local h = 1 + math.floor((lvl / 15) * 4)
-        screen.rect(x - 2, y + 2 - h, 4, h)
-        screen.fill()
-      else
-        screen.pixel(x, y)
-        screen.fill()
+    if cell.type ~= "voice" then
+      for _, c in ipairs(cell.coords) do
+        local x, y = cell_xy(c[1], c[2])
+        if meters_mode then
+          -- real meter data arrives with bridge.lua (§7.4); idle brightness
+          -- stands in for now
+          plot(patch.degree(id) > 0 and 8 or 3, x, y)
+        else
+          plot(state.is_held(id) and 15 or 4, x, y)
+        end
       end
     end
   end
+  if meters_mode then flush_meters() else flush() end
+
+  for id, cell in topology.each() do
+    if cell.type == "voice" then
+      for _, c in ipairs(cell.coords) do
+        local x, y = cell_xy(c[1], c[2])
+        plot(meters_mode and 4 or (state.is_held(id) and 15 or 8), x, y)
+      end
+    end
+  end
+  flush(4, 4)
 end
 
 -- §5.2 "pulses render as a dot travelling the line". rambler.trails is a
@@ -110,6 +190,7 @@ end
 -- themselves are dim, the travelling dots are what the network view is for.
 local function draw_trails()
   local now = util.time()
+  local any = false
   for _, tr in ipairs(rambler.trails) do
     local age = now - tr.t
     if age >= 0 and age < rambler.TRAIL_LIFE then
@@ -118,12 +199,12 @@ local function draw_trails()
         local ax, ay = cell_xy(ca.coords[1][1], ca.coords[1][2])
         local bx, by = cell_xy(cb.coords[1][1], cb.coords[1][2])
         local f = age / rambler.TRAIL_LIFE
-        screen.level(15)
-        screen.rect(ax + (bx - ax) * f - 1, ay + (by - ay) * f - 1, 2, 2)
-        screen.fill()
+        plot(15, ax + (bx - ax) * f, ay + (by - ay) * f)
+        any = true
       end
     end
   end
+  if any then flush(2, 2) end
 end
 
 function screenui.draw_network()

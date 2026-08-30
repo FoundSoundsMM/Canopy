@@ -586,6 +586,18 @@ Pulses render as a bright dot travelling the line. Now that the cables are dim,
 those dots are what the view is *for*. Bottom line: the most recent event, with
 the tempo and the Weather tag in the corner.
 
+**Everything on this view is bucketed by brightness and painted once per
+level.** Drawn a dot at a time — level, shape, fill, level, shape, fill — the
+map plus its cables is around six hundred screen commands a frame, a couple of
+hundred of them cairo *paint* calls. At 15 fps that fills matron's screen queue
+faster than it drains, and a full queue blocks the Lua thread: the screen stops
+updating and the front panel stops responding, while the grid — its own
+callback, its own metro — carries on, so the script looks alive and the norns
+looks broken. Bucketed, the same picture costs about sixteen paint calls. The
+number of cable dots is budgeted too (they are shared out across however many
+cables exist, evenly spaced within each), so the frame cost is bounded by the
+patch cap rather than by the patch. `test/soak.lua` asserts both numbers.
+
 ```
     ▪ ▪▪▪▪▪▪▪▪▪▪ ▪
   ▪[O]▪ ··········  ▪[H]▪

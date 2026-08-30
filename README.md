@@ -88,8 +88,12 @@ reach. The shape of what is left is what makes the panel readable.
   cell and edge views, at the moment you are holding the thing it is about.
 - **The network view's cables are dim and dotted.** At full brightness and
   solid, twenty cables is a ball of wool. An inverting cable is drawn with
-  the dots twice as far apart. The travelling pulse dots stay bright —
-  they are what the view is for.
+  the dots further apart. The travelling pulse dots stay bright — they are
+  what the view is for. Everything on that view is bucketed by brightness and
+  painted once per level, so the whole frame is ~16 cairo paint calls at the
+  64-cable cap rather than ~250; the per-frame command count is asserted in
+  `test/soak.lua`, because overrunning it wedges matron's screen queue and
+  takes the front panel down with it.
 
 Not yet built: the metering back-channel (§7.4 — so the meters view is
 still idle brightness, and continuous audio-rate cell response is not lit),
@@ -236,6 +240,13 @@ to actually render audio.
   audio tap, and the refractory bounding a self-loop.
 - `smoke.lua` — loads `Woodland.lua` itself and exercises every screen
   view, the sound page, and every control.
+- `soak.lua` — the same, but against a *strict* norns stub: `screen`, `util`
+  and `clock` expose only the functions norns actually has, so calling one it
+  doesn't is an error rather than a silent no-op. Redraws from every state
+  (all 92 cells held one at a time, all 130 type pairs held in twos, both
+  views with a live patch), 4000 random gestures with the scheduler running,
+  and the per-frame screen command and paint budgets. This is the test that
+  catches "the screen died but the grid still works".
 - `perf.lua` — what the 2 ms tick costs. Cheap on a dev machine, but the
   CM3 is the budget that matters, so re-check it there if the scheduler
   ever feels like the thing making the UI stutter.

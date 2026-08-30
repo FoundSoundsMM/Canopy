@@ -334,6 +334,17 @@ function topology.node_ids_for_voice(voice_id)
   return out
 end
 
+-- the types that carry a pulse of their own -- a phase (D) or a rule (R).
+-- traffic between two of them is deferred a scheduler tick so a cycle in the
+-- patch cannot recurse, which rambler.lua and heartwood.lua both need to know
+-- about. it lives here because it is a fact about the map, and putting it in
+-- rambler would mean heartwood reaching into the scheduler mid-load.
+topology.PULSE_TYPES = {D = true, R = true}
+
+function topology.is_pulse_cell(cell)
+  return (cell and topology.PULSE_TYPES[cell.type]) and true or false
+end
+
 topology.ROLE_ORDER = ROLE_ORDER
 topology.GRID_W = 16
 topology.GRID_H = 8
