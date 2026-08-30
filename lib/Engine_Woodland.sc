@@ -32,8 +32,11 @@ Engine_Woodland : CroneEngine {
 
 	// §2.4 exciter table, in the same order as topology.lua's S_CELLS list --
 	// index i here IS the S cell's `index` field on the Lua side. flat array,
-	// no nesting, to stay clear of the bug noted above.
-	classvar excDefs = [
+	// no nesting, to stay clear of the bug noted above -- and `#[` on the
+	// outermost bracket, because sclang's grammar only accepts a *literal*
+	// on the right of a classvar `=`. a bare `[...]` here is a parse error
+	// that takes the whole class library down with it.
+	classvar excDefs = #[
 		\wl_exc_bracken, \wl_exc_gorse, \wl_exc_ember, \wl_exc_windfall,
 		\wl_exc_mistle, \wl_exc_wisp, \wl_exc_hollow, \wl_exc_drizzle,
 		\wl_exc_loam, \wl_exc_beck
@@ -101,7 +104,10 @@ Engine_Woodland : CroneEngine {
 			// (hardness -> 1) = brighter, shorter burst.
 			var burstDur = 0.008 - (hardness.clip(0, 1) * 0.006);
 			var bpFreq = 800 + (hardness.clip(0, 1) * 5200);
-			var env = EnvGen.kr(Env.perc(0.0003, burstDur), t_trig);
+			// .ar, not .kr: burstDur is 2-8 ms and a control period is ~1.3 ms
+			// at norns' block size, so a kr envelope quantises the whole burst
+			// to one or two steps and `hardness` stops shortening it at all.
+			var env = EnvGen.ar(Env.perc(0.0003, burstDur), t_trig);
 			var exc = BPF.ar(WhiteNoise.ar(1), bpFreq, 0.35) * env * force;
 			var totalExc = exc + (extExc * sapLevel);
 
@@ -172,10 +178,16 @@ Engine_Woodland : CroneEngine {
 		// in `colourModIn`, the other half of "S<->S: each modulates the
 		// other's colour" (§6) -- the "and level" half of that sentence is
 		// not implemented; two S cells only cross-modulate colour for now.
+		//
+		// InFeedback, not In: the colour-mod buses are written by \wl_patch_ak
+		// synths in gPatch, which runs AFTER gSrc, and In.ar returns silence
+		// for a bus nothing has touched yet this cycle. S<->S is a genuine
+		// feedback path round the node order, so it has to read last cycle's
+		// block -- with plain In.ar the cross-modulation is a permanent no-op.
 
 		SynthDef(\wl_exc_bracken, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var bp = BPF.ar(WhiteNoise.ar(1), 500 + (c * 4000), 0.5);
 			var crackle = Decay2.ar(Dust.ar(15 + (c * 45)), 0.001, 0.02) * WhiteNoise.ar(1);
 			var sig = (bp * 0.6) + (crackle * 0.5);
@@ -184,14 +196,14 @@ Engine_Woodland : CroneEngine {
 
 		SynthDef(\wl_exc_gorse, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var sig = BPF.ar(WhiteNoise.ar(1), 3500 + (c * 5000), 0.06);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_ember, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(4 + (c * 40));
 			var sig = Decay2.ar(trig, 0.0005, 0.03 + (c * 0.05)) * WhiteNoise.ar(1);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
@@ -199,7 +211,7 @@ Engine_Woodland : CroneEngine {
 
 		SynthDef(\wl_exc_windfall, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(2 + (c * 10));
 			var genv = EnvGen.ar(Env.perc(0.001, 0.04 + (c * 0.08)), trig);
 			var sig = BPF.ar(WhiteNoise.ar(1), 900 + (c * 3000), 0.3) * genv * 2;
@@ -208,7 +220,7 @@ Engine_Woodland : CroneEngine {
 
 		SynthDef(\wl_exc_mistle, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(1 + (c * 4));
 			var fenv = EnvGen.ar(Env([1800 + (c * 1500), 3200 + (c * 2000), 2200], [0.02, 0.06], \exp), trig);
 			var aenv = EnvGen.ar(Env.perc(0.005, 0.09), trig);
@@ -221,21 +233,21 @@ Engine_Woodland : CroneEngine {
 		// can sum and gate the same way as the other nine.
 		SynthDef(\wl_exc_wisp, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var sig = K2A.ar(LFNoise1.kr(0.3 + (c * 2)).range(-1, 1));
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_hollow, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var sig = CombL.ar(PinkNoise.ar(1), 0.3, 0.05 + (c * 0.2), 3 + (c * 5));
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_drizzle, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(1 + (c * 8));
 			var tail = Decay2.ar(trig, 0.001, 0.15 + (c * 0.3)) * PinkNoise.ar(1);
 			var sig = BPF.ar(tail, 2000, 0.6) * 3;
@@ -244,14 +256,14 @@ Engine_Woodland : CroneEngine {
 
 		SynthDef(\wl_exc_loam, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var sig = LPF.ar(BrownNoise.ar(1), 80 + (c * 500));
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_beck, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
-			var c = (colour + In.ar(colourModIn, 1)).clip(0, 1);
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var cutoff = SinOsc.kr(0.1 + (c * 0.4)).range(300, 1200 + (c * 1500));
 			var sig = RLPF.ar(PinkNoise.ar(1), cutoff, 0.25);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);

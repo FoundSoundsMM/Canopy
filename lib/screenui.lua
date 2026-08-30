@@ -210,12 +210,22 @@ function screenui.draw_cell(id)
   screen.move(2, 50)
   screen.text(#edges .. " cable" .. (#edges == 1 and "" or "s"))
 
-  for i, edge in ipairs(edges) do
-    if i > 3 then break end
+  -- §5.3 draws three cable rows, but only two baselines clear the hint line
+  -- on a 64px screen (the third landed at y=71, off the panel entirely, and
+  -- the second collided with the hint). so the list is a two-row window that
+  -- follows E1's focus instead of a fixed top-of-list slice -- otherwise
+  -- focusing cable 3+ would attenuvert something you cannot see.
+  local CABLE_ROWS = 2
+  local first = 1
+  if focus > CABLE_ROWS then first = focus - CABLE_ROWS + 1 end
+  for row = 0, CABLE_ROWS - 1 do
+    local i = first + row
+    local edge = edges[i]
+    if not edge then break end
     local other = topology.get(patch.other(edge, id))
-    local y = 50 + i * 7
+    local y = 50 + row * 6
     screen.level(i == focus and 15 or 6)
-    screen.move(6, y)
+    screen.move(52, y)
     screen.text((i == focus and "> " or "  ") .. (other and other.name or "?"))
     screen.move(126, y)
     screen.text_right(string.format("%+.2f", edge.gain))
