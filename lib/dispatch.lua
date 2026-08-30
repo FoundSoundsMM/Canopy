@@ -13,9 +13,14 @@
 -- exists, so there is no per-pulse Lua work -- only "does this synth exist
 -- and does its gain match", checked whenever patch.lua reports a change.
 --
--- H is still unbuilt, so every H pair is a no-op; node<->node and Sap/Sway/
--- Moss's own *outputs* need a follower/analyser tap this codebase doesn't
--- have yet, so those stay no-ops too (see the comment above specs_for).
+-- build phase 5 adds H to both halves: a pulse cabled into a heartwood node
+-- enters the lattice and diffuses (`on_pulse`), and a stream cabled to one
+-- is injected into / tapped out of the lattice's audio side
+-- (`resync_matrix`). the lattice's own walk lives in heartwood.lua.
+--
+-- node<->node and Sap/Sway/Moss's own *outputs* need a follower/analyser tap
+-- this codebase doesn't have yet, so those stay no-ops (see the comment
+-- above specs_for).
 --
 -- both halves fall through silently for pairs with no handler.
 
@@ -23,6 +28,7 @@ local topology = wl("topology")
 local state    = wl("state")
 local bridge   = wl("bridge")
 local patch    = wl("patch")
+local heartwood = wl("heartwood")
 
 local dispatch = {}
 
@@ -68,7 +74,16 @@ HANDLERS["S"] = function(source_id, target_id, edge, weight)
   bridge.exciter_gate(cell.index, DEFAULT_GATE_DUR, amp)
 end
 
+-- -> H: "pulse enters the lattice and diffuses" (§6). heartwood.lua walks it
+-- from there; everything this has to decide is where it goes in and how hard.
+HANDLERS["H"] = function(source_id, target_id, edge, weight)
+  local w = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
+  heartwood.inject(target_id, w, source_id)
+end
+
 -- fires when `source_id` (a D cell) wraps and has a cable to `target_id`.
+-- also the path a pulse *emerging* from the lattice takes, with the H node
+-- standing in for the D cell as the source.
 function dispatch.on_pulse(source_id, target_id, edge, weight)
   local target = topology.get(target_id)
   if not target then return end
@@ -89,6 +104,8 @@ end
 
 local NODE_BUS = {sap = "exc_in", sway = "sway", moss = "moss"}
 
+-- S -> a voice node: the stream lands on whichever of that voice's three
+-- summing inputs the node's role owns. Knock has none (it is pulse-only).
 local function s_to_node_spec(s, node, gain)
   local bus = NODE_BUS[node.role]
   if not bus then return nil end
@@ -101,25 +118,114 @@ local function s_to_node_spec(s, node, gain)
   }
 end
 
+-- H -> a voice node: "lattice returns to the node" (§6). the other half of
+-- that sentence -- "node injects into the lattice" -- needs a tap on the
+-- node's out, which does not exist yet, so for now the lattice only speaks.
+local function h_to_node_spec(h, node, gain)
+  local bus = NODE_BUS[node.role]
+  if not bus then return nil end
+  local voice = topology.get(node.voice)
+  return {
+    kind = "aa",
+    src = bridge.bus("heart_out", h.index),
+    dst = bridge.bus(bus, voice.index - 1),
+    gain = gain,
+  }
+end
+
+-- an H<->H cable is a second path between two points that already sit in one
+-- lattice, so its gain rides on top of the ring's own. held well under unity:
+-- heart_out -> heart_in closes a loop *outside* \wl_heartwood's own
+-- normalisation, and the ring is already tuned to sit just short of
+-- self-oscillation at full conductance.
+local SHORTCUT_GAIN = 0.7
+
+local function h_to_h_specs(a, b, edge, out)
+  local function link(from, to)
+    table.insert(out, {
+      kind = "aa",
+      src = bridge.bus("heart_out", from.index),
+      dst = bridge.bus("heart_in", to.index),
+      gain = edge.gain * SHORTCUT_GAIN,
+    })
+  end
+  link(a, b)
+  -- a one-way shortcut is a genuinely different object from a two-way one:
+  -- it makes the lattice directional, which the ring itself never is.
+  if not edge.oneway then link(b, a) end
+end
+
+-- S <-> H: "stream diffuses through the lattice" (§6). read androgynously,
+-- like S<->S above -- the source feeds the lattice, and what the lattice
+-- makes of it comes back as colour on the exciter.
+local function s_to_h_specs(s, h, edge, out)
+  table.insert(out, {
+    kind = "aa",
+    src = bridge.bus("exc", s.index),
+    dst = bridge.bus("heart_in", h.index),
+    gain = edge.gain,
+  })
+  table.insert(out, {
+    kind = "ak",
+    src = bridge.bus("heart_out", h.index),
+    dst = bridge.bus("colour_mod", s.index),
+    gain = edge.gain,
+  })
+end
+
 local function specs_for(edge)
   local a, b = topology.get(edge.a), topology.get(edge.b)
   local out = {}
 
-  if a.type == "S" and b.type == "S" then
+  -- the matrix is symmetric in the endpoints, so each pair is written once
+  -- and `ordered` finds it whichever way round the cable was drawn.
+  local function ordered(ta, tb)
+    if a.type == ta and b.type == tb then return a, b end
+    if b.type == ta and a.type == tb then return b, a end
+    return nil
+  end
+
+  local x, y
+
+  x, y = ordered("S", "S")
+  if x then
     table.insert(out, {
-      kind = "ak", src = bridge.bus("exc", a.index),
-      dst = bridge.bus("colour_mod", b.index), gain = edge.gain,
+      kind = "ak", src = bridge.bus("exc", x.index),
+      dst = bridge.bus("colour_mod", y.index), gain = edge.gain,
     })
     table.insert(out, {
-      kind = "ak", src = bridge.bus("exc", b.index),
-      dst = bridge.bus("colour_mod", a.index), gain = edge.gain,
+      kind = "ak", src = bridge.bus("exc", y.index),
+      dst = bridge.bus("colour_mod", x.index), gain = edge.gain,
     })
-  elseif a.type == "S" and b.type == "node" then
-    local spec = s_to_node_spec(a, b, edge.gain)
+    return out
+  end
+
+  x, y = ordered("S", "node")
+  if x then
+    local spec = s_to_node_spec(x, y, edge.gain)
     if spec then table.insert(out, spec) end
-  elseif b.type == "S" and a.type == "node" then
-    local spec = s_to_node_spec(b, a, edge.gain)
+    return out
+  end
+
+  x, y = ordered("S", "H")
+  if x then
+    s_to_h_specs(x, y, edge, out)
+    return out
+  end
+
+  x, y = ordered("H", "node")
+  if x then
+    local spec = h_to_node_spec(x, y, edge.gain)
     if spec then table.insert(out, spec) end
+    return out
+  end
+
+  x, y = ordered("H", "H")
+  if x then
+    -- ordered() may have swapped them; the one-way rule is written in terms
+    -- of the edge's own a/b, so re-derive from those rather than from x/y.
+    h_to_h_specs(topology.get(edge.a), topology.get(edge.b), edge, out)
+    return out
   end
 
   return out

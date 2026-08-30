@@ -15,6 +15,12 @@ local exciter = {}
 local on_state = {}    -- s.id -> true while its exciter synth is running
 local gated_state = {} -- s.id -> true while it has an incoming D cable
 
+-- deliberately D cables only, not "anything that can carry a pulse": the
+-- heartwood can deliver one too, but an S<->H cable's *usual* meaning is the
+-- stream diffusing through the lattice (§6), and gating on it would silence
+-- an exciter the player cabled in expecting to hear it. a pulse emerging from
+-- the lattice into an ungated S cell still fires exciter_gate -- it just
+-- doesn't envelope anything, since the cell is free-running.
 local function has_d_neighbor(id)
   for _, edge in ipairs(patch.edges_at(id)) do
     local other = topology.get(patch.other(edge, id))

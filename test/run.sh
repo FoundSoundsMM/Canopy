@@ -7,5 +7,6 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export ROOT SP="$ROOT/test"
 echo "== rhythm =="; lua "$SP/rhythm.lua"
 echo; echo "== exciter =="; lua "$SP/exciter.lua"
+echo; echo "== heartwood =="; lua "$SP/heartwood.lua"
 echo; echo "== smoke =="; lua "$SP/smoke.lua"
 echo; echo "== perf =="; lua "$SP/perf.lua"

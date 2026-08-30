@@ -14,9 +14,9 @@
 -- K1+K2 (hold): Regrow — seeded random patch.
 -- K1+K3 (hold): Clearing — cut every cable.
 --
--- build phase 3: all ten D-cell gaits, D<->D Kuramoto phase coupling, and
--- the 2ms scheduler. exciters, heartwood and the metering back-channel are
--- still ahead (see docs/woodland-spec.md §9 for the full build order).
+-- build phase 5: the heartwood diffusion lattice, discrete and continuous.
+-- voice<->voice feedback, the metering back-channel and PARAMS/PSET
+-- persistence are still ahead (docs/woodland-spec.md §9 has the build order).
 
 engine.name = "Woodland"
 
@@ -46,6 +46,7 @@ local bridge   = wl("bridge")
 local voice    = wl("voice")
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
+local heartwood = wl("heartwood")
 
 -- fixed for now; only the overall wet amount (E1: Canopy) is exposed yet.
 local CANOPY_SIZE = 0.6
@@ -186,6 +187,7 @@ function init()
   grid_metro:start()
 
   voice.init()
+  heartwood.init()
   bridge.canopy(CANOPY_SIZE, CANOPY_DAMP, state.global.canopy)
   bridge.master_level(state.global.level)
   rambler.start()

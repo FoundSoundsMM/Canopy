@@ -29,7 +29,7 @@ do
   local names, n = {}, 0
   for k in pairs(M) do table.insert(names, k) n = n + 1 end
   table.sort(names)
-  check("all 11 modules memoised, one copy each", n == 11, table.concat(names, ","))
+  check("all 12 modules memoised, one copy each", n == 12, table.concat(names, ","))
 end
 
 -- the whole point of the memo: one graph, seen by everyone

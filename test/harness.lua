@@ -31,6 +31,7 @@ local function fresh_calls()
     exciter_on = {}, exciter_off = {}, exciter_colour = {}, exciter_gated = {}, exciter_gate = {},
     patch_add = {}, patch_gain = {}, patch_free = {},
     voice_sap = {}, voice_sway = {}, voice_moss = {},
+    heart_conductance = {},
   }
 end
 CALLS = fresh_calls()
@@ -63,6 +64,8 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.voice_sway, {t = T, voice = a[1], v = a[2]})
     elseif k == "voice_moss" then
       table.insert(CALLS.voice_moss, {t = T, voice = a[1], v = a[2]})
+    elseif k == "heart_conductance" then
+      table.insert(CALLS.heart_conductance, {t = T, index = a[1], v = a[2]})
     end
   end
 end})
@@ -84,7 +87,8 @@ function fresh(seed)
   CALLS = fresh_calls()
   _woodland_mods = {}
   local M = {}
-  for _, n in ipairs({"topology", "patch", "state", "bridge", "dispatch", "voice", "rambler", "exciter"}) do
+  for _, n in ipairs({"topology", "patch", "state", "bridge", "heartwood",
+                      "dispatch", "voice", "rambler", "exciter"}) do
     M[n] = wl(n)
   end
   return M

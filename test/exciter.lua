@@ -111,7 +111,7 @@ do
   check("both freed on remove", #CALLS.patch_free == 2, #CALLS.patch_free)
 end
 
-print("\n-- node<->node and H pairs are safe no-ops (no taps built yet) --")
+print("\n-- node<->node is still a safe no-op (no node taps built yet) --")
 do
   local M = fresh(1)
   local ok = pcall(function() M.patch.add("oak.sway", "oak.moss", 0.5) end)

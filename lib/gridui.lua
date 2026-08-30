@@ -6,6 +6,7 @@ local patch    = wl("patch")
 local lexicon  = wl("lexicon")
 local state    = wl("state")
 local rambler  = wl("rambler")
+local heartwood = wl("heartwood")
 
 local gridui = {}
 
@@ -169,8 +170,9 @@ end
 -- rendering -----------------------------------------------------------------
 -- §5.1 idle brightness. D cells are live from here on -- they flash 15 on a
 -- pulse and decay over ~120ms, over a base that rises with how strongly the
--- cell is coupled. voice envelopes, S shimmer and lattice energy still need
--- the metering back-channel (§7.4) and stay static for now.
+-- cell is coupled -- and H cells likewise, over a base that rises with how
+-- much energy is still circulating in the lattice. voice envelopes and S
+-- shimmer still need the metering back-channel (§7.4) and stay static.
 
 function gridui.brightness(id, cell)
   if cell.type == "voice" then
@@ -182,7 +184,7 @@ function gridui.brightness(id, cell)
   elseif cell.type == "S" then
     return patch.degree(id) > 0 and 5 or 3
   elseif cell.type == "H" then
-    return 2
+    return heartwood.level(id, 2)
   end
   return 0
 end

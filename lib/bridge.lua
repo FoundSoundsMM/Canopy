@@ -8,7 +8,7 @@
 
 local bridge = {}
 
--- offsets into Engine_Woodland.sc's single 38-channel `patchBus` (see the
+-- offsets into Engine_Woodland.sc's single 54-channel `patchBus` (see the
 -- classvar block at the top of that file). dispatch.lua resolves a cabled
 -- pair's endpoints to {bus name, per-cell index} and calls bridge.bus() to
 -- get the absolute number patch_add/patch_gain/patch_free expect. keep the
@@ -19,6 +19,8 @@ bridge.BUS = {
   sway       = {base = 16, n = 6},  -- per-voice Sway stream sum
   moss       = {base = 22, n = 6},  -- per-voice Moss stream sum
   colour_mod = {base = 28, n = 10}, -- per-S colour cross-mod sum
+  heart_in   = {base = 38, n = 8},  -- per-H lattice injection sum
+  heart_out  = {base = 46, n = 8},  -- per-H lattice emergence tap
 }
 
 function bridge.bus(name, index)
@@ -101,6 +103,13 @@ end
 
 function bridge.exciter_gate(index, dur, amp)
   engine.exciter_gate(index, dur, amp)
+end
+
+-- §2.5 heartwood: per-node conductance (E2 while holding), which sets that
+-- node's hop delay and loss on the continuous side. the discrete side's
+-- copy of the same mapping lives in heartwood.lua.
+function bridge.heart_conductance(index, v)
+  engine.heart_conductance(index, v)
 end
 
 -- §7.3/§8 generic audio-rate patch matrix. `src`/`dst` are absolute

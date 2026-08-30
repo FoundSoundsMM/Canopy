@@ -3,41 +3,48 @@
 A monome norns script for grid (128). Full design in
 [`docs/woodland-spec.md`](docs/woodland-spec.md).
 
-## Status: build phase 4 — "exciters"
+## Status: build phase 5 — "heartwood"
 
 Phase 1 (topology, lexicon, the patch graph, grid render, hold/tap
 patching, the network/cell/edge/lexicon/meters screens), phase 2 (the SC
 engine: six modal voices per the §8 woodiness recipe, `strike`, the Grain
-macro, Canopy/master level), and phase 3 (all ten D-cell gaits, D↔D
-Kuramoto coupling, the 2 ms scheduler, rooted/wild, Moss chokes) are done.
+macro, Canopy/master level), phase 3 (all ten D-cell gaits, D↔D Kuramoto
+coupling, the 2 ms scheduler, rooted/wild, Moss chokes) and phase 4 (the
+ten exciter recipes, D→S gating, the audio-rate patch matrix) are done.
 
-Phase 4 makes the ten S cells real, and wires them into the rest of the
-patch:
+Phase 5 builds the heartwood (§2.5) — "not a bus, a diffusion lattice" —
+and it is the last of the five cell types to become real:
 
-- **Ten exciter recipes.** Bracken, Gorse, Ember, Windfall, Mistle, Wisp,
-  Hollow, Drizzle, Loam, Beck — each its own SC SynthDef per the §2.4
-  table, not one shared macro. Lazily allocated: an S cell only runs
-  while it has at least one cable (`exciter.lua`).
-- **D → S gating.** An S cell free-runs until a D cell is cabled to it;
-  once it is, the exciter goes silent between pulses and fires a short
-  grain on each one (§2.4's "man with red steam" move).
-- **The audio-rate patch matrix.** A generic pair of SC synths
-  (`\wl_patch_aa`, `\wl_patch_ak`) realise the continuous half of the §6
-  matrix: S → Sap injects a stream audio-rate into a voice's resonator,
-  S → Sway bends pitch↔structure, S → Moss sets damping↔brightness, and
-  S↔S cross-modulates colour. Driven by the patch graph, not a per-tick
-  loop — a synth is added/freed/re-gained only when a cable actually
-  changes (`dispatch.resync_matrix`).
-- **Sap/Sway/Moss's own E2** (injection level, bend depth/balance, damping
-  curve) now forwards to the engine (`voice.lua`), separate from Moss's
-  existing pulse-choke path.
-- **Colour** (E2 on an S cell) forwards live, same shape as Grain.
+- **The discrete lattice** (`heartwood.lua`). A pulse cabled into a
+  heartwood node enters the lattice and spreads outward through the ring
+  of 8 and its two chord rungs, hop by hop, emerging from every node it
+  reaches through whatever that node is cabled to — later and quieter the
+  further it has travelled. It rides the same 2 ms tick as the ramblers,
+  and freezes with them under Still.
+- **The continuous lattice** (`\wl_heartwood`). The same eight nodes as an
+  audio-rate feedback delay network, so a *stream* patched into one
+  diffuses the same way a pulse does. Per-node hop delay and loss are read
+  from the same conductance mapping on both sides.
+- **Conductance** (E2 on an H cell) sets that node's hop delay and loss
+  together: a poor conductor is one slow, lossy thud that dies within a
+  hop; a good one is short hops that let energy circulate the ring for a
+  long time. Full conductance sits deliberately just under
+  self-oscillation.
+- **H↔H cables** add a shortcut path across the lattice, on both the pulse
+  and the stream side, and a one-way one makes the lattice directional in
+  a way the ring itself never is.
+- **The rest of §6's H column.** D→H injects, H→D re-enters the rambler
+  inbox (so a D→H→D loop is bounded exactly the way D↔D is), H→Knock
+  strikes, H→S fires a grain, H→Sap/Sway/Moss taps the emergence bus into
+  a voice, S↔H diffuses a stream and gets the lattice's colour back.
+- H cells light from lattice energy on the grid, and their cell screen
+  reads out hop, loss and what is still circulating.
 
 Not yet built: node *outputs* (Sway's amplitude-envelope tap, Moss's
-spectral centroid, Sap's audio tap for voice↔voice feedback — so
-node↔node cables and the "S↔S also modulates level" half of §6 are still
-no-ops), the heartwood lattice, voice↔voice feedback itself, the metering
-back-channel, PARAMS/PSET persistence.
+spectral centroid, Sap's audio tap for voice↔voice feedback — so node↔node
+cables, node→lattice, and the "S↔S also modulates level" half of §6 are
+still no-ops), voice↔voice feedback itself, the metering back-channel,
+PARAMS/PSET persistence.
 
 ## Install
 
@@ -57,8 +64,8 @@ or copy this repo to `~/dust/code/Woodland` by hand. Then select
 - Hold a cell + `K1`, tap another: one-way cable.
 - Hold a cell + `K2`+`K3`: sever every cable at that cell.
 - Hold a cell: `E1` selects the focused cable, `E2` is its character
-  parameter, `E3` is the focused cable's gain (or the cell's trim, when
-  no cable is focused).
+  parameter (an H cell's is its conductance), `E3` is the focused cable's
+  gain (or the cell's trim, when no cable is focused).
 - Hold a D cell + `K1`, turn `E2`: swap its gait.
 - `K1` + tap a D cell (nothing else held): root it to the norns clock, or
   set it wild. Only metric and euclidean have anything to root to.
@@ -79,19 +86,19 @@ lib/
   state.lua                 shared runtime UI state
   gridui.lua                grid render + hold/tap state machine
   screenui.lua              network / cell / edge / lexicon / meters views
-  dispatch.lua              §6 type-interaction matrix: pulse events (D->
-                             Knock/Moss/S) and the continuous patch matrix
-                             (S<->S, S<->Sap/Sway/Moss)
+  dispatch.lua              §6 type-interaction matrix: pulse events (->
+                             Knock/Moss/S/H) and the continuous patch matrix
+                             (S<->S, S<->Sap/Sway/Moss, S<->H, H<->H, H->node)
   rambler.lua               all ten D-cell gaits + the coupling scheduler
   voice.lua                 voice state: Grain + Sap/Sway/Moss's own E2
   exciter.lua               S-cell control layer: lazy alloc, gating, Colour
+  heartwood.lua             the diffusion lattice's discrete-event side
   bridge.lua                Lua-side wrapper around the engine commands
-  Engine_Woodland.sc        SC: six modal voices, ten exciters, patch matrix
+  Engine_Woodland.sc        SC: six modal voices, ten exciters, patch matrix,
+                             the heartwood delay network
 test/
   run.sh                    offline test run (needs `lua`, no hardware)
 ```
-
-(`heartwood.lua` lands in a later phase.)
 
 ## A note on `include`
 
@@ -115,9 +122,15 @@ Kuramoto locking, Still, and runaway-resistance on a densely cross-patched
 graph are all checkable on a laptop. `exciter.lua` (the test, not the lib
 of the same name) checks lazy alloc/off, D-cable gating, Colour
 forwarding, and that the patch matrix resolves cables to the right SC bus
-numbers and cleans up on removal — all against the stubbed `engine.*`
-call log, since there's no SC to actually render audio here. `smoke.lua`
-loads `Woodland.lua` itself and exercises every screen view and control.
+numbers and cleans up on removal — all against the stubbed `engine.*` call
+log, since there's no SC to actually render audio here. `heartwood.lua`
+(the test) injects a pulse at one lattice node and checks it emerges from
+the others later and quieter, that conductance really does span "dies
+within one hop" to "circulates", that an H↔H cable beats the ring to the
+far side, that a D→H→D loop at full conductance stays bounded for 20 s,
+and that Still freezes what is in flight rather than flushing it.
+`smoke.lua` loads `Woodland.lua` itself and exercises every screen view
+and control.
 `perf.lua` reports what the 2 ms tick costs — cheap on a dev machine, but
 the CM3 is the budget that matters, so re-check it there if the scheduler
 ever feels like the thing making the UI stutter.

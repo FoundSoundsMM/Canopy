@@ -19,6 +19,7 @@ local topology = wl("topology")
 local patch    = wl("patch")
 local state    = wl("state")
 local dispatch = wl("dispatch")
+local heartwood = wl("heartwood")
 
 local rambler = {}
 
@@ -325,6 +326,25 @@ function rambler.schedule(r, delay, w)
   table.insert(scheduled, {t = util.time() + delay, r = r, w = w})
 end
 
+-- §5.2's pulse dots. heartwood.lua draws on the same list, so a pulse
+-- crossing the lattice animates exactly like one crossing a D->D cable.
+function rambler.trail(from, to, now)
+  if #rambler.trails >= MAX_TRAILS then return end
+  table.insert(rambler.trails, {from = from, to = to, t = now or util.time()})
+end
+
+-- a pulse arriving from outside the D graph -- today, one emerging from the
+-- heartwood lattice into a cabled D cell. deferred by a tick and delivered
+-- through the same inbox as D<->D traffic, so a D->H->D loop is bounded by
+-- construction in exactly the way a D->D one is.
+function rambler.inject(id, w, src, sign)
+  if not ramblers[id] then return end
+  if #inbox >= MAX_SCHEDULED then return end
+  table.insert(inbox, {
+    id = id, w = util.clamp(w or 1, 0, 1), sign = sign or 1, src = src,
+  })
+end
+
 function rambler.emit(r, weight)
   if emits_this_tick >= MAX_EMITS_PER_TICK then return end
   emits_this_tick = emits_this_tick + 1
@@ -354,9 +374,7 @@ function rambler.emit(r, weight)
     else
       dispatch.on_pulse(r.id, link.id, link.edge, weight)
     end
-    if #rambler.trails < MAX_TRAILS then
-      table.insert(rambler.trails, {from = r.id, to = link.id, t = now})
-    end
+    rambler.trail(r.id, link.id, now)
   end
 
   if #r.out_links > 0 then
@@ -470,6 +488,11 @@ function rambler.tick()
   -- §4.1 Still: gaits freeze, resonators ring out. scheduled taps and queued
   -- D->D traffic freeze with them rather than flushing on resume.
   if state.global.still then return end
+
+  -- 0. the heartwood's in-flight pulses (§2.5). first, so a signal emerging
+  --    from the lattice this tick reaches the inbox in time to be delivered
+  --    in step 2 rather than sitting a whole extra tick.
+  heartwood.tick(now)
 
   -- 1. scheduled taps (burst ratchets, echo repeats)
   if #scheduled > 0 then

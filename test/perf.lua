@@ -18,6 +18,26 @@ bench("modest patch (6 cables)", function(M)
   M.patch.add("d.gabriel", "ash.knock", 0.6)
   M.patch.add("d.shuck", "yew.knock", 0.9)
 end)
+-- the lattice is the one thing that adds work to the tick without a D cell
+-- doing anything, so it gets its own row: eight nodes at full conductance,
+-- every one of them cabled, fed continuously.
+bench("heartwood, full conductance", function(M)
+  local hs = {}
+  for id, c in M.topology.each() do
+    if c.type == "H" then
+      table.insert(hs, id)
+      M.state.character[id] = 1.0
+    end
+  end
+  M.patch.add("d.gabriel", hs[1], 1.0)
+  M.patch.add("d.hunt", hs[5], 1.0)
+  M.patch.add(hs[2], "oak.knock", 0.8)
+  M.patch.add(hs[4], "rowan.knock", 0.8)
+  M.patch.add(hs[6], "yew.knock", 0.8)
+  M.patch.add(hs[8], "s.bracken", 0.8)
+  M.patch.add(hs[1], hs[5], 0.6) -- a shortcut across the ring
+end)
+
 bench("saturated (all 10 D ringed)", function(M)
   local ds = {}
   for id, c in M.topology.each() do if c.type == "D" then table.insert(ds, id) end end

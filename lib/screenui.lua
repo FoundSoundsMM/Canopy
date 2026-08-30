@@ -6,6 +6,7 @@ local patch    = wl("patch")
 local lexicon  = wl("lexicon")
 local state    = wl("state")
 local rambler  = wl("rambler")
+local heartwood = wl("heartwood")
 
 local screenui = {}
 
@@ -162,6 +163,7 @@ function screenui.draw_cell(id)
   -- for a D cell the E2 knob means whatever its current gait says it means,
   -- so the gait names the row and supplies its own units (§4.2).
   local info = (cell.type == "D") and rambler.info(id) or nil
+  local hinfo = (cell.type == "H") and heartwood.info(id) or nil
 
   local ch = lexicon.character(id)
   local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
@@ -189,6 +191,17 @@ function screenui.draw_cell(id)
     screen.move(126, 36)
     screen.text_right(string.format("coupling %.2f", info.energy))
     if info.phased then bar(2, 39, 124, 3, info.phase or 0, 6) end
+  elseif hinfo then
+    -- conductance is one knob standing for two quantities (§2.5), so the row
+    -- under it reads out both, and the bar is what is actually still moving
+    -- around the lattice rather than anything the player set.
+    screen.level(12)
+    screen.move(2, 36)
+    screen.text(string.format("%.0f ms hop \xC2\xB7 %d links",
+                              hinfo.hop * 1000, hinfo.links))
+    screen.move(126, 36)
+    screen.text_right(string.format("loss %.2f", 1 - hinfo.loss))
+    bar(2, 39, 124, 3, hinfo.charge, 6)
   else
     local trim = state.get_trim(id)
     screen.level(12)

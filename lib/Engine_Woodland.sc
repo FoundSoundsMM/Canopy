@@ -5,8 +5,8 @@
 //
 // build phase 4 adds the ten S-cell exciters (§2.4), the generic audio-rate
 // patch matrix (§7.3's \patch_aa / \patch_ak), and the Sap/Sway/Moss stream
-// inputs on the voice synth. heartwood and voice<->voice feedback are still
-// ahead.
+// inputs on the voice synth. build phase 5 adds \wl_heartwood, the continuous
+// half of the §2.5 diffusion lattice. voice<->voice feedback is still ahead.
 
 Engine_Woodland : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
@@ -14,6 +14,7 @@ Engine_Woodland : CroneEngine {
 	var voiceSynths;
 	var excSynths;
 	var patchSynths;
+	var heartSynth;
 	var fxSynth;
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
@@ -49,9 +50,9 @@ Engine_Woodland : CroneEngine {
 	// implemented here as audio buses instead, because Out.kr *overwrites* a
 	// bus each block while Out.ar *adds* to it -- and several cables landing
 	// on the same node's Sway/Moss/Sap input need to sum, not fight. keep
-	// these six numbers in sync with bridge.lua's `bridge.BUS` table.
+	// these eight numbers in sync with bridge.lua's `bridge.BUS` table.
 	classvar excBase = 0, excInBase = 10, swayBase = 16, mossBase = 22,
-		colourModBase = 28, patchTotal = 38;
+		colourModBase = 28, heartInBase = 38, heartOutBase = 46, patchTotal = 54;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -269,6 +270,61 @@ Engine_Woodland : CroneEngine {
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
+		// §2.5 the heartwood. "not a bus. a diffusion lattice." eight nodes,
+		// each one a short delay line that hands what reaches it on to its
+		// neighbours, quieter and later. streams patched into a node arrive on
+		// heartInBase+i; what emerges at a node is on heartOutBase+i, and that
+		// is what a cable out of a heartwood cell taps.
+		//
+		// adjacency duplicates topology.lua's ring-of-8-plus-two-chords, in the
+		// same node order (perimeter, taproot first). the two lists have to
+		// agree; there is no way to check that from this side.
+		//
+		// InFeedback on the injection buses, and LocalIn/LocalOut for the
+		// lattice itself: this synth lives in gSrc, which runs *before* the
+		// gPatch synths that write the injection buses, and the lattice is a
+		// cyclic graph -- there is no node order that makes a ring acyclic. one
+		// block of latency either way, which at 64 samples is inaudible.
+		//
+		// the /2.5 on the pass gain is what keeps the ring stable. each node
+		// sums 2-3 neighbours, so the loop gain around the lattice is roughly
+		// `loss * (mean degree)`; dividing by a little more than the largest
+		// eigenvalue of this particular graph lands full conductance just
+		// under unity -- long circulation, no self-oscillation -- and the tanh
+		// is the backstop for the rest.
+		SynthDef(\wl_heartwood, {
+			arg inBus=0, outBus=0,
+				c0=0.5, c1=0.5, c2=0.5, c3=0.5, c4=0.5, c5=0.5, c6=0.5, c7=0.5;
+
+			var conds = [c0, c1, c2, c3, c4, c5, c6, c7];
+			var hNbr = [
+				[1, 7], [0, 2, 6], [1, 3, 5], [2, 4],
+				[3, 5], [4, 6, 2], [5, 7, 1], [6, 0]
+			];
+			var inj = InFeedback.ar(inBus, 8);
+			var fb = LocalIn.ar(8);
+
+			var emerge = Array.fill(8, { |i|
+				var arriving = hNbr[i].collect({ |j| fb[j] }).sum;
+				LeakDC.ar(inj[i] + arriving).tanh;
+			});
+
+			// what each node passes on: its own signal, delayed and attenuated
+			// by its own conductance. keep this mapping identical to the
+			// HOP_MIN/HOP_MAX and LOSS_MIN/LOSS_MAX pair in heartwood.lua, or
+			// one node's knob will mean two different things to the pulse and
+			// the stream halves of the same lattice.
+			var passed = Array.fill(8, { |i|
+				var c = conds[i].clip(0, 1);
+				var hop = 0.35 - (c * 0.30);
+				var loss = 0.10 + (c * 0.80);
+				DelayC.ar(emerge[i], 0.4, hop) * (loss / 2.5);
+			});
+
+			LocalOut.ar(passed);
+			Out.ar(outBus, emerge);
+		}).add;
+
 		// §7.3's generic audio-rate patch matrix. one synth per live cable
 		// that means something continuous (§6): S -> Sap/Sway/Moss is a
 		// straight pass (\wl_patch_aa); S <-> S colour cross-mod follows the
@@ -302,6 +358,18 @@ Engine_Woodland : CroneEngine {
 
 		excSynths = Array.newClear(10);
 		patchSynths = Dictionary.new;
+
+		// in gSrc, so the emergence buses are already written by the time the
+		// gPatch cables that tap them run this block; the injection buses it
+		// reads are the ones gPatch wrote last block (hence InFeedback above).
+		// unlike the exciters this is not lazily allocated -- it is the wood
+		// itself, it costs eight delay lines, and a lattice that only exists
+		// once something is patched into it cannot ring on after the cable is
+		// pulled, which is precisely the thing §2.5 wants it to do.
+		heartSynth = Synth.new(\wl_heartwood, [
+			\inBus, patchBus.index + heartInBase,
+			\outBus, patchBus.index + heartOutBase
+		], gSrc);
 
 		fxSynth = Synth.new(\woodland_fx, [
 			\busIn, voiceBus.index,
@@ -477,6 +545,16 @@ Engine_Woodland : CroneEngine {
 			};
 		});
 
+		// heart_conductance(index, v) -- §2.5 conductance, E2 on an H cell.
+		// sets that node's hop delay and loss; heartwood.lua applies the same
+		// mapping to the discrete side.
+		this.addCommand("heart_conductance", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < 8 }) {
+				heartSynth.set(("c" ++ i).asSymbol, msg[2]);
+			};
+		});
+
 		this.addCommand("canopy", "fff", { |msg|
 			fxSynth.set(\size, msg[1], \damp, msg[2], \mix, msg[3]);
 		});
@@ -492,6 +570,7 @@ Engine_Woodland : CroneEngine {
 		voiceSynths.do({ |s| if (s.notNil) { s.free } });
 		excSynths.do({ |s| if (s.notNil) { s.free } });
 		patchSynths.do({ |s| if (s.notNil) { s.free } });
+		if (heartSynth.notNil) { heartSynth.free };
 		if (fxSynth.notNil) { fxSynth.free };
 		voiceBus.free;
 		patchBus.free;

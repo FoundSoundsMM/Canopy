@@ -134,8 +134,12 @@ local H_CELLS = {
   {id = "barrow",   x = 7,  y = 5},
 }
 
-for _, h in ipairs(H_CELLS) do
-  reg("H", "h." .. h.id, h.id:sub(1, 1):upper() .. h.id:sub(2), {{h.x, h.y}})
+for i, h in ipairs(H_CELLS) do
+  -- index is this node's slot in the engine's heartwood buses AND its row in
+  -- Engine_Woodland.sc's `hNbr` adjacency table -- the two lists must stay in
+  -- the same order (they do: both follow the perimeter order below).
+  reg("H", "h." .. h.id, h.id:sub(1, 1):upper() .. h.id:sub(2), {{h.x, h.y}},
+      {index = i - 1})
 end
 
 local RING = {"taproot", "mycel", "wyrd", "ley", "hearth", "holloway", "warren", "barrow"}
