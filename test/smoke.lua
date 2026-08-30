@@ -29,7 +29,7 @@ do
   local names, n = {}, 0
   for k in pairs(M) do table.insert(names, k) n = n + 1 end
   table.sort(names)
-  check("all 12 modules memoised, one copy each", n == 12, table.concat(names, ","))
+  check("all 13 modules memoised, one copy each", n == 13, table.concat(names, ","))
 end
 
 -- the whole point of the memo: one graph, seen by everyone
@@ -63,7 +63,7 @@ local ok, err = pcall(function()
   gridobj.key(5, 3, 1); redraw()              -- cell view, a D cell
   gridobj.key(2, 1, 1); redraw()              -- edge view
   gridobj.key(2, 1, 0); gridobj.key(5, 3, 0)
-  for _, id in ipairs({"oak", "oak.sway", "s.beck", "h.wyrd"}) do
+  for _, id in ipairs({"oak", "oak.sway", "s.beck", "h.wyrd", "p.cuckoo"}) do
     local c = M.topology.get(id)
     gridobj.key(c.coords[1][1], c.coords[1][2], 1); redraw()
     gridobj.key(c.coords[1][1], c.coords[1][2], 0)

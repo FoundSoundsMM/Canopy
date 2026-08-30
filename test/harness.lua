@@ -32,6 +32,7 @@ local function fresh_calls()
     patch_add = {}, patch_gain = {}, patch_free = {},
     voice_sap = {}, voice_sway = {}, voice_moss = {},
     heart_conductance = {},
+    voice_pitch = {}, voice_glide = {}, voice_drift = {},
   }
 end
 CALLS = fresh_calls()
@@ -66,6 +67,12 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.voice_moss, {t = T, voice = a[1], v = a[2]})
     elseif k == "heart_conductance" then
       table.insert(CALLS.heart_conductance, {t = T, index = a[1], v = a[2]})
+    elseif k == "voice_pitch" then
+      table.insert(CALLS.voice_pitch, {t = T, voice = a[1], hz = a[2]})
+    elseif k == "voice_glide" then
+      table.insert(CALLS.voice_glide, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_drift" then
+      table.insert(CALLS.voice_drift, {t = T, voice = a[1], depth = a[2], rate = a[3]})
     end
   end
 end})
@@ -88,7 +95,7 @@ function fresh(seed)
   _woodland_mods = {}
   local M = {}
   for _, n in ipairs({"topology", "patch", "state", "bridge", "heartwood",
-                      "dispatch", "voice", "rambler", "exciter"}) do
+                      "grove", "dispatch", "voice", "rambler", "exciter"}) do
     M[n] = wl(n)
   end
   return M

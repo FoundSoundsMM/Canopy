@@ -6,7 +6,9 @@
 // build phase 4 adds the ten S-cell exciters (§2.4), the generic audio-rate
 // patch matrix (§7.3's \patch_aa / \patch_ak), and the Sap/Sway/Moss stream
 // inputs on the voice synth. build phase 5 adds \wl_heartwood, the continuous
-// half of the §2.5 diffusion lattice. voice<->voice feedback is still ahead.
+// half of the §2.5 diffusion lattice. build phase 5b adds the pitch side of
+// §2.6's grove: `glide` and the per-voice detune `drift` on \woodland_voice,
+// driven by voice_glide/voice_drift. voice<->voice feedback is still ahead.
 
 Engine_Woodland : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
@@ -80,7 +82,8 @@ Engine_Woodland : CroneEngine {
 				t_choke=0, chokeDepth=0.9, chokeTime=0.25,
 				excIn=0, swayIn=0, mossIn=0,
 				sapLevel=0.6, swayBalance=0, mossCurve=0.5,
-				fmRatio=2.0, fmDepth=0, noiseTune=0, exciteQ=0.35;
+				fmRatio=2.0, fmDepth=0, noiseTune=0, exciteQ=0.35,
+				glide=0.02, driftDepth=0.06, driftRate=0.07, driftSeed=0;
 
 			var harmonicRatio = [1, 2, 3, 4, 5, 6];
 			var barRatio = [1, 2.756, 5.404, 8.933, 13.34, 18.64];
@@ -119,13 +122,38 @@ Engine_Woodland : CroneEngine {
 			// §8.5: amplitude-dependent pitch drop -- the "thunk" of a hard hit.
 			var pitchDrop = 1 - (force.clip(0, 1) * 0.02);
 
+			// §2.6, the continuous half of the grove. two things happen to
+			// `freq` before it reaches the mode bank:
+			//
+			// `glide` is portamento on whatever pitch Lua last sent, so a
+			// field stepping to a new degree is heard as a move rather than
+			// as a discontinuity in a bank of already-ringing resonators. a
+			// discrete mode asks for ~10 ms (lands on the strike); a
+			// continuous one asks for hundreds (heard as a slide).
+			//
+			// `drift` is the detune wander, and it is generated here rather
+			// than in Lua for the obvious reason: a few cents moving
+			// continuously is far too fine to push over OSC without either
+			// flooding it or stepping audibly. three incommensurate slow
+			// shapes summed, so it never repeats; driftSeed offsets the
+			// phases so no two voices breathe together. driftDepth is in
+			// semitones and defaults to a barely-there 6 cents -- on for
+			// every voice, cabled or not, which is what stops an untouched
+			// patch from repeating one identical note forever.
+			var driftA = SinOsc.kr(driftRate * 0.31, driftSeed * 1.7);
+			var driftB = SinOsc.kr(driftRate * 0.53, (driftSeed * 2.9) + 1.1);
+			var driftC = LFNoise2.kr((driftRate * 0.83).max(0.001));
+			var drift = ((driftA * 0.5) + (driftB * 0.3) + (driftC * 0.4)) / 1.2;
+			var freqBase = Lag.kr(freq, glide.clip(0, 4))
+				* (drift * driftDepth).midiratio;
+
 			// FM: every voice can be frequency-modulated now (engine-level --
 			// not yet a patchable cable). fmDepth=0 is a no-op, so nothing
 			// about the existing sound changes until it's turned up. one
 			// shared modulator ahead of the mode ratios, so all six modes
 			// move together instead of detuning against each other.
-			var fmOsc = SinOsc.ar((freq * fmRatio).max(0.1)) * fmDepth;
-			var freqFM = freq * (1 + fmOsc);
+			var fmOsc = SinOsc.ar((freqBase * fmRatio).max(0.1)) * fmDepth;
+			var freqFM = freqBase * (1 + fmOsc);
 
 			var modeSig = Mix.fill(6, { |i|
 				var n = i + 1;
@@ -431,6 +459,25 @@ Engine_Woodland : CroneEngine {
 		this.addCommand("voice_pitch", "if", { |msg|
 			var v = msg[1].asInteger;
 			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\freq, msg[2]) };
+		});
+
+		// voice_glide(voice, seconds) -- §2.6: portamento on voice_pitch.
+		// grove.lua sends it just ahead of a pitch, and only when it changes.
+		this.addCommand("voice_glide", "if", { |msg|
+			var v = msg[1].asInteger;
+			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\glide, msg[2]) };
+		});
+
+		// voice_drift(voice, depthSemitones, rateHz, seed) -- §2.6: the
+		// always-on detune wander. depth is small by design; grove.lua raises
+		// it a little for voices with a wide field cabled to them.
+		this.addCommand("voice_drift", "ifff", { |msg|
+			var v = msg[1].asInteger;
+			if (v >= 0 and: { v < 6 }) {
+				voiceSynths[v].set(
+					\driftDepth, msg[2], \driftRate, msg[3], \driftSeed, msg[4]
+				);
+			};
 		});
 
 		// grain (§8: "reachable from Grain as a macro plus individually from

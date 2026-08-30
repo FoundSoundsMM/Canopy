@@ -35,6 +35,21 @@ function bridge.voice_pitch(voice_index, hz)
   engine.voice_pitch(voice_index, hz)
 end
 
+-- §2.6 grove: portamento on voice_pitch. a discrete field wants this near
+-- zero so a retune lands on the strike; a continuous one wants it long, so
+-- the voice is heard sliding rather than stepping.
+function bridge.voice_glide(voice_index, seconds)
+  engine.voice_glide(voice_index, seconds)
+end
+
+-- §2.6 grove: the always-on detune wander. `depth` is in semitones, `rate`
+-- in Hz, `seed` only spreads the phase so no two voices breathe in step.
+-- this is the one piece of pitch motion SC generates itself -- a few cents
+-- of continuous drift is far too fine-grained to push over OSC.
+function bridge.voice_drift(voice_index, depth, rate, seed)
+  engine.voice_drift(voice_index, depth, rate, seed)
+end
+
 function bridge.voice_grain(voice_index, v)
   engine.voice_grain(voice_index, v)
 end

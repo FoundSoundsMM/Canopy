@@ -50,6 +50,16 @@ local DESC = {
   ["h.holloway"] = "heartwood node — a chord across the lattice.",
   ["h.warren"]   = "heartwood node — a chord across the lattice.",
   ["h.barrow"]   = "heartwood node — closes the ring back to the taproot.",
+
+  -- grove / P (§2.6)
+  ["p.cuckoo"]   = "call mode — two notes back and forth, never quite the same twice.",
+  ["p.nightjar"] = "drone mode — stays on the root; only the last few cents move.",
+  ["p.curlew"]   = "cascade mode — a descending run, then a leap back to the top.",
+  ["p.bittern"]  = "octave mode — register jumps only; ignores the scale.",
+  ["p.wren"]     = "flutter mode — fast small steps around a wandering centre.",
+  ["p.merlin"]   = "scatter mode — a new degree anywhere in the field, each step.",
+  ["p.plover"]   = "wander mode — no degrees at all; glides continuously.",
+  ["p.raven"]    = "gravity mode — pulled toward the fields it is cabled to.",
 }
 
 local ROLE_DESC = {
@@ -81,6 +91,7 @@ local CHARACTER = {
   D = {label = "rate",       lo = 0, hi = 1, note = "rate / clock relation (gait-dependent)"},
   S = {label = "Colour",     lo = 0, hi = 1, note = "the source's filter/character"},
   H = {label = "Conductance",lo = 0, hi = 1, note = "hop delay and loss"},
+  P = {label = "Range",      lo = 0, hi = 1, note = "how far the field roams"},
 }
 
 function lexicon.character(id)
@@ -94,7 +105,7 @@ end
 
 -- flat, sorted listing for the lexicon screen (§5.4) --------------------
 
-local TYPE_ORDER = {voice = 1, node = 2, D = 3, S = 4, H = 5}
+local TYPE_ORDER = {voice = 1, node = 2, D = 3, S = 4, H = 5, P = 6}
 
 function lexicon.listing()
   local out = {}

@@ -9,12 +9,16 @@
 -- hold two cells together: read/set that edge's gain on E3.
 -- K1 + tap a D cell: root it to the clock, or set it wild.
 -- hold a D cell, K1+E2: swap its gait.
+-- hold a P cell, K1+E2: swap its pitch-field mode.
+-- K1 + tap a P cell: snap its field to the scale, or set it free.
 -- K3: cycle the screen (network -> meters -> lexicon).
 -- K2: freeze the pulse gaits (Still).
 -- K1+K2 (hold): Regrow — seeded random patch.
 -- K1+K3 (hold): Clearing — cut every cable.
 --
 -- build phase 5: the heartwood diffusion lattice, discrete and continuous.
+-- build phase 5b: the grove -- eight P cells, each a wandering pitch field a
+-- voice can be cabled into, plus an always-on per-voice detune drift in SC.
 -- voice<->voice feedback, the metering back-channel and PARAMS/PSET
 -- persistence are still ahead (docs/woodland-spec.md §9 has the build order).
 
@@ -47,6 +51,7 @@ local voice    = wl("voice")
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
 local heartwood = wl("heartwood")
+local grove     = wl("grove")
 
 -- fixed for now; only the overall wet amount (E1: Canopy) is exposed yet.
 local CANOPY_SIZE = 0.6
@@ -188,6 +193,7 @@ function init()
 
   voice.init()
   heartwood.init()
+  grove.init()
   bridge.canopy(CANOPY_SIZE, CANOPY_DAMP, state.global.canopy)
   bridge.master_level(state.global.level)
   rambler.start()

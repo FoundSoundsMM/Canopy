@@ -7,6 +7,7 @@ local lexicon  = wl("lexicon")
 local state    = wl("state")
 local rambler  = wl("rambler")
 local heartwood = wl("heartwood")
+local grove    = wl("grove")
 
 local screenui = {}
 
@@ -164,6 +165,9 @@ function screenui.draw_cell(id)
   -- so the gait names the row and supplies its own units (§4.2).
   local info = (cell.type == "D") and rambler.info(id) or nil
   local hinfo = (cell.type == "H") and heartwood.info(id) or nil
+  -- and a P cell's E2 means whatever its mode says, exactly as a D cell's
+  -- means whatever its gait says (§2.6).
+  local pinfo = (cell.type == "P") and grove.info(id) or nil
 
   local ch = lexicon.character(id)
   local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
@@ -171,9 +175,11 @@ function screenui.draw_cell(id)
   local frac = (v - lo) / (hi - lo)
   screen.level(12)
   screen.move(2, 22)
-  screen.text(info and info.gait or (ch and ch.label or "character"))
+  screen.text(info and info.gait or (pinfo and pinfo.mode)
+              or (ch and ch.label or "character"))
   screen.move(126, 22)
-  screen.text_right(info and info.param or string.format("%.2f", v))
+  screen.text_right(info and info.param or (pinfo and pinfo.param)
+                    or string.format("%.2f", v))
   bar(2, 25, 124, 3, frac)
 
   if info then
@@ -202,6 +208,18 @@ function screenui.draw_cell(id)
     screen.move(126, 36)
     screen.text_right(string.format("loss %.2f", 1 - hinfo.loss))
     bar(2, 39, 124, 3, hinfo.charge, 6)
+  elseif pinfo then
+    -- where the field is *right now*, in semitones off the root, and the bar
+    -- is its position across the whole range rather than anything set: the
+    -- point of a P cell is that it is somewhere different every time you look.
+    screen.level(12)
+    screen.move(2, 36)
+    screen.text(string.format("%+.2f st \xC2\xB7 %d voice%s",
+                              pinfo.degree, pinfo.voices,
+                              pinfo.voices == 1 and "" or "s"))
+    screen.move(126, 36)
+    screen.text_right(pinfo.snap and "snapped" or "free")
+    bar(2, 39, 124, 3, util.clamp((pinfo.pos + 1) / 2, 0, 1), 6)
   else
     local trim = state.get_trim(id)
     screen.level(12)
@@ -246,7 +264,9 @@ function screenui.draw_cell(id)
 
   screen.level(2)
   screen.move(2, 63)
-  screen.text(info and "K2+K3 sever   K1+E2 gait" or "K2+K3 sever")
+  screen.text(info and "K2+K3 sever   K1+E2 gait"
+              or pinfo and "K2+K3 sever   K1+E2 mode"
+              or "K2+K3 sever")
 end
 
 -- edge view (two cells held) -------------------------------------------------
@@ -262,10 +282,15 @@ local INTERACTION_DESC = {
   ["S|S"] = "cross-modulation: each modulates the other's colour and level",
   ["H|S"] = "stream diffuses through the lattice",
   ["H|H"] = "direct link — short-circuits two lattice points",
+  ["node|P"] = "the pitch field tunes this voice; gain sets how far",
+  ["D|P"] = "each pulse steps the field to a new degree",
+  ["S|P"] = "the exciter's colour rides the field's line",
+  ["H|P"] = "a pulse out of the lattice steps the field",
+  ["P|P"] = "the two fields pull together (or apart, at negative gain)",
 }
 
 local function interaction_text(ta, tb)
-  local order = {node = 1, D = 2, S = 3, H = 4}
+  local order = {node = 1, D = 2, S = 3, H = 4, P = 5}
   local a, b = ta, tb
   if (order[a] or 9) > (order[b] or 9) then a, b = b, a end
   return INTERACTION_DESC[a .. "|" .. b] or "no direct interaction defined"

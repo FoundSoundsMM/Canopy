@@ -3,7 +3,7 @@
 A monome norns script for grid (128). Full design in
 [`docs/woodland-spec.md`](docs/woodland-spec.md).
 
-## Status: build phase 5 — "heartwood"
+## Status: build phase 5b — "grove"
 
 Phase 1 (topology, lexicon, the patch graph, grid render, hold/tap
 patching, the network/cell/edge/lexicon/meters screens), phase 2 (the SC
@@ -13,7 +13,7 @@ coupling, the 2 ms scheduler, rooted/wild, Moss chokes) and phase 4 (the
 ten exciter recipes, D→S gating, the audio-rate patch matrix) are done.
 
 Phase 5 builds the heartwood (§2.5) — "not a bus, a diffusion lattice" —
-and it is the last of the five cell types to become real:
+and it is the last of the spec's original five cell types to become real:
 
 - **The discrete lattice** (`heartwood.lua`). A pulse cabled into a
   heartwood node enters the lattice and spreads outward through the ring
@@ -40,6 +40,39 @@ and it is the last of the five cell types to become real:
 - H cells light from lattice energy on the grid, and their cell screen
   reads out hop, loss and what is still circulating.
 
+Phase 5b builds the **grove** (§2.6) — eight new P cells, out of the spec's
+build order and on purpose. Six fixed-pitch resonators is one chord however
+alive the rhythm on top of it is, and that was audible long before feedback
+or metering were.
+
+- **Pitch fields** (`grove.lua`). A P cell is a wandering pitch a voice can be
+  cabled into. Its **mode** is what a gait is to a D cell — the shape of the
+  line, swappable with `K1 + E2` — and E2 is **Range**, how far it travels,
+  logarithmic from a 25-cent shimmer to two octaves, meaning the same thing
+  in every mode.
+- **Three clocks move it.** Every voice a field tunes re-tunes just before it
+  is struck, so *one cable* turns an existing rhythm into a melody with
+  nothing else patched. A D→P or H→P cable steps the field on its own clock
+  instead, so the line need not be locked to the rhythm playing it. And the
+  continuous modes ride the same 2 ms tick as the ramblers, freezing with
+  them under Still.
+- **Snap.** Fields quantise to a minor pentatonic by default; `K1 + tap` sets
+  one free to sit between the notes. Below the smallest interval in the scale
+  a field ignores snap either way — at small Range this is a microtonal
+  detuner, at large Range a melody.
+- **P↔P** is D↔D's Kuramoto term one domain over: positive gain pulls two
+  fields onto a consonance, negative pushes them into contrary motion.
+- **The rest of §6's P column.** P→S makes a pitched exciter's Colour ride the
+  line. A P cell never emits a pulse, which is what makes its column one-way
+  and unable to feed back.
+- **Detune drift** (`\woodland_voice`). Separately from any of that, every
+  voice now carries a continuous few-cents wander generated in SC — three
+  incommensurate slow shapes, per-voice phase offsets — on by default whether
+  or not anything is cabled, and deepened (to a 35-cent ceiling) by a wide
+  field. Plus a per-strike detune of the same order, scaled by Weather: the
+  pitch half of the organic-rhythm wobble dispatch already applies to force
+  and hardness.
+
 Not yet built: node *outputs* (Sway's amplitude-envelope tap, Moss's
 spectral centroid, Sap's audio tap for voice↔voice feedback — so node↔node
 cables, node→lattice, and the "S↔S also modulates level" half of §6 are
@@ -64,11 +97,13 @@ or copy this repo to `~/dust/code/Woodland` by hand. Then select
 - Hold a cell + `K1`, tap another: one-way cable.
 - Hold a cell + `K2`+`K3`: sever every cable at that cell.
 - Hold a cell: `E1` selects the focused cable, `E2` is its character
-  parameter (an H cell's is its conductance), `E3` is the focused cable's
-  gain (or the cell's trim, when no cable is focused).
-- Hold a D cell + `K1`, turn `E2`: swap its gait.
+  parameter (an H cell's is its conductance, a P cell's its range), `E3` is
+  the focused cable's gain (or the cell's trim, when no cable is focused).
+- Hold a D cell + `K1`, turn `E2`: swap its gait. Same gesture on a P cell
+  swaps its pitch-field mode.
 - `K1` + tap a D cell (nothing else held): root it to the norns clock, or
-  set it wild. Only metric and euclidean have anything to root to.
+  set it wild. Only metric and euclidean have anything to root to. Same
+  gesture on a P cell snaps its field to the scale, or sets it free.
 - Nothing held: `E1`/`E2`/`E3` are Canopy/Weather/Level; `K2` toggles
   Still; `K3` cycles Network → Meters → Lexicon (paging through the
   lexicon before advancing).
@@ -93,9 +128,10 @@ lib/
   voice.lua                 voice state: Grain + Sap/Sway/Moss's own E2
   exciter.lua               S-cell control layer: lazy alloc, gating, Colour
   heartwood.lua             the diffusion lattice's discrete-event side
+  grove.lua                 the pitch fields: modes, coupling, voice retuning
   bridge.lua                Lua-side wrapper around the engine commands
   Engine_Woodland.sc        SC: six modal voices, ten exciters, patch matrix,
-                             the heartwood delay network
+                             the heartwood delay network, glide + pitch drift
 test/
   run.sh                    offline test run (needs `lua`, no hardware)
 ```
@@ -129,6 +165,14 @@ the others later and quieter, that conductance really does span "dies
 within one hop" to "circulates", that an H↔H cable beats the ring to the
 far side, that a D→H→D loop at full conductance stays bounded for 20 s,
 and that Still freezes what is in flight rather than flushing it.
+`grove.lua` (the test) checks that a cabled field really does retune a voice
+*before* the strike lands, that Range is what bounds how far it goes, that a
+snapped field lands on scale tones and a freed one does not, that a narrow
+field ignores snap rather than collapsing onto the root, that a pulse steps a
+field with nothing being struck at all, that a P↔P cable converges at positive
+gain and does not at negative, that severing the cable hands the voice back
+its own fundamental, and that a voice with no field at all still never plays
+the same pitch twice.
 `smoke.lua` loads `Woodland.lua` itself and exercises every screen view
 and control.
 `perf.lua` reports what the 2 ms tick costs — cheap on a dev machine, but

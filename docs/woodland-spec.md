@@ -189,6 +189,74 @@ instrument has to a memory.
 Yew's and Alder's Sap/Sway nodes sit directly against the heartwood edge, so
 those two voices are physically rooted into it.
 
+### 2.6 Grove — P (8)
+
+Six fixed-pitch resonators is one chord, however alive the rhythm on top of
+it is. The grove is the answer: eight **pitch fields**, two vertical seams at
+`x=4` and `x=13` flanking the D/S/H core, paired across the same 180° symmetry
+(`x → 17-x`, `y → 9-y`) as the D and S counterparts.
+
+```
+(4,3) Cuckoo    (13,3) Wren
+(4,4) Nightjar  (13,4) Merlin
+(4,5) Curlew    (13,5) Plover
+(4,6) Bittern   (13,6) Raven
+```
+
+| Cell | Name | Default mode | Counterpart |
+|--------|----------|--------------|-------------|
+| (4,3)  | Cuckoo   | call — two notes back and forth, never quite the same twice | Raven |
+| (4,4)  | Nightjar | drone — stays on the root; only the last few cents move | Plover |
+| (4,5)  | Curlew   | cascade — a descending run, then a leap back to the top | Merlin |
+| (4,6)  | Bittern  | octave — register jumps only; ignores the scale | Wren |
+| (13,3) | Wren     | flutter — fast small steps around a wandering centre | Bittern |
+| (13,4) | Merlin   | scatter — a new degree anywhere in the field, each step | Curlew |
+| (13,5) | Plover   | wander — no degrees at all; glides continuously | Nightjar |
+| (13,6) | Raven    | gravity — pulled toward the fields it is cabled to | Cuckoo |
+
+A field is to pitch what a rambler is to rhythm, and the parallel is
+deliberate: the **mode** is the P cell's gait (swappable with `K1 + E2`), and
+a mode only decides the *shape* of the line. How far it travels is E2's
+**Range**, logarithmic from a 25-cent shimmer to two octaves, so Range means
+the same thing in every mode.
+
+**Three clocks move a field**, and they are different on purpose:
+
+1. **A strike.** Every voice a field tunes re-tunes immediately before it is
+   struck. This is the important one: *one cable* turns an existing rhythm
+   into a melody, with no sequencer and nothing else patched.
+2. **A pulse.** A D→P or H→P cable steps the field on its own clock, so the
+   line need not be locked to the rhythm playing it.
+3. **Time.** The continuous modes (wander, gravity) and the P↔P pull run on
+   the 2 ms scheduler, decimated to every 8th tick, and freeze under Still
+   with everything else.
+
+**Snap.** By default a field quantises to a minor pentatonic — with mode banks
+this inharmonic, anything denser stops reading as a scale and starts reading
+as an out-of-tune one. `K1 + tap` a P cell sets it free to sit between the
+notes. A field narrower than the smallest interval in the scale ignores snap
+either way: at small Range this is a microtonal detuner, at large Range it is
+a melody, and quantising the small end would just pin it to the root.
+
+**P↔P** is the pitch counterpart of D↔D's Kuramoto term, on position rather
+than phase: positive gain pulls two fields toward each other (converging on a
+consonance), negative pushes them apart into contrary motion.
+
+**A P cell never emits a pulse.** Its whole output is a number of semitones.
+That is what makes a D→P→Knock chain unable to feed itself, and it is why P
+contributes nothing to the continuous patch matrix — there is no stream to
+route, only `voice_pitch`/`exciter_colour` calls out of `grove.lua`.
+
+**Detune drift.** Separately from all of the above, every voice carries a
+continuous few-cents wander generated in SC (`driftDepth`/`driftRate`, three
+incommensurate slow shapes summed, per-voice phase offsets). It is on by
+default at ~6 cents whether or not anything is cabled — it is why an untouched
+patch no longer repeats one identical note — and cabling a wide field into a
+voice deepens it, to a ceiling of 35 cents. Above that it stops sounding like
+wood and starts sounding out of tune. There is a per-strike detune of the same
+order in `grove.on_strike`, scaled by Weather: the pitch half of §2.3's
+organic-rhythm wobble.
+
 ---
 
 ## 3. Patching grammar
@@ -231,7 +299,7 @@ Constraints: no self-cables; no duplicate edges; a soft cap of 64 cables.
 | E1 | select which cable at this cell is focused (ALL → 1..n) |
 | E2 | the cell's **character** parameter (see below) |
 | E3 | attenuvert — focused cable's gain, or node trim when ALL is selected |
-| K1 + E2 | secondary character parameter (D cells: swap gait) |
+| K1 + E2 | secondary character parameter (D cells: swap gait; P cells: swap mode) |
 | K2 + K3 | sever all cables at this cell |
 
 **E2 per cell type — the one thing that matters about that cell:**
@@ -246,6 +314,7 @@ Constraints: no self-cables; no duplicate edges; a soft cap of 64 cables.
 | D cell | rate / clock relation | gait-dependent |
 | S cell | **Colour** — the source's filter/character | 0..1 |
 | H cell | **Conductance** — hop delay and loss | 0..1 |
+| P cell | **Range** — how far the field roams (25 cents .. 2 octaves) | 0..1 |
 
 Deeper per-voice controls (base pitch, mode count, drive, pan, scale snap) live
 in the norns PARAMS menu, not on the grid.
@@ -263,6 +332,7 @@ in the norns PARAMS menu, not on the grid.
 | D | 3 | flash 15 on pulse, decay ~120 ms; base rises with coupling strength |
 | S | 3 unpatched, 5 patched | flash on a D→S grain firing, decay ~120 ms, weighted by amp; continuous stream-amplitude shimmer still needs the metering back-channel (§7.4) |
 | H | 2 | local lattice energy — signals are visibly seen spreading |
+| P | 2 | where the field currently sits, so a rising line climbs the cell; flash on each step |
 | bezel | 0 | — |
 
 **Patch reveal** — while a cell is held: held cell solid 15; every cell cabled to
@@ -310,7 +380,7 @@ description of what actually flows across that edge given the two types.
 
 ### 5.4 Lexicon view
 
-A scrollable list of all 60 named cells with type, coordinates and a one-line
+A scrollable list of all 68 named cells with type, coordinates and a one-line
 description. This is the manual, on the device.
 
 ---
@@ -320,12 +390,13 @@ description. This is the manual, on the device.
 What a cable *means* is derived from the pair of endpoint types. This table is
 the authority; implement it as a dispatch table, not as branching.
 
-|            | Voice node | D (pulse) | S (exciter) | H (heartwood) |
-|------------|-----------|-----------|-------------|---------------|
-| **Voice node** | audio/CV cross-feed both ways: each node's out feeds the other's in, per role | pulse strikes / chokes the node; node's own event-out resets D's phase | S's stream drives the node; node's follower stream modulates S's colour | node injects into the lattice; lattice returns to the node |
-| **D** | — | mutual phase coupling (Kuramoto) + mutual triggering | D pulse envelopes S into a grain; S stream modulates D's rate | pulse enters the lattice and diffuses |
-| **S** | — | — | cross-modulation: each modulates the other's colour and level | stream diffuses through the lattice |
-| **H** | — | — | — | direct link — short-circuits two lattice points, adds a shortcut path |
+|            | Voice node | D (pulse) | S (exciter) | H (heartwood) | P (grove) |
+|------------|-----------|-----------|-------------|---------------|-----------|
+| **Voice node** | audio/CV cross-feed both ways: each node's out feeds the other's in, per role | pulse strikes / chokes the node; node's own event-out resets D's phase | S's stream drives the node; node's follower stream modulates S's colour | node injects into the lattice; lattice returns to the node | the field tunes this node's voice; gain sets depth, and inverts the contour when negative |
+| **D** | — | mutual phase coupling (Kuramoto) + mutual triggering | D pulse envelopes S into a grain; S stream modulates D's rate | pulse enters the lattice and diffuses | each pulse steps the field to a new degree |
+| **S** | — | — | cross-modulation: each modulates the other's colour and level | stream diffuses through the lattice | the exciter's colour rides the field's line |
+| **H** | — | — | — | direct link — short-circuits two lattice points, adds a shortcut path | a pulse out of the lattice steps the field |
+| **P** | — | — | — | — | the two fields pull together (apart, at negative gain) |
 
 Notes on the awkward pairs:
 
@@ -337,6 +408,8 @@ Notes on the awkward pairs:
   self-damping).
 - **D↔D at negative gain** produces anti-phase locking — the most reliable way
   to get a stable interlocking two-part rhythm.
+- **P is a source only.** A field never emits a pulse and never writes a
+  stream, so its whole column is one-way and nothing in it can feed back.
 
 ---
 
@@ -355,6 +428,7 @@ woodland/
     rambler.lua             -- D-cell gaits + the phase-coupling scheduler
     exciter.lua             -- S-cell control layer (audio side lives in SC)
     heartwood.lua           -- diffusion lattice
+    grove.lua               -- pitch fields: modes, coupling, voice retuning
     voice.lua               -- voice state, param mapping, node roles
     gridui.lua              -- grid render + hold/tap state machine
     screenui.lua            -- network / cell / edge / lexicon views
@@ -366,8 +440,11 @@ woodland/
 ### 7.2 Lua / SC split
 
 **Lua owns:** the patch graph, all pulse generation and coupling, the heartwood
-lattice's discrete-event side, all UI. **SC owns:** every sample of audio, the
-audio-rate patch matrix, and continuous modulation.
+lattice's discrete-event side, the grove's pitch fields, all UI. **SC owns:**
+every sample of audio, the audio-rate patch matrix, and continuous modulation
+— including the per-voice detune drift (§2.6), which is a few cents moving
+continuously and so far too fine-grained to push over OSC without either
+flooding it or stepping audibly.
 
 Pulses are generated in Lua because they must be visualised, coupled, and
 rewired live — all of which are painful in SC. The cost is timing jitter; see
@@ -415,6 +492,9 @@ by `osc.event(path, args)`. Lua caches the array and *decays it locally* between
 messages so the grid stays smooth if a packet is dropped. (Verify the port and
 the SendReply→NetAddr forwarding pattern against the norns version in use;
 `addPoll` is scalar-only and will not carry a 60-element array.)
+
+The 60 is the pre-grove cell count and stays right: a P cell has no audio to
+meter, and its position is already a Lua-side number the grid reads directly.
 
 ### 7.5 Persistence
 
@@ -500,6 +580,7 @@ included here.
 ```
 strike(voice, force, hardness, position)
 voice_pitch(voice, hz)          voice_grain(voice, v)
+voice_glide(voice, seconds)     voice_drift(voice, depth, rate, seed)
 voice_damp(voice, v)            voice_bright(voice, v)
 voice_pos(voice, v)             voice_drive(voice, v)
 voice_amp(voice, v)             voice_modes(voice, n)
@@ -534,6 +615,10 @@ Each phase ends in something testable on the device.
 4. **Exciters.** S cells, the audio-rate patch matrix, control-bus modulation,
    D→S gating.
 5. **Heartwood.** The diffusion lattice, both discrete and continuous paths.
+5b. **Grove.** The eight pitch fields, their modes and coupling, `glide` and
+   the per-voice detune drift in SC. Out of build order deliberately: six
+   fixed-pitch voices made every patch one chord, and that was audible long
+   before feedback or metering were.
 6. **Feedback.** Voice↔Voice via Sap, with limiting and saturation. Tune until
    loops howl musically.
 7. **Life.** Metering back-channel → grid and screen animation.

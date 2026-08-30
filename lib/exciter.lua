@@ -14,6 +14,13 @@ local exciter = {}
 
 local on_state = {}    -- s.id -> true while its exciter synth is running
 local gated_state = {} -- s.id -> true while it has an incoming D cable
+local colour_offset = {} -- s.id -> grove.lua's addition to Colour (§2.6 P<->S)
+
+-- Colour has two writers now -- E2 here, and a cabled pitch field tracking
+-- its line -- so it is summed in one place rather than raced from two.
+local function colour_of(id, cell)
+  return util.clamp(state.get_character(id, cell, 0, 1) + (colour_offset[id] or 0), 0, 1)
+end
 
 -- deliberately D cables only, not "anything that can carry a pulse": the
 -- heartwood can deliver one too, but an S<->H cable's *usual* meaning is the
@@ -41,7 +48,7 @@ function exciter.resync()
         -- a fresh synth starts at its SC-side defaults; push whatever this
         -- cell's character/gating already are so it doesn't briefly sound
         -- wrong if they were set while it was unpatched.
-        bridge.exciter_colour(cell.index, state.get_character(id, cell, 0, 1))
+        bridge.exciter_colour(cell.index, colour_of(id, cell))
         gated_state[id] = has_d_neighbor(id)
         bridge.exciter_gated(cell.index, gated_state[id])
       elseif (not live) and on_state[id] then
@@ -58,10 +65,23 @@ function exciter.resync()
   end
 end
 
+-- §2.6: a P->S cable makes that exciter's Colour ride the pitch field, so
+-- a pitched source follows the line the voices are playing. grove.lua owns
+-- the offset; this stays the only thing that talks to the engine about it.
+function exciter.set_colour_offset(id, off)
+  off = util.clamp(off or 0, -1, 1)
+  if colour_offset[id] == off then return end
+  colour_offset[id] = off
+  local cell = topology.get(id)
+  if cell and cell.type == "S" and on_state[id] then
+    bridge.exciter_colour(cell.index, colour_of(id, cell))
+  end
+end
+
 state.on_character_change(function(id)
   local cell = topology.get(id)
   if cell and cell.type == "S" and on_state[id] then
-    bridge.exciter_colour(cell.index, state.character[id])
+    bridge.exciter_colour(cell.index, colour_of(id, cell))
   end
 end)
 

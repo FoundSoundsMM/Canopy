@@ -7,11 +7,13 @@ local lexicon  = wl("lexicon")
 local state    = wl("state")
 local rambler  = wl("rambler")
 local heartwood = wl("heartwood")
+local grove    = wl("grove")
 
 local gridui = {}
 
--- K1+E2 cycles a D cell's gait (§4.2). one gait per three detents, so a
--- normal flick of the encoder moves one step rather than five.
+-- K1+E2 cycles a D cell's gait, or a P cell's mode (§4.2, §2.6). one step
+-- per three detents, so a normal flick of the encoder moves one rather than
+-- five.
 local GAIT_DETENTS = 3
 local gait_acc = {}
 
@@ -79,6 +81,11 @@ function gridui.on_grid_key(x, y, z, keystate)
         else
           state.set_event(cell.name .. (rooted and " rooted" or " wild"), 1.5)
         end
+      elseif cell.type == "P" then
+        -- §2.6: the same gesture on a P cell snaps its field to the scale,
+        -- or lets it sit between the notes.
+        local snap = grove.toggle_snap(id)
+        state.set_event(cell.name .. (snap and " snapped" or " free"), 1.5)
       end
     end
   end
@@ -133,13 +140,15 @@ function gridui.on_norns_enc(n, d, keystate)
     state.focus[id] = util.clamp(f, 0, #edges)
   elseif n == 2 then
     local delta = d / 100
-    if keystate and keystate.k1 and cell.type == "D" then
-      -- §4.2: "K1 + E2 secondary character parameter (D cells: swap gait)"
+    if keystate and keystate.k1 and (cell.type == "D" or cell.type == "P") then
+      -- §4.2: "K1 + E2 secondary character parameter (D cells: swap gait)",
+      -- and §2.6's mode swap on a P cell, which is the same idea one type over.
       gait_acc[id] = (gait_acc[id] or 0) + d
       while math.abs(gait_acc[id]) >= GAIT_DETENTS do
         local step = gait_acc[id] > 0 and 1 or -1
         gait_acc[id] = gait_acc[id] - step * GAIT_DETENTS
-        local key = rambler.cycle_gait(id, step)
+        local key = (cell.type == "D") and rambler.cycle_gait(id, step)
+                                        or grove.cycle_mode(id, step)
         if key then state.set_event(cell.name .. ": " .. key, 1.5) end
       end
     elseif keystate and keystate.k1 then
@@ -170,9 +179,11 @@ end
 -- rendering -----------------------------------------------------------------
 -- §5.1 idle brightness. D cells are live from here on -- they flash 15 on a
 -- pulse and decay over ~120ms, over a base that rises with how strongly the
--- cell is coupled -- and H cells likewise, over a base that rises with how
--- much energy is still circulating in the lattice. voice envelopes and S
--- shimmer still need the metering back-channel (§7.4) and stay static.
+-- cell is coupled -- H cells likewise, over a base that rises with how much
+-- energy is still circulating in the lattice, and P cells over a base that
+-- tracks where their field currently sits, so a rising line visibly climbs
+-- the cell. voice envelopes and S shimmer still need the metering
+-- back-channel (§7.4) and stay static.
 
 function gridui.brightness(id, cell)
   if cell.type == "voice" then
@@ -187,6 +198,8 @@ function gridui.brightness(id, cell)
     return state.flash_level(id, base)
   elseif cell.type == "H" then
     return heartwood.level(id, 2)
+  elseif cell.type == "P" then
+    return grove.level(id, 2)
   end
   return 0
 end

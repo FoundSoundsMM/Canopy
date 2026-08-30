@@ -20,6 +20,7 @@ local patch    = wl("patch")
 local state    = wl("state")
 local dispatch = wl("dispatch")
 local heartwood = wl("heartwood")
+local grove    = wl("grove")
 
 local rambler = {}
 
@@ -493,6 +494,12 @@ function rambler.tick()
   --    from the lattice this tick reaches the inbox in time to be delivered
   --    in step 2 rather than sitting a whole extra tick.
   heartwood.tick(now)
+
+  -- 0b. the continuous half of the pitch fields (§2.6) -- the modes that
+  --     move on their own clock, and the P<->P pull. it decimates itself to
+  --     every 8th tick; it sits inside the Still check for the same reason
+  --     the lattice does, so a frozen patch is frozen in pitch too.
+  grove.tick(now)
 
   -- 1. scheduled taps (burst ratchets, echo repeats)
   if #scheduled > 0 then

@@ -37,6 +37,8 @@ state.character2 = {}  -- id -> secondary character value (K1+E2)
 state.trim = {}        -- id -> node/cell trim (E3 when focus == ALL)
 state.gait = {}        -- D id -> gait key (K1+E2 swaps it, §4.2)
 state.rooted = {}      -- D id -> locked to the norns clock? (K1+tap, §2.3)
+state.mode = {}        -- P id -> pitch-field mode key (K1+E2 swaps it, §2.6)
+state.snap = {}        -- P id -> quantised to the scale? (K1+tap, §2.6)
 
 function state.get_focus(id)
   if state.focus[id] == nil then state.focus[id] = 0 end
@@ -71,6 +73,17 @@ end
 function state.get_rooted(id, default)
   if state.rooted[id] == nil then state.rooted[id] = default and true or false end
   return state.rooted[id]
+end
+
+-- same shape for a P cell's mode/snap pair (§2.6), for the same reason.
+function state.get_mode(id, default)
+  if state.mode[id] == nil then state.mode[id] = default end
+  return state.mode[id]
+end
+
+function state.get_snap(id, default)
+  if state.snap[id] == nil then state.snap[id] = default and true or false end
+  return state.snap[id]
 end
 
 -- fires when a cell's primary character (E2) changes, so voice.lua etc. can

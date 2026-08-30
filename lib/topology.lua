@@ -25,17 +25,21 @@ end
 
 -- 2.1 voices ------------------------------------------------------------
 
+-- `root` is the voice's fundamental in Hz -- the same number as column 2 of
+-- Engine_Woodland.sc's `voiceDefs` table, duplicated here because grove.lua
+-- has to compute an absolute Hz from a semitone offset on the Lua side. the
+-- two lists must stay in step, exactly like the S/H index lists below.
 local VOICES = {
-  {id = "oak",   name = "Oak",   index = 1, coords = {{2, 2}}},
-  {id = "rowan", name = "Rowan", index = 2, coords = {{2, 7}}},
-  {id = "ash",   name = "Ash",   index = 3, coords = {{15, 2}}},
-  {id = "hazel", name = "Hazel", index = 4, coords = {{15, 7}}},
-  {id = "yew",   name = "Yew",   index = 5, coords = {{8, 2}, {9, 2}}},
-  {id = "alder", name = "Alder", index = 6, coords = {{8, 7}, {9, 7}}},
+  {id = "oak",   name = "Oak",   index = 1, root = 65,  coords = {{2, 2}}},
+  {id = "rowan", name = "Rowan", index = 2, root = 330, coords = {{2, 7}}},
+  {id = "ash",   name = "Ash",   index = 3, root = 146, coords = {{15, 2}}},
+  {id = "hazel", name = "Hazel", index = 4, root = 220, coords = {{15, 7}}},
+  {id = "yew",   name = "Yew",   index = 5, root = 49,  coords = {{8, 2}, {9, 2}}},
+  {id = "alder", name = "Alder", index = 6, root = 98,  coords = {{8, 7}, {9, 7}}},
 }
 
 for _, v in ipairs(VOICES) do
-  reg("voice", v.id, v.name, v.coords, {index = v.index})
+  reg("voice", v.id, v.name, v.coords, {index = v.index, root = v.root})
 end
 
 -- 2.2 voice nodes (24) ----------------------------------------------------
@@ -155,6 +159,34 @@ for _, pair in ipairs(CHORDS) do
   local a, b = "h." .. pair[1], "h." .. pair[2]
   table.insert(topology.cells[a].neighbors, b)
   table.insert(topology.cells[b].neighbors, a)
+end
+
+-- 2.6 grove cells -- P (8) -------------------------------------------------
+-- the pitch fields (§2.6). mode keys match grove.lua. two vertical seams at
+-- x=4 and x=13, flanking the D/S/H core over the same rows it occupies, and
+-- paired across the same 180-degree symmetry (x -> 17-x, y -> 9-y) the D and
+-- S counterparts use.
+
+local P_CELLS = {
+  {id = "cuckoo",   x = 4,  y = 3, mode = "call",    counterpart = "raven"},
+  {id = "nightjar", x = 4,  y = 4, mode = "drone",   counterpart = "plover"},
+  {id = "curlew",   x = 4,  y = 5, mode = "cascade", counterpart = "merlin"},
+  {id = "bittern",  x = 4,  y = 6, mode = "octave",  counterpart = "wren"},
+  {id = "wren",     x = 13, y = 3, mode = "flutter", counterpart = "bittern"},
+  {id = "merlin",   x = 13, y = 4, mode = "scatter", counterpart = "curlew"},
+  {id = "plover",   x = 13, y = 5, mode = "wander",  counterpart = "nightjar"},
+  {id = "raven",    x = 13, y = 6, mode = "gravity", counterpart = "cuckoo"},
+}
+
+for _, p in ipairs(P_CELLS) do
+  local id = "p." .. p.id
+  local name = p.id:sub(1, 1):upper() .. p.id:sub(2)
+  reg("P", id, name, {{p.x, p.y}}, {
+    mode = p.mode,
+    counterpart = "p." .. p.counterpart,
+    -- snapped to the scale by default; K1 + tap sets a field free (§2.6).
+    snap = true,
+  })
 end
 
 -- lookups -------------------------------------------------------------

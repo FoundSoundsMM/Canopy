@@ -38,6 +38,22 @@ bench("heartwood, full conductance", function(M)
   M.patch.add(hs[1], hs[5], 0.6) -- a shortcut across the ring
 end)
 
+-- the grove's continuous half is the other thing that costs something with
+-- no D cell involved: eight fields, all cabled to voices and to each other,
+-- every one of them at full range.
+bench("grove, all 8 fields cabled", function(M)
+  local ps, voices = {}, {}
+  for id, c in M.topology.each() do
+    if c.type == "P" then table.insert(ps, id); M.state.character[id] = 1.0 end
+    if c.type == "voice" then table.insert(voices, id) end
+  end
+  for i, id in ipairs(ps) do
+    M.patch.add(id, voices[((i - 1) % #voices) + 1] .. ".sway", 0.8)
+    M.patch.add(id, ps[(i % #ps) + 1], 0.6)
+  end
+  M.patch.add("d.gabriel", "oak.knock", 0.9)
+end)
+
 bench("saturated (all 10 D ringed)", function(M)
   local ds = {}
   for id, c in M.topology.each() do if c.type == "D" then table.insert(ds, id) end end

@@ -22,6 +22,11 @@
 -- this codebase doesn't have yet, so those stay no-ops (see the comment
 -- above specs_for).
 --
+-- P (§2.6) appears only in the first half. a pitch field's whole output is a
+-- number of semitones, which Lua turns into voice_pitch/exciter_colour calls
+-- from grove.lua directly -- there is no stream to route, so P contributes no
+-- specs to the continuous matrix at all.
+--
 -- both halves fall through silently for pairs with no handler.
 
 local topology = wl("topology")
@@ -29,6 +34,7 @@ local state    = wl("state")
 local bridge   = wl("bridge")
 local patch    = wl("patch")
 local heartwood = wl("heartwood")
+local grove    = wl("grove")
 
 local dispatch = {}
 
@@ -64,6 +70,11 @@ HANDLERS["node:knock"] = function(source_id, target_id, edge, weight)
   local wForce = wobble(force, 0.04, 0, 1)
   local wHardness = wobble(hardness, 0.05, 0, 1)
   local wPosition = wobble(STRIKE_POSITION_DEFAULT, 0.07, 0, 1)
+  -- §2.6, and the pitch half of the wobble above: every field cabled to this
+  -- voice takes a step and the new pitch is sent *before* the mallet, so the
+  -- strike lands on the note the field just chose. a voice with no field
+  -- still gets a few cents of per-strike detune out of this.
+  grove.on_strike(node.voice)
   bridge.strike(voice.index - 1, wForce, wHardness, wPosition)
   state.flash(target_id, force)
 end
@@ -97,6 +108,15 @@ HANDLERS["S"] = function(source_id, target_id, edge, weight)
   local wDur = wobble(DEFAULT_GATE_DUR, 0.02, 0.02, 4)
   bridge.exciter_gate(cell.index, wDur, wAmp)
   state.flash(target_id, amp)
+end
+
+-- -> P: a pulse steps the pitch field (§6's P column). the field moves on
+-- its own clock rather than on whatever is being struck, which is how you
+-- get a melody that is not locked to the rhythm playing it. a P cell never
+-- emits a pulse of its own, so nothing here can feed back round into itself.
+HANDLERS["P"] = function(source_id, target_id, edge, weight)
+  local w = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
+  grove.step(target_id, w, source_id)
 end
 
 -- -> H: "pulse enters the lattice and diffuses" (§6). heartwood.lua walks it
