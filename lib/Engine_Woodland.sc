@@ -13,13 +13,16 @@ Engine_Woodland : CroneEngine {
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
 	// §8 "per-voice defaults" table.
+	// nested arrays inside a literal array are written WITHOUT their own `#`
+	// -- sclang's grammar only allows the `#` on the outermost one, and an
+	// inner `#[` is a syntax error that fails the whole class library.
 	classvar voiceDefs = #[
-		#[\oak,   65,  0.55, 0, 1.1, 2.4],
-		#[\rowan, 330, 0.75, 0, 0.6, 1.8],
-		#[\ash,   146, 0.5,  1, 0.8, 1.2],
-		#[\hazel, 220, 0.95, 0, 1.3, 0.35],
-		#[\yew,   49,  0.35, 0, 0.4, 6.0],
-		#[\alder, 98,  0.6,  0, 0.9, 2.0]
+		[\oak,   65,  0.55, 0, 1.1, 2.4],
+		[\rowan, 330, 0.75, 0, 0.6, 1.8],
+		[\ash,   146, 0.5,  1, 0.8, 1.2],
+		[\hazel, 220, 0.95, 0, 1.3, 0.35],
+		[\yew,   49,  0.35, 0, 0.4, 6.0],
+		[\alder, 98,  0.6,  0, 0.9, 2.0]
 	];
 
 	*new { arg context, doneCallback;
