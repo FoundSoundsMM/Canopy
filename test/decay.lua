@@ -1,13 +1,13 @@
 -- build phase 5c: E3 with no cable focused is the held sound's decay (§4.2).
 -- that every voice starts on its own ring time, that the knob moves it in
--- seconds, that a voice's nodes hand the gesture to the voice they belong to,
--- and that an S cell's exciter gets the same knob as a ratio.
+-- seconds, that a voice's sockets hand the gesture to the voice they belong
+-- to, and that an S cell's exciter gets the same knob as a ratio.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
-local OAK, YEW, HAZEL = "oak", "yew", "hazel"
+local OAK, ROWAN, HAZEL = "oak", "rowan", "hazel"
 local BECK = "s.beck"
 
 local function last_decay_for(v)
@@ -45,9 +45,9 @@ do
             string.format("%s vs %.2f s", tostring(sent), cell.decay))
     end
   end
-  check("all six of them", seen == 6, "#" .. seen)
+  check("all four of them", seen == 4, "#" .. seen)
   check("and the defaults are the ones the engine's own table has",
-        M.topology.get(YEW).decay == 6.0 and M.topology.get(HAZEL).decay == 0.35)
+        M.topology.get(ROWAN).decay == 1.8 and M.topology.get(HAZEL).decay == 0.28)
 end
 
 print("\n-- the knob moves it, in seconds either way --")
@@ -74,13 +74,14 @@ do
   check("the shortest voice can be cut down to a knock",
         M.voice.decay_seconds(HAZEL) < 0.1,
         string.format("%.3f s", M.voice.decay_seconds(HAZEL)))
-  -- Yew's 6s default x4 is the longest ring E3 can ask for anywhere, and it
-  -- has to stay under the mode bank's own ceiling (Ringz, clipped at 30s in
-  -- Engine_Woodland.sc) or the screen would read out a decay you cannot hear.
-  M.state.decay[YEW] = 1.0
-  check("and the longest is a real churchyard drone",
-        M.voice.decay_seconds(YEW) > 20 and M.voice.decay_seconds(YEW) <= 30,
-        string.format("%.2f s", M.voice.decay_seconds(YEW)))
+  -- Rowan's 1.8s default x4 is the longest ring the sound page can ask for
+  -- anywhere, and it has to stay under the mode bank's own ceiling (Ringz,
+  -- clipped at 30s in Engine_Woodland.sc) or the page would read out a decay
+  -- you cannot hear.
+  M.state.decay[ROWAN] = 1.0
+  check("and the longest is a real bell",
+        M.voice.decay_seconds(ROWAN) > 6 and M.voice.decay_seconds(ROWAN) <= 30,
+        string.format("%.2f s", M.voice.decay_seconds(ROWAN)))
 end
 
 print("\n-- E3 on the grid reaches the engine --")
@@ -107,23 +108,25 @@ do
         string.format("%.3f .. %.3f s", floor_s, ceil_s))
 end
 
-print("\n-- a node hands the gesture to the voice it belongs to --")
+print("\n-- a socket hands the gesture to the voice it belongs to --")
 do
   local M = fresh(7)
   M.voice.init()
   local base = last_decay_for(0)
-  turn_e3(M, "oak.moss", 25)
-  check("holding a node moves the voice's decay", last_decay_for(0) > base,
+  turn_e3(M, "oak.mod", 25)
+  check("holding a socket moves the voice's decay", last_decay_for(0) > base,
         string.format("%.3f -> %.3f s", base, last_decay_for(0)))
-  check("and it is stored against the voice, not the node",
-        M.state.decay[OAK] ~= nil and M.state.decay["oak.moss"] == nil)
-  check("so all four nodes and the voice read the same number",
-        M.state.decay_target(M.topology.get("oak.sap")) == OAK
-        and M.state.decay_target(M.topology.get("oak.knock")) == OAK
+  check("and it is stored against the voice, not the socket",
+        M.state.decay[OAK] ~= nil and M.state.decay["oak.mod"] == nil)
+  check("so all four sockets and the voice read the same number",
+        M.state.decay_target(M.topology.get("oak.mod")) == OAK
+        and M.state.decay_target(M.topology.get("oak.trig")) == OAK
         and M.state.decay_target(M.topology.get(OAK)) == OAK)
-  -- a node of another voice must not have moved with it
+  -- a socket of another voice must not have moved with it
+  -- engine index 1 is Hazel (topology's second voice), and it must still be
+  -- sitting on its own default.
   check("a different voice is untouched", last_decay_for(1) == nil
-        or math.abs(last_decay_for(1) - M.topology.get("rowan").decay) < 1e-9)
+        or math.abs(last_decay_for(1) - M.topology.get(HAZEL).decay) < 1e-9)
 end
 
 print("\n-- an S cell gets the same knob, as a ratio --")
@@ -147,7 +150,7 @@ do
         "#" .. #CALLS.exciter_decay)
 
   local index = M.topology.get(BECK).index
-  M.patch.add(BECK, "oak.sap", 0.8)
+  M.patch.add(BECK, "oak.mod", 0.8)
   check("cabling it pushes whatever decay it was already set to",
         last_exciter_decay(index)
         and math.abs(last_exciter_decay(index) - M.exciter.decay_scale(BECK)) < 1e-9,
@@ -161,7 +164,7 @@ end
 print("\n-- cells with no sound of their own have no decay --")
 do
   local M = fresh(17)
-  for _, id in ipairs({"d.knocker", "h.wyrd", "p.cuckoo"}) do
+  for _, id in ipairs({"d.knocker", "h.wyrd", "f.cuckoo"}) do
     local cell = M.topology.get(id)
     check(cell.name .. " has no decay target",
           M.state.decay_target(cell) == nil, tostring(M.state.decay_target(cell)))
@@ -178,8 +181,8 @@ do
   local M = fresh(13)
   M.voice.init()
   local gridui = wl("gridui")
-  M.patch.add(BECK, "oak.sap", 0.5)
-  local edge_id = M.patch.has(BECK, "oak.sap")
+  M.patch.add(BECK, "oak.mod", 0.5)
+  local edge_id = M.patch.has(BECK, "oak.mod")
 
   -- focus 0 (ALL): E3 is decay, and the cable's gain must not move
   M.state.held = {BECK}

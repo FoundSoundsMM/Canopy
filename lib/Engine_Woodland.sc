@@ -1,14 +1,28 @@
 // Engine_Woodland
-// six modal/pinged-filter voices, DynKlank-style but hand-built so strike
+// four modal/pinged-filter voices, DynKlank-style but hand-built so strike
 // position and structure can be re-shaped live. see docs/woodland-spec.md
 // §8 for the woodiness recipe, §9 for the build order.
 //
-// build phase 4 adds the ten S-cell exciters (§2.4), the generic audio-rate
-// patch matrix (§7.3's \patch_aa / \patch_ak), and the Sap/Sway/Moss stream
-// inputs on the voice synth. build phase 5 adds \wl_heartwood, the continuous
-// half of the §2.5 diffusion lattice. build phase 5b adds the pitch side of
-// §2.6's grove: `glide` and the per-voice detune `drift` on \woodland_voice,
-// driven by voice_glide/voice_drift. voice<->voice feedback is still ahead.
+// build phase 4 added the S-cell exciters (§2.4), the generic audio-rate
+// patch matrix (§7.3's \patch_aa / \patch_ak), and the stream inputs on the
+// voice synth. build phase 5 added \wl_heartwood, the continuous half of the
+// §2.5 diffusion lattice. 5b added `glide` and the per-voice detune `drift`.
+//
+// build phase 6 -- the re-cut -- changes three things here:
+//
+//   * six voices become four, each with ONE modulation input (the M socket)
+//     instead of three anonymous ones, and a `modBalance` deciding what a
+//     stream landing there does: inject into the resonator at 0, bend the
+//     body at 1.
+//   * every voice now also writes its own signal to a tap bus, scaled by
+//     `tapLevel` -- the O socket. that is what makes voice<->voice feedback a
+//     cable rather than a phase-7 promise.
+//   * ten exciters become twenty. the second ten are aimed squarely at a kit:
+//     clicks, metals, scrapes, impacts, air.
+//
+// the Grain macro is gone with it: the voice page (§5.5) exposes structure,
+// damping, brightness, drive, strike position, decay, tune and level
+// individually, so there is nothing left for a macro to hide.
 
 Engine_Woodland : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
@@ -20,17 +34,18 @@ Engine_Woodland : CroneEngine {
 	var fxSynth;
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
-	// §8 "per-voice defaults" table.
+	// §8 "per-voice defaults" table. keep freq/structureBase/dampBase/decay in
+	// step with topology.lua's VOICES table -- the Lua side sweeps the sound
+	// page's knobs *around* these numbers, so they have to be the same numbers.
+	//
 	// nested arrays inside a literal array are written WITHOUT their own `#`
 	// -- sclang's grammar only allows the `#` on the outermost one, and an
 	// inner `#[` is a syntax error that fails the whole class library.
 	classvar voiceDefs = #[
-		[\oak,   65,  0.55, 0, 1.1, 2.4],
-		[\rowan, 330, 0.75, 0, 0.6, 1.8],
-		[\ash,   146, 0.5,  1, 0.8, 1.2],
-		[\hazel, 220, 0.95, 0, 1.3, 0.35],
-		[\yew,   49,  0.35, 0, 0.4, 6.0],
-		[\alder, 98,  0.6,  0, 0.9, 2.0]
+		[\oak,   55,  0.55, 0, 1.1, 1.2],
+		[\hazel, 220, 0.95, 0, 1.3, 0.28],
+		[\alder, 98,  0.5,  1, 0.8, 1.6],
+		[\rowan, 330, 0.75, 0, 0.6, 1.8]
 	];
 
 	// §2.4 exciter table, in the same order as topology.lua's S_CELLS list --
@@ -42,19 +57,23 @@ Engine_Woodland : CroneEngine {
 	classvar excDefs = #[
 		\wl_exc_bracken, \wl_exc_gorse, \wl_exc_ember, \wl_exc_windfall,
 		\wl_exc_mistle, \wl_exc_wisp, \wl_exc_hollow, \wl_exc_drizzle,
-		\wl_exc_loam, \wl_exc_beck
+		\wl_exc_loam, \wl_exc_beck,
+		\wl_exc_skein, \wl_exc_flint, \wl_exc_husk, \wl_exc_tinder,
+		\wl_exc_mire, \wl_exc_glim, \wl_exc_rasp, \wl_exc_cicada,
+		\wl_exc_hail, \wl_exc_reed
 	];
 
-	// offsets into the single `patchBus` block (§7.3's "10 exciter outputs /
-	// 6 voice exciter-inputs / 24 voice modulation inputs" collapsed into one
-	// allocation so the Lua side only needs to add an offset, not track five
-	// bus objects). spec calls the modulation buses "control buses"; they are
-	// implemented here as audio buses instead, because Out.kr *overwrites* a
-	// bus each block while Out.ar *adds* to it -- and several cables landing
-	// on the same node's Sway/Moss/Sap input need to sum, not fight. keep
-	// these eight numbers in sync with bridge.lua's `bridge.BUS` table.
-	classvar excBase = 0, excInBase = 10, swayBase = 16, mossBase = 22,
-		colourModBase = 28, heartInBase = 38, heartOutBase = 46, patchTotal = 54;
+	classvar nVoices = 4, nExc = 20;
+
+	// offsets into the single `patchBus` block (§7.3's separate bus families
+	// collapsed into one allocation so the Lua side only needs to add an
+	// offset, not track five bus objects). spec calls the modulation buses
+	// "control buses"; they are implemented here as audio buses instead,
+	// because Out.kr *overwrites* a bus each block while Out.ar *adds* -- and
+	// several cables landing on one voice's M socket need to sum, not fight.
+	// keep these six numbers in sync with bridge.lua's `bridge.BUS` table.
+	classvar excBase = 0, colourModBase = 20, modInBase = 40,
+		voiceOutBase = 44, heartInBase = 48, heartOutBase = 56, patchTotal = 64;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -70,40 +89,38 @@ Engine_Woodland : CroneEngine {
 		gTap = Group.after(gVoice);
 		gFx = Group.after(gTap);
 
-		// one mono bus per voice (§7.3 "6 voice outputs")
-		voiceBus = Bus.audio(server, 6);
+		// one mono bus per voice (§7.3 "voice outputs")
+		voiceBus = Bus.audio(server, nVoices);
 		// see the classvar block above for the six sub-ranges packed in here
 		patchBus = Bus.audio(server, patchTotal);
 
 		SynthDef(\woodland_voice, {
-			arg out=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
+			arg out=0, tapOut=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
 				freq=110, damp=0.8, bright=0.5, drive=0.2, structure=0.5,
 				oddOnly=0, decayBase=2.0, amp=1.0, modes=6,
 				t_choke=0, chokeDepth=0.9, chokeTime=0.25,
-				excIn=0, swayIn=0, mossIn=0,
-				sapLevel=0.6, swayBalance=0, mossCurve=0.5,
+				modIn=0, modBalance=0.5, tapLevel=0.5,
 				fmRatio=2.0, fmDepth=0, noiseTune=0, exciteQ=0.35,
 				glide=0.02, driftDepth=0.06, driftRate=0.07, driftSeed=0;
 
 			var harmonicRatio = [1, 2, 3, 4, 5, 6];
 			var barRatio = [1, 2.756, 5.404, 8.933, 13.34, 18.64];
 
-			// §2.2 Sap: a cabled S (or, later, H) stream injected audio-rate
-			// into the resonator, alongside the voice's own strike exciter.
-			// §2.2 Sway: a stream bends pitch <-> structure; §2.2 Moss: a
-			// stream sets damping <-> brightness. each node's own E2 char
-			// (sapLevel / swayBalance / mossCurve) decides how much and,
-			// for Sway/Moss, which of the two targets it leans toward.
-			var extExc = In.ar(excIn, 1);
-			var swayStream = In.ar(swayIn, 1);
-			var mossStream = In.ar(mossIn, 1);
+			// §2.2, the M socket. one input, one knob. at balance 0 the stream
+			// is excitation -- it goes into the resonator alongside the voice's
+			// own strike burst, which is the old Sap. at balance 1 it is a
+			// control signal on the body: damping, brightness and a little
+			// structure, which is the old Moss and half of the old Sway. the
+			// three separate buses those used to need were three ways of
+			// saying the same thing to the same resonator.
+			var modStream = In.ar(modIn, 1);
+			var inject = modStream * (1 - modBalance.clip(0, 1));
+			var bend = modStream * modBalance.clip(0, 1);
 
-			var pitchBend = swayStream * swayBalance.max(0) * 0.06;
-			var structBend = swayStream * swayBalance.neg.max(0) * 0.4;
+			var structBend = bend * 0.3;
 			var structureEff = (structure + structBend).clip(0, 1.3);
-
-			var dampMod = mossStream * (1 - mossCurve) * 0.6;
-			var brightMod = mossStream * mossCurve * 0.6;
+			var dampMod = bend * 0.5;
+			var brightMod = bend * 0.5;
 
 			// §8.3: a noise-burst exciter, never a raw impulse. hard mallet
 			// (hardness -> 1) = brighter, shorter burst. pink, not white --
@@ -117,7 +134,7 @@ Engine_Woodland : CroneEngine {
 			// to one or two steps and `hardness` stops shortening it at all.
 			var env = EnvGen.ar(Env.perc(0.0003, burstDur), t_trig);
 			var exc = BPF.ar(PinkNoise.ar(1), bpFreq, exciteQ) * env * force;
-			var totalExc = exc + (extExc * sapLevel);
+			var totalExc = exc + (inject * 0.8);
 
 			// §8.5: amplitude-dependent pitch drop -- the "thunk" of a hard hit.
 			var pitchDrop = 1 - (force.clip(0, 1) * 0.02);
@@ -136,10 +153,7 @@ Engine_Woodland : CroneEngine {
 			// continuously is far too fine to push over OSC without either
 			// flooding it or stepping audibly. three incommensurate slow
 			// shapes summed, so it never repeats; driftSeed offsets the
-			// phases so no two voices breathe together. driftDepth is in
-			// semitones and defaults to a barely-there 6 cents -- on for
-			// every voice, cabled or not, which is what stops an untouched
-			// patch from repeating one identical note forever.
+			// phases so no two voices breathe together.
 			var driftA = SinOsc.kr(driftRate * 0.31, driftSeed * 1.7);
 			var driftB = SinOsc.kr(driftRate * 0.53, (driftSeed * 2.9) + 1.1);
 			var driftC = LFNoise2.kr((driftRate * 0.83).max(0.001));
@@ -147,27 +161,28 @@ Engine_Woodland : CroneEngine {
 			var freqBase = Lag.kr(freq, glide.clip(0, 4))
 				* (drift * driftDepth).midiratio;
 
-			// FM: every voice can be frequency-modulated now (engine-level --
-			// not yet a patchable cable). fmDepth=0 is a no-op, so nothing
-			// about the existing sound changes until it's turned up. one
-			// shared modulator ahead of the mode ratios, so all six modes
-			// move together instead of detuning against each other.
+			// FM: every voice can be frequency-modulated (engine-level -- not
+			// yet a patchable cable). fmDepth=0 is a no-op, so nothing about
+			// the existing sound changes until it's turned up. one shared
+			// modulator ahead of the mode ratios, so all six modes move
+			// together instead of detuning against each other.
 			var fmOsc = SinOsc.ar((freqBase * fmRatio).max(0.1)) * fmDepth;
 			var freqFM = freqBase * (1 + fmOsc);
 
 			var modeSig = Mix.fill(6, { |i|
 				var n = i + 1;
 				// §8.1: morph harmonic -> free-free bar via `structure`;
-				// Ash overrides with an odd-only ratio set ("hollow tube").
+				// Alder overrides with an odd-only ratio set ("hollow tube").
 				var ratio = Select.kr(oddOnly, [
 					harmonicRatio[i] + ((barRatio[i] - harmonicRatio[i]) * structureEff),
 					(2 * n) - 1
 				]);
-				var mfreq = freqFM * ratio * pitchDrop * (1 + pitchBend);
+				var mfreq = freqFM * ratio * pitchDrop;
 				// §8.2: frequency-dependent damping -- high modes die fast.
-				// the ceiling is above the longest decayBase E3 can ask for
-				// (Yew's 6s default, x4 at the top of the knob), so the ring
-				// time the cell view reads out is the one you actually hear.
+				// the ceiling is above the longest decayBase the sound page
+				// can ask for (Rowan's 1.8 s default, x4 at the top of the
+				// knob), so the ring time the page reads out is the one you
+				// actually hear.
 				var mdecay = (decayBase * (ratio ** (damp + dampMod).neg)).clip(0.02, 30);
 				// §8.4: strike position comb-notches modes with a node there.
 				var mamp = (pi * position * n).sin;
@@ -175,22 +190,17 @@ Engine_Woodland : CroneEngine {
 				Ringz.ar(totalExc, mfreq, mdecay) * mamp * active;
 			});
 
-			// no body-cavity diffuser any more: two cascaded AllpassC stages
-			// at ~20/31 ms (the previous design) read as a slapback/flutter
-			// echo once heard through a resonant mode bank, not as diffusion
-			// -- that was the "odd reverb-like/slappy" complaint. what's left
-			// is a plain, tuneable, pinged resonant-filter bank plus a much
-			// gentler tanh than before. the tanh itself stays. it is still
-			// the DC-blocked, soft-saturating, limited safety net §6 wants
-			// once voice<->voice feedback lands ("do not prevent the loop"),
-			// just dialled back from a x3 drive to a x0.8 one so it no longer
-			// colours the tone on its own.
+			// a plain, tuneable, pinged resonant-filter bank plus a gentle
+			// tanh. the tanh is the DC-blocked, soft-saturating, limited
+			// safety net §6 wants now that voice<->voice feedback is a real
+			// cable ("do not prevent the loop"), dialled back to a x0.8 drive
+			// so it no longer colours the tone on its own.
 			var driven = (modeSig * (1 + (drive * 0.8))).tanh;
 			var toned = LPF.ar(driven, 400 + ((bright + brightMod).clip(0, 1) * 9000));
 
-			// §2.2 Moss: "a pulse chokes it". a hand on the bar -- duck fast,
-			// let it back in over chokeTime. \exp needs a non-zero floor, and
-			// clipping chokeDepth guarantees one whatever Lua sends.
+			// §2.2 M socket: "a pulse chokes it". a hand on the bar -- duck
+			// fast, let it back in over chokeTime. \exp needs a non-zero
+			// floor, and clipping chokeDepth guarantees one whatever Lua sends.
 			var chokeFloor = 1 - (chokeDepth.clip(0, 1) * 0.98);
 			var choke = EnvGen.kr(
 				Env([1, chokeFloor, 1], [0.006, chokeTime.clip(0.01, 4)], \exp),
@@ -199,22 +209,27 @@ Engine_Woodland : CroneEngine {
 			var sig = Limiter.ar(LeakDC.ar(toned), 0.95) * amp * 0.35 * choke;
 
 			Out.ar(out, sig);
+			// §2.2 O socket: the same signal on its own bus, at whatever level
+			// the socket's knob asks for, for anything the player has cabled
+			// there. it is a *tap*, not a send -- turning it down does not
+			// make the voice quieter, only what the cable carries.
+			Out.ar(tapOut, sig * tapLevel.clip(0, 1));
 		}).add;
 
 		SynthDef(\woodland_fx, {
 			arg busIn=0, out=0, size=0.5, damp=0.5, mix=0.3, level=0.8;
-			var dry = In.ar(busIn, 6).sum;
+			var dry = In.ar(busIn, 4).sum;
 			var wet = FreeVerb.ar(dry, mix, size, damp);
 			Out.ar(out, (wet * level) ! 2);
 		}).add;
 
 		// shared gate envelope for every exciter (§2.4: "an S cell is
-		// continuous until a pulse is cabled into it. a D->S cable turns the
+		// continuous until a pulse is cabled into it. a pulse cable turns the
 		// exciter into an enveloped grain, fired by that pulse"). `gated`
 		// flips that switch; `t_gate` fires one grain while gated.
 		// `decay` (E3 on an S cell, §4.2) is a plain multiplier on every time
 		// constant the exciter has: the grain envelope here, and -- for the
-		// six recipes that have a tail of their own -- that tail as well. the
+		// recipes that have a tail of their own -- that tail as well. the
 		// 0..1 knob is mapped to this multiplier on the Lua side, so the
 		// engine only ever sees a ratio.
 		gateMul = { |tGate, gated, dur, amp, decay|
@@ -226,22 +241,18 @@ Engine_Woodland : CroneEngine {
 		// are noise colours and textures, not one macro. `colour` (E2, §4.2)
 		// is the one thing that matters about each; the exact curve is a
 		// sound-design call, tune by ear once this is on hardware. `c` folds
-		// in `colourModIn`, the other half of "S<->S: each modulates the
-		// other's colour" (§6) -- the "and level" half of that sentence is
-		// not implemented; two S cells only cross-modulate colour for now.
+		// in `colourModIn`, which is where S<->S cross-modulation, a cabled
+		// pitch field and a voice's own output all land.
 		//
-		// InFeedback, not In: the colour-mod buses are written by \wl_patch_ak
+		// InFeedback, not In: the colour-mod buses are written by patch
 		// synths in gPatch, which runs AFTER gSrc, and In.ar returns silence
-		// for a bus nothing has touched yet this cycle. S<->S is a genuine
-		// feedback path round the node order, so it has to read last cycle's
-		// block -- with plain In.ar the cross-modulation is a permanent no-op.
-
-		// every exciter below now also takes fmRatio/fmDepth (§ FM addendum,
-		// same engine-level deal as the voice's fmDepth=0 no-op): each one's
-		// own natural "frequency" parameter -- a BPF/RLPF/LPF centre, a Dust
-		// rate, a comb delay time, or (Mistle) a genuine SinOsc carrier --
-		// gets an audio-rate `* (1 + SinOsc.ar(base * fmRatio) * fmDepth)`
-		// on top of what Colour already does to it.
+		// for a bus nothing has touched yet this cycle.
+		//
+		// every exciter also takes fmRatio/fmDepth (§ FM addendum, same
+		// engine-level deal as the voice's fmDepth=0 no-op): each one's own
+		// natural "frequency" parameter gets an audio-rate
+		// `* (1 + SinOsc.ar(base * fmRatio) * fmDepth)` on top of what Colour
+		// already does to it.
 
 		SynthDef(\wl_exc_bracken, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
@@ -302,7 +313,7 @@ Engine_Woodland : CroneEngine {
 
 		// control-rate by spec ("slow wandering random walk, control-rate");
 		// K2A.ar upsamples it onto the shared audio-rate exciter bus so it
-		// can sum and gate the same way as the other nine.
+		// can sum and gate the same way as the others.
 		SynthDef(\wl_exc_wisp, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
 				decay=1.0;
@@ -358,6 +369,162 @@ Engine_Woodland : CroneEngine {
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
+		// the second ten (build phase 6). the first ten were weather and
+		// undergrowth; these are the things you hit a drum with, and the
+		// things a drum is made of.
+
+		// skein: metal shimmer -- four inharmonic partials rung by a whisper
+		// of pink noise. the cymbal end of the panel.
+		SynthDef(\wl_exc_skein, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 2200 + (c * 3400);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var exc = PinkNoise.ar(0.06);
+			var sig = Mix.fill(4, { |i|
+				var ratio = [1, 1.41, 2.13, 2.87][i];
+				Ringz.ar(exc, (base * ratio * (1 + fm)).clip(20, 18000),
+					(0.5 - (i * 0.09)) * decay);
+			}) * 0.22;
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// flint: one hard click and nothing else. the shortest thing here --
+		// four milliseconds of highpassed noise, which is a stick on a rim.
+		SynthDef(\wl_exc_flint, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 2000 + (c * 6000);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var trig = Dust.ar(3 + (c * 20));
+			var env = EnvGen.ar(Env.perc(0.0002, (0.002 + (c * 0.004)) * decay), trig);
+			var sig = HPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000)) * env * 3;
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// husk: a dry scrape -- brown noise dragged through a notch that is
+		// itself wandering. a brush, or a nail down bark.
+		SynthDef(\wl_exc_husk, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var sweep = LFNoise1.kr(2 + (c * 10)).range(300, 1400 + (c * 3000));
+			var fm = SinOsc.ar(sweep.max(20) * fmRatio) * fmDepth;
+			var band = BPF.ar(BrownNoise.ar(1), (sweep * (1 + fm)).clip(20, 18000), 0.4);
+			var sig = BRF.ar(band, (sweep * 2.3).clip(20, 18000), 0.5) * 2.5;
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// tinder: fizz. hundreds of tiny sparks a second, close enough
+		// together to read as a hiss with grain in it rather than as events.
+		SynthDef(\wl_exc_tinder, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 3000 + (c * 5000);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var trig = Dust.ar(200 + (c * 1800));
+			var env = Decay2.ar(trig, 0.0002, (0.003 + (c * 0.004)) * decay);
+			var sig = HPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000)) * env * 2.5;
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// mire: sub thud. a resonant lowpass on brown noise and nothing above
+		// it at all -- body without any top, which is what a kick wants under
+		// its click.
+		SynthDef(\wl_exc_mire, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 40 + (c * 130);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var sig = LPF.ar(
+				RLPF.ar(BrownNoise.ar(1), (base * (1 + fm)).clip(20, 2000), 0.18),
+				400) * 3;
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// glim: a struck sine with a noise edge on the attack. the only
+		// exciter here with a pitch you could name, which is why it is the
+		// one to cable a field to.
+		SynthDef(\wl_exc_glim, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 700 + (c * 2600);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var freq = (base * (1 + fm)).clip(20, 18000);
+			var trig = Dust.ar(1 + (c * 6));
+			var env = EnvGen.ar(Env.perc(0.0005, (0.10 + (c * 0.2)) * decay), trig);
+			var edge = EnvGen.ar(Env.perc(0.0002, 0.006 * decay), trig);
+			var sig = (SinOsc.ar(freq) * env)
+				+ (BPF.ar(WhiteNoise.ar(1), (freq * 2).clip(20, 18000), 0.3) * edge * 0.8);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// rasp: a comb-filtered saw. a stick dragged along a fence -- the one
+		// genuinely buzzy source on the panel, and the one that turns a
+		// resonator into something with teeth.
+		SynthDef(\wl_exc_rasp, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 45 + (c * 180);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var raw = Saw.ar((base * (1 + fm)).clip(10, 8000)) * 0.4;
+			var sig = CombL.ar(raw, 0.02, (1 / (base * 3)).clip(0.0003, 0.02), 0.05 * decay);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// cicada: a high band shivered by a fast pulse. insects, and the only
+		// source here with a rhythm of its own -- Colour sets how fast, so a
+		// climate cell cabled to it is a whole part on one cable.
+		SynthDef(\wl_exc_cicada, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 2500 + (c * 4000);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			// audio-rate: `c` folds in an audio-rate colour-mod bus, so a
+			// control-rate LFPulse here would be taking an ar input.
+			var am = Lag.ar(LFPulse.ar(20 + (c * 70), 0, 0.4), 0.002);
+			var sig = BPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000), 0.15)
+				* am * 3;
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// hail: a dense scatter of tiny hard impacts. drizzle's opposite --
+		// same idea, no tail, a hundred times as many of them.
+		SynthDef(\wl_exc_hail, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 1200 + (c * 4000);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var trig = Dust.ar(30 + (c * 180));
+			var env = Decay2.ar(trig, 0.0005, (0.010 + (c * 0.02)) * decay);
+			var sig = BPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000), 0.4)
+				* env * 3;
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
+		// reed: air with a formant in it. two bands off one pink source, so
+		// it reads as breath through a tube rather than as filtered noise.
+		SynthDef(\wl_exc_reed, { arg out=0, colour=0.5, colourModIn=0,
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
+			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
+			var base = 400 + (c * 800);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var f1 = (base * (1 + fm)).clip(20, 18000);
+			var air = HPF.ar(PinkNoise.ar(1), 200);
+			var sig = (BPF.ar(air, f1, 0.25) * 2.5)
+				+ (BPF.ar(air, (f1 * 2.6).clip(20, 18000), 0.3) * 1.2);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+		}).add;
+
 		// §2.5 the heartwood. "not a bus. a diffusion lattice." eight nodes,
 		// each one a short delay line that hands what reaches it on to its
 		// neighbours, quieter and later. streams patched into a node arrive on
@@ -365,7 +532,7 @@ Engine_Woodland : CroneEngine {
 		// is what a cable out of a heartwood cell taps.
 		//
 		// adjacency duplicates topology.lua's ring-of-8-plus-two-chords, in the
-		// same node order (perimeter, taproot first). the two lists have to
+		// same node order (ring order, taproot first). the two lists have to
 		// agree; there is no way to check that from this side.
 		//
 		// InFeedback on the injection buses, and LocalIn/LocalOut for the
@@ -414,37 +581,44 @@ Engine_Woodland : CroneEngine {
 		}).add;
 
 		// §7.3's generic audio-rate patch matrix. one synth per live cable
-		// that means something continuous (§6): S -> Sap/Sway/Moss is a
-		// straight pass (\wl_patch_aa); S <-> S colour cross-mod follows the
-		// source's amplitude first (\wl_patch_ak). `src`/`dst` are absolute
-		// bus numbers computed on the Lua side (bridge.BUS) and fixed at
-		// creation, like `out` on the voice/exciter synths.
+		// that means something continuous (§6): a stream into a voice's M
+		// socket is a straight pass (\wl_patch_aa); anything landing on a
+		// colour-mod bus follows the source's amplitude first
+		// (\wl_patch_ak). `src`/`dst` are absolute bus numbers computed on
+		// the Lua side (bridge.BUS) and fixed at creation.
+		//
+		// InFeedback on the source, not In. these synths live in gPatch,
+		// which runs before gVoice, so a cable whose source is a voice's own
+		// output tap (the O socket) would read silence with plain In.ar --
+		// and O->M is now a legal, and the most interesting, cable. one block
+		// of latency on every cable rather than a node-order rule nobody can
+		// see: 1.5 ms at norns' block size, and it makes the whole matrix
+		// order-independent by construction.
 		SynthDef(\wl_patch_aa, { arg src=0, dst=0, gain=0.6;
-			Out.ar(dst, In.ar(src, 1) * gain);
+			Out.ar(dst, InFeedback.ar(src, 1) * gain);
 		}).add;
 
 		SynthDef(\wl_patch_ak, { arg src=0, dst=0, gain=0.6;
-			Out.ar(dst, LPF.ar(Amplitude.ar(In.ar(src, 1), 0.01, 0.1), 20) * gain);
+			Out.ar(dst, LPF.ar(Amplitude.ar(InFeedback.ar(src, 1), 0.01, 0.1), 20) * gain);
 		}).add;
 
 		server.sync;
 
-		voiceSynths = Array.newClear(6);
+		voiceSynths = Array.newClear(nVoices);
 		voiceDefs.do({ |def, i|
 			voiceSynths[i] = Synth.new(\woodland_voice, [
 				\out, voiceBus.index + i,
+				\tapOut, patchBus.index + voiceOutBase + i,
 				\freq, def[1],
 				\structure, def[2],
 				\oddOnly, def[3],
 				\damp, def[4],
 				\decayBase, def[5],
-				\excIn, patchBus.index + excInBase + i,
-				\swayIn, patchBus.index + swayBase + i,
-				\mossIn, patchBus.index + mossBase + i
+				\modIn, patchBus.index + modInBase + i
 			], gVoice);
 		});
 
-		excSynths = Array.newClear(10);
+		excSynths = Array.newClear(nExc);
 		patchSynths = Dictionary.new;
 
 		// in gSrc, so the emergence buses are already written by the time the
@@ -467,7 +641,7 @@ Engine_Woodland : CroneEngine {
 		// strike(voice, force, hardness, position)
 		this.addCommand("strike", "ifff", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) {
+			if (v >= 0 and: { v < nVoices }) {
 				voiceSynths[v].set(
 					\force, msg[2], \hardness, msg[3], \position, msg[4], \t_trig, 1
 				);
@@ -476,14 +650,14 @@ Engine_Woodland : CroneEngine {
 
 		this.addCommand("voice_pitch", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\freq, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\freq, msg[2]) };
 		});
 
 		// voice_glide(voice, seconds) -- §2.6: portamento on voice_pitch.
 		// grove.lua sends it just ahead of a pitch, and only when it changes.
 		this.addCommand("voice_glide", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\glide, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\glide, msg[2]) };
 		});
 
 		// voice_drift(voice, depthSemitones, rateHz, seed) -- §2.6: the
@@ -491,103 +665,89 @@ Engine_Woodland : CroneEngine {
 		// it a little for voices with a wide field cabled to them.
 		this.addCommand("voice_drift", "ifff", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) {
+			if (v >= 0 and: { v < nVoices }) {
 				voiceSynths[v].set(
 					\driftDepth, msg[2], \driftRate, msg[3], \driftSeed, msg[4]
 				);
 			};
 		});
 
-		// grain (§8: "reachable from Grain as a macro plus individually from
-		// PARAMS") morphs structure/damp/bright/drive together around each
-		// voice's baked-in baseline. the exact curve is a sound-design call,
-		// not a spec requirement -- tune by ear once this is on hardware.
-		this.addCommand("voice_grain", "if", { |msg|
+		// the eight knobs of §5.5's voice page. no macro in front of them any
+		// more -- voice.lua maps each 0..1 knob to the real unit below and
+		// sends it here, so what the page reads out is what the synth has.
+
+		// voice_decay(voice, seconds) -- the resonator's own ring time,
+		// straight onto `decayBase`: the mode bank's frequency-dependent
+		// damping still shortens the high modes relative to it, so the voice
+		// keeps its character and only its length changes.
+		this.addCommand("voice_decay", "if", { |msg|
 			var v = msg[1].asInteger;
-			var g = msg[2].clip(0, 1);
-			if (v >= 0 and: { v < 6 }) {
-				var sBase = voiceDefs[v][2];
-				var dBase = voiceDefs[v][4];
-				var structure = (sBase - 0.25 + (g * 0.5)).clip(0, 1.3);
-				var damp = (dBase + ((0.5 - g) * 0.4)).clip(0.2, 1.6);
-				var bright = (0.15 + (g * 0.75)).clip(0, 1);
-				var drive = g;
-				voiceSynths[v].set(
-					\structure, structure, \damp, damp, \bright, bright, \drive, drive
-				);
+			if (v >= 0 and: { v < nVoices }) {
+				voiceSynths[v].set(\decayBase, msg[2].clip(0.02, 30));
 			};
 		});
 
-		// voice_decay(voice, seconds) -- §4.2 E3 with no cable focused. this
-		// is the resonator's own ring time, straight onto `decayBase`: the
-		// mode bank's frequency-dependent damping still shortens the high
-		// modes relative to it, so the voice keeps its character and only
-		// its length changes. voice.lua maps the 0..1 knob to seconds around
-		// each voice's default from the voiceDefs table above.
-		this.addCommand("voice_decay", "if", { |msg|
+		this.addCommand("voice_structure", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) {
-				voiceSynths[v].set(\decayBase, msg[2].clip(0.02, 30));
+			if (v >= 0 and: { v < nVoices }) {
+				voiceSynths[v].set(\structure, msg[2].clip(0, 1.3));
 			};
 		});
 
 		this.addCommand("voice_damp", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\damp, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\damp, msg[2]) };
 		});
 
 		this.addCommand("voice_bright", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\bright, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\bright, msg[2]) };
 		});
 
 		this.addCommand("voice_pos", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\position, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\position, msg[2]) };
 		});
 
 		this.addCommand("voice_drive", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\drive, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\drive, msg[2]) };
 		});
 
 		this.addCommand("voice_amp", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\amp, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\amp, msg[2]) };
 		});
 
 		this.addCommand("voice_modes", "ii", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\modes, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\modes, msg[2]) };
 		});
 
-		// voice_choke(voice, depth, time) -- see §2.2 Moss.
+		// voice_choke(voice, depth, time) -- a pulse on the M socket (§2.2).
 		this.addCommand("voice_choke", "iff", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) {
+			if (v >= 0 and: { v < nVoices }) {
 				voiceSynths[v].set(
 					\chokeDepth, msg[2], \chokeTime, msg[3], \t_choke, 1
 				);
 			};
 		});
 
-		// voice_sap/sway/moss(voice, v) -- each node's own E2 character
-		// (§4.2: Sap's injection filter, Sway's bend depth/balance, Moss's
-		// damping curve) forwarded from the stream-modulation half of §2.2,
-		// separate from the pulse-choke path voice_choke already covers.
-		this.addCommand("voice_sap", "if", { |msg|
+		// voice_mod(voice, balance) -- the M socket's own knob: what a stream
+		// landing there does. 0 injects it into the resonator, 1 bends the
+		// body with it (§2.2).
+		this.addCommand("voice_mod", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\sapLevel, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\modBalance, msg[2]) };
 		});
 
-		this.addCommand("voice_sway", "if", { |msg|
+		// voice_tap(voice, level) -- the O socket's own knob: how loud this
+		// voice is on its output bus. it does not change what you hear from
+		// the voice itself, only what a cable out of it carries.
+		this.addCommand("voice_tap", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\swayBalance, msg[2]) };
-		});
-
-		this.addCommand("voice_moss", "if", { |msg|
-			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\mossCurve, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\tapLevel, msg[2]) };
 		});
 
 		// voice_fm(voice, ratio, depth) -- FM addendum, engine-level: ratio
@@ -595,7 +755,7 @@ Engine_Woodland : CroneEngine {
 		// 0..~2 modulation index. depth=0 (the default) is a no-op.
 		this.addCommand("voice_fm", "iff", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) {
+			if (v >= 0 and: { v < nVoices }) {
 				voiceSynths[v].set(\fmRatio, msg[2], \fmDepth, msg[3]);
 			};
 		});
@@ -606,19 +766,21 @@ Engine_Woodland : CroneEngine {
 		// bandpass's resonance.
 		this.addCommand("voice_noise_tune", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\noiseTune, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\noiseTune, msg[2]) };
 		});
 
 		this.addCommand("voice_noise_q", "if", { |msg|
 			var v = msg[1].asInteger;
-			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\exciteQ, msg[2]) };
+			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\exciteQ, msg[2]) };
 		});
 
 		// exciter_on/off(index) -- §2.4 lazy allocation: an S cell only runs
-		// while it has at least one cable.
+		// while it has at least one cable. with twenty of them that is no
+		// longer a nicety -- twenty always-on noise sources would be most of
+		// a norns' CPU budget for nothing.
 		this.addCommand("exciter_on", "i", { |msg|
 			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < 10 } and: { excSynths[i].isNil }) {
+			if (i >= 0 and: { i < nExc } and: { excSynths[i].isNil }) {
 				excSynths[i] = Synth.new(excDefs[i], [
 					\out, patchBus.index + excBase + i,
 					\colourModIn, patchBus.index + colourModBase + i
@@ -628,7 +790,7 @@ Engine_Woodland : CroneEngine {
 
 		this.addCommand("exciter_off", "i", { |msg|
 			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
+			if (i >= 0 and: { i < nExc } and: { excSynths[i].notNil }) {
 				excSynths[i].free;
 				excSynths[i] = nil;
 			};
@@ -637,7 +799,7 @@ Engine_Woodland : CroneEngine {
 		// exciter_colour(index, v) -- Colour, E2 on an S cell (§4.2).
 		this.addCommand("exciter_colour", "if", { |msg|
 			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
+			if (i >= 0 and: { i < nExc } and: { excSynths[i].notNil }) {
 				excSynths[i].set(\colour, msg[2]);
 			};
 		});
@@ -647,16 +809,17 @@ Engine_Woodland : CroneEngine {
 		// its own recipe has. see the gateMul comment above.
 		this.addCommand("exciter_decay", "if", { |msg|
 			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
+			if (i >= 0 and: { i < nExc } and: { excSynths[i].notNil }) {
 				excSynths[i].set(\decay, msg[2].clip(0.05, 20));
 			};
 		});
 
-		// exciter_gated(index, flag) -- does this S cell have >=1 incoming D
-		// cable right now? flips it between free-running and grain-on-pulse.
+		// exciter_gated(index, flag) -- does this S cell have >=1 incoming
+		// pulse cable right now? flips it between free-running and
+		// grain-on-pulse.
 		this.addCommand("exciter_gated", "ii", { |msg|
 			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
+			if (i >= 0 and: { i < nExc } and: { excSynths[i].notNil }) {
 				excSynths[i].set(\gated, msg[2]);
 			};
 		});
@@ -664,7 +827,7 @@ Engine_Woodland : CroneEngine {
 		// exciter_gate(index, dur, amp) -- fires one grain; see gateMul above.
 		this.addCommand("exciter_gate", "iff", { |msg|
 			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
+			if (i >= 0 and: { i < nExc } and: { excSynths[i].notNil }) {
 				excSynths[i].set(\gateDur, msg[2], \gateAmp, msg[3], \t_gate, 1);
 			};
 		});
@@ -674,7 +837,7 @@ Engine_Woodland : CroneEngine {
 		// every other per-exciter set command.
 		this.addCommand("exciter_fm", "iff", { |msg|
 			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
+			if (i >= 0 and: { i < nExc } and: { excSynths[i].notNil }) {
 				excSynths[i].set(\fmRatio, msg[2], \fmDepth, msg[3]);
 			};
 		});

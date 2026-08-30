@@ -5,8 +5,10 @@
 
 local state = {}
 
--- §5.2-5.4 screen views (cycled with K3 when nothing is held)
-state.views = {"network", "meters", "lexicon"}
+-- §5.2-5.3 screen views (cycled with K3 when nothing is held). the lexicon
+-- pages are gone: every cell's one knob names itself on the cell view, which
+-- is where you are already looking when you want to know what it does.
+state.views = {"network", "meters"}
 state.view = "network"
 
 function state.cycle_view()
@@ -17,6 +19,12 @@ function state.cycle_view()
     end
   end
 end
+
+-- §5.5 the sound editor. tapping a voice cell puts its id in here and the
+-- screen becomes that voice's eight-parameter page; tapping it again (or K3)
+-- clears it and the screen goes back to whatever view it was on.
+state.voice_edit = nil
+state.vparam_focus = 1
 
 -- §4.1 global macros
 state.global = {
@@ -33,13 +41,17 @@ state.held_t = {}   -- id -> util.time() at press
 
 -- per-cell UI params, lazily defaulted
 state.focus = {}       -- id -> focused edge index (0 = ALL)
-state.character = {}   -- id -> primary character value (E2)
+state.character = {}   -- id -> primary character value (E2), player-set
+state.character_mod = {} -- id -> climate.lua's offset, in 0..1 of the range
 state.character2 = {}  -- id -> secondary character value (K1+E2)
 state.decay = {}       -- id -> that sound's decay (E3 when focus == ALL)
 state.gait = {}        -- D id -> gait key (K1+E2 swaps it, §4.2)
 state.rooted = {}      -- D id -> locked to the norns clock? (K1+tap, §2.3)
-state.mode = {}        -- P id -> pitch-field mode key (K1+E2 swaps it, §2.6)
-state.snap = {}        -- P id -> quantised to the scale? (K1+tap, §2.6)
+state.rule = {}        -- R id -> weave rule key (K1+E2 swaps it, §2.7)
+state.mode = {}        -- F id -> pitch-field mode key (K1+E2 swaps it, §2.6)
+state.snap = {}        -- F id -> quantised to the scale? (K1+tap, §2.6)
+state.shape = {}       -- C id -> climate shape key (K1+E2 swaps it, §2.8)
+state.vparam = {}      -- voice id -> {key -> 0..1} (§5.5 sound editor)
 
 function state.get_focus(id)
   if state.focus[id] == nil then state.focus[id] = 0 end
@@ -55,11 +67,12 @@ function state.get_decay(id)
 end
 
 -- which cell's decay a gesture on this one moves, or nil if it moves none.
--- a voice's four nodes are parts of that voice, not sounds of their own, so
--- the gesture on any of them reaches the voice's resonator. D, H and P cells
--- have no sound to decay -- they make pulses, diffuse energy and choose
--- pitches -- and their E3-with-nothing-focused is deliberately inert rather
--- than quietly storing a number nothing reads.
+-- a voice's four sockets are parts of that voice, not sounds of their own, so
+-- the gesture on any of them reaches the voice's resonator. D, R, H, F and C
+-- cells have no sound to decay -- they make pulses, bend them, diffuse
+-- energy, choose pitches and change the weather -- and their E3-with-nothing-
+-- focused is deliberately inert rather than quietly storing a number nothing
+-- reads.
 local DECAY_TYPES = {voice = true, node = true, S = true}
 
 function state.decay_target(cell)
@@ -68,12 +81,27 @@ function state.decay_target(cell)
   return cell.id
 end
 
-function state.get_character(id, cell, lo, hi)
+-- the player's own setting, untouched by the weather (§2.8). this is what
+-- E2 moves and what the cell view's bar draws.
+function state.base_character(id, lo, hi)
   if state.character[id] == nil then
     lo, hi = lo or 0, hi or 1
     state.character[id] = lo + (hi - lo) * 0.5
   end
   return state.character[id]
+end
+
+-- what the cell actually runs on: the player's setting plus whatever any
+-- cabled climate cell is currently adding. every consumer reads through
+-- here, so a C cable moves the sound without ever overwriting the knob.
+function state.get_character(id, cell, lo, hi)
+  lo, hi = lo or 0, hi or 1
+  local base = state.base_character(id, lo, hi)
+  local mod = state.character_mod[id]
+  if not mod or mod == 0 then return base end
+  local v = base + mod * (hi - lo)
+  if v < lo then return lo elseif v > hi then return hi end
+  return v
 end
 
 function state.get_character2(id)
@@ -93,7 +121,13 @@ function state.get_rooted(id, default)
   return state.rooted[id]
 end
 
--- same shape for a P cell's mode/snap pair (§2.6), for the same reason.
+-- the same shape for an R cell's rule (§2.7), an F cell's mode/snap pair
+-- (§2.6) and a C cell's shape (§2.8), for the same reason.
+function state.get_rule(id, default)
+  if state.rule[id] == nil then state.rule[id] = default end
+  return state.rule[id]
+end
+
 function state.get_mode(id, default)
   if state.mode[id] == nil then state.mode[id] = default end
   return state.mode[id]
@@ -104,8 +138,30 @@ function state.get_snap(id, default)
   return state.snap[id]
 end
 
--- fires when a cell's primary character (E2) changes, so voice.lua etc. can
--- forward the new value to the engine without gridui knowing about audio.
+function state.get_shape(id, default)
+  if state.shape[id] == nil then state.shape[id] = default end
+  return state.shape[id]
+end
+
+-- §5.5 the eight per-voice sound parameters, all stored 0..1. voice.lua owns
+-- what each of them means in real units.
+function state.get_vparam(voice_id, key, default)
+  local t = state.vparam[voice_id]
+  if not t then t = {}; state.vparam[voice_id] = t end
+  if t[key] == nil then t[key] = default or 0.5 end
+  return t[key]
+end
+
+function state.set_vparam(voice_id, key, v)
+  local t = state.vparam[voice_id]
+  if not t then t = {}; state.vparam[voice_id] = t end
+  t[key] = util.clamp(v, 0, 1)
+  return t[key]
+end
+
+-- fires when a cell's primary character (E2, or the weather moving under it)
+-- changes, so voice.lua etc. can forward the new value to the engine without
+-- gridui knowing about audio.
 state._character_listeners = {}
 function state.on_character_change(fn)
   table.insert(state._character_listeners, fn)
@@ -132,9 +188,6 @@ function state.is_held(id)
   return false
 end
 
--- lexicon view pagination
-state.lexicon_page = 1
-
 -- §5.2 network view bottom line: text of the most recent event.
 -- once the scheduler is running, pulse traffic would otherwise overwrite a
 -- patching message within a few milliseconds and you would never read it, so
@@ -156,12 +209,13 @@ end
 state.confirm = nil -- {label=, started=, duration=} or nil
 
 -- §5.1 "signal magnitude through it" -- a decaying flash for any cell whose
--- pulse arrival is Lua-known (node strike/choke, a D->S grain firing), the
--- same flash-on-pulse-then-decay-to-15 shape rambler.lua and heartwood.lua
--- each already keep for D and H cells, just without a dedicated per-cell
--- object to hang it on. continuous audio-rate response -- a node under a
--- steady stream, S's own shimmer, a voice's amplitude envelope -- still
--- needs the metering back-channel (§7.4) and isn't lit by this.
+-- pulse arrival is Lua-known (a socket strike/choke, a D->S grain firing),
+-- the same flash-on-pulse-then-decay shape rambler.lua, weave.lua and
+-- heartwood.lua each already keep for their own cells, just without a
+-- dedicated per-cell object to hang it on. continuous audio-rate response --
+-- a socket under a steady stream, S's own shimmer, a voice's amplitude
+-- envelope -- still needs the metering back-channel (§7.4) and isn't lit by
+-- this.
 state.FLASH_DECAY = 0.12
 state._flash = {} -- id -> {t=, w=}
 

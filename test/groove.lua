@@ -10,7 +10,7 @@ dofile(SP .. "/harness.lua")
 
 local KNOCKER, HOB, SHUCK = "d.knocker", "d.hob", "d.shuck"
 local BOGGART, GABRIEL = "d.boggart", "d.gabriel"
-local KNOCK = "oak.knock"
+local KNOCK = "oak.trig"
 
 -- every division the quantiser can pick is a whole number of 64th notes, so
 -- "on the grid" is one test whatever grid a given cell ended up on.
@@ -104,8 +104,8 @@ do
   M.rambler.set_gait(SHUCK, "slow")
   M.state.character[SHUCK] = 0.7           -- 0.36 Hz
   M.patch.add(KNOCKER, KNOCK, 1.0)
-  M.patch.add(HOB, "rowan.knock", 1.0)
-  M.patch.add(SHUCK, "ash.knock", 1.0)
+  M.patch.add(HOB, "rowan.trig", 1.0)
+  M.patch.add(SHUCK, "hazel.trig", 1.0)
   run(M, 20)
 
   local voices = {}

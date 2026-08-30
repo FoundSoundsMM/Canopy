@@ -1,16 +1,16 @@
 -- build phase 5b: the §2.6 pitch fields. that a cabled field actually
 -- retunes a voice before it is struck, that Range bounds how far, that snap
 -- lands on the scale and free does not, that a pulse steps a field on its own
--- clock, that P<->P cables pull two fields together, and that a voice with no
+-- clock, that F<->F cables pull two fields together, and that a voice with no
 -- field cabled to it still never plays the same note twice.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
-local OAK_ROOT = 65
-local CUCKOO, MERLIN, PLOVER, RAVEN = "p.cuckoo", "p.merlin", "p.plover", "p.raven"
-local BITTERN, NIGHTJAR = "p.bittern", "p.nightjar"
+local OAK_ROOT = 55
+local CUCKOO, MERLIN, PLOVER, RAVEN = "f.cuckoo", "f.merlin", "f.plover", "f.raven"
+local BITTERN, NIGHTJAR = "f.bittern", "f.nightjar"
 
 -- semitones between an emitted Hz and a voice's own fundamental
 local function st(hz, root)
@@ -28,7 +28,7 @@ end
 -- one D cell striking Oak, as fast as the metric gait will go, so a test can
 -- get plenty of strikes out of a short virtual run.
 local function knock_oak(M)
-  M.patch.add("d.knocker", "oak.knock", 1.0)
+  M.patch.add("d.knocker", "oak.trig", 1.0)
   M.state.character["d.knocker"] = 1.0  -- 4 x beat
 end
 
@@ -36,7 +36,7 @@ print("\n-- a cabled field retunes the voice, and does it before the strike --")
 do
   local M = fresh(1)
   knock_oak(M)
-  M.patch.add(MERLIN, "oak.sway", 1.0)   -- scatter: a new degree every step
+  M.patch.add(MERLIN, "oak.pitch", 1.0)   -- scatter: a new degree every step
   M.state.character[MERLIN] = 1.0        -- widest range
   run(M, 4)
 
@@ -74,7 +74,7 @@ do
   local function spread(range)
     local M = fresh(3)
     knock_oak(M)
-    M.patch.add(MERLIN, "oak.sway", 1.0)
+    M.patch.add(MERLIN, "oak.pitch", 1.0)
     M.state.character[MERLIN] = range
     M.state.notify_character_change(MERLIN)
     run(M, 6)
@@ -108,7 +108,7 @@ do
   end
 
   local M = fresh(5)
-  M.patch.add(MERLIN, "oak.sway", 1.0)
+  M.patch.add(MERLIN, "oak.pitch", 1.0)
   M.state.character[MERLIN] = 1.0
   M.state.notify_character_change(MERLIN)
   -- step the field directly: a strike would add its own few cents of detune,
@@ -136,7 +136,7 @@ end
 print("\n-- a narrow field ignores snap, because a scale needs room --")
 do
   local M = fresh(41)
-  M.patch.add(MERLIN, "oak.sway", 1.0)
+  M.patch.add(MERLIN, "oak.pitch", 1.0)
   M.state.character[MERLIN] = 0.2       -- well under the smallest interval
   M.state.notify_character_change(MERLIN)
   check("it reads as free even with snap set", M.grove.info(MERLIN).snap == false)
@@ -148,10 +148,10 @@ do
   check("and it still detunes rather than collapsing onto the root", moved)
 end
 
-print("\n-- a P->S cable makes the exciter's colour ride the line --")
+print("\n-- an F->S cable makes the exciter's colour ride the line --")
 do
   local M = fresh(43)
-  M.patch.add("s.mistle", "oak.sap", 0.8)  -- cable it so the exciter is live
+  M.patch.add("s.mistle", "oak.mod", 0.8)  -- cable it so the exciter is live
   M.patch.add(MERLIN, "s.mistle", 1.0)
   M.state.character[MERLIN] = 1.0
   M.state.notify_character_change(MERLIN)
@@ -180,7 +180,7 @@ end
 print("\n-- octave mode transposes; it never plays a line --")
 do
   local M = fresh(7)
-  M.patch.add(BITTERN, "oak.sway", 1.0)
+  M.patch.add(BITTERN, "oak.pitch", 1.0)
   M.state.character[BITTERN] = 1.0
   M.state.notify_character_change(BITTERN)
   for _ = 1, 60 do M.grove.step(BITTERN, 1) end
@@ -200,19 +200,19 @@ print("\n-- a pulse steps the field on its own clock --")
 do
   local M = fresh(11)
   -- no strike path at all: Shuck only feeds the field, nothing knocks Oak.
-  M.patch.add(CUCKOO, "oak.sway", 1.0)
+  M.patch.add(CUCKOO, "oak.pitch", 1.0)
   M.patch.add("d.shuck", CUCKOO, 1.0)
   M.state.character["d.shuck"] = 1.0   -- 0.5 Hz
   M.state.character[CUCKOO] = 0.8
   M.state.notify_character_change(CUCKOO)
   run(M, 12)
-  check("no strikes -- nothing is cabled to Knock", #CALLS.strike == 0,
+  check("no strikes -- nothing is cabled to the trigger socket", #CALLS.strike == 0,
         "#" .. #CALLS.strike)
   check("but the field moved the voice anyway", #pitches_for(0) > 3,
         "#" .. #pitches_for(0))
 end
 
-print("\n-- a P<->P cable pulls two fields together --")
+print("\n-- an F<->F cable pulls two fields together --")
 do
   local function converge(gain)
     local M = fresh(13)
@@ -266,14 +266,14 @@ do
   for _, c in ipairs(CALLS.voice_drift) do depth[c.voice] = c.depth end
   local n = 0
   for _ in pairs(depth) do n = n + 1 end
-  check("all six voices get a drift depth at init", n == 6, "#" .. n)
+  check("every voice gets a drift depth at init", n == 4, "#" .. n)
   check("and it is small enough to read as wood, not as out of tune",
         (depth[0] or 0) > 0 and (depth[0] or 1) < 0.1,
         string.format("%.3f st", depth[0] or -1))
 
   local base = depth[0]
   M.state.character[NIGHTJAR] = 1.0    -- a two-octave field
-  M.patch.add(NIGHTJAR, "oak.sway", 1.0)
+  M.patch.add(NIGHTJAR, "oak.pitch", 1.0)
   local now = base
   for _, c in ipairs(CALLS.voice_drift) do if c.voice == 0 then now = c.depth end end
   check("cabling a wide field in makes the voice breathe harder", now > base,
@@ -285,7 +285,7 @@ end
 print("\n-- Still freezes the fields with everything else --")
 do
   local M = fresh(23)
-  M.patch.add(PLOVER, "oak.sway", 1.0)  -- wander: moves on the tick, unprompted
+  M.patch.add(PLOVER, "oak.pitch", 1.0)  -- wander: moves on the tick, unprompted
   M.state.character[PLOVER] = 1.0
   M.state.notify_character_change(PLOVER)
   -- 4s, not 2: a wander field emits a retune each time its glide crosses a
@@ -313,7 +313,7 @@ end
 print("\n-- pulling the cable hands the voice back its own root --")
 do
   local M = fresh(29)
-  local edge = M.patch.add(MERLIN, "oak.sway", 1.0)
+  local edge = M.patch.add(MERLIN, "oak.pitch", 1.0)
   M.state.character[MERLIN] = 1.0
   M.state.notify_character_change(MERLIN)
   for _ = 1, 20 do M.grove.step(MERLIN, 1) end
@@ -330,7 +330,7 @@ print("\n-- mode swap and the field's own readout --")
 do
   local M = fresh(31)
   local first = M.grove.info(CUCKOO).mode
-  check("a P cell starts on its topology default", first == "call", first)
+  check("an F cell starts on its topology default", first == "call", first)
   local key = M.grove.cycle_mode(CUCKOO, 1)
   check("cycle_mode advances it", key ~= first and M.grove.info(CUCKOO).mode == key, key)
   check("info reads out the range in musical units",

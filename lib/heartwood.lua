@@ -105,7 +105,13 @@ local function rebuild_links()
         if ocell.type == "H" then
           table.insert(n.lattice, {id = other, gain = math.abs(edge.gain)})
         else
-          table.insert(n.out_links, {id = other, edge = edge, d = ocell.type == "D"})
+          -- `pulse` means the far end has a phase or a rule of its own (a D
+          -- or an R cell), so what emerges there has to go through rambler's
+          -- inbox rather than straight down dispatch, or a D->H->D loop would
+          -- recurse where a D->D one does not.
+          table.insert(n.out_links, {
+            id = other, edge = edge, pulse = wl("rambler").is_pulse_cell(ocell),
+          })
         end
       end
     end
@@ -142,7 +148,7 @@ local function arrive(n, w, hops, from, now, src)
   -- gain itself, so `w` goes through unscaled.
   for _, link in ipairs(n.out_links) do
     if link.id ~= src then
-      if link.d then
+      if link.pulse then
         rambler.inject(link.id, w * math.abs(link.edge.gain), n.id,
                        link.edge.gain < 0 and -1 or 1)
       else
@@ -265,7 +271,9 @@ end
 state.on_character_change(function(id)
   local n = nodes[id]
   if n then
-    bridge.heart_conductance(n.cell.index, state.character[id])
+    -- through heartwood.conductance, not state.character, so a climate cell
+    -- cabled to this node moves the lattice as well as the readout (§2.8).
+    bridge.heart_conductance(n.cell.index, heartwood.conductance(id))
   end
 end)
 

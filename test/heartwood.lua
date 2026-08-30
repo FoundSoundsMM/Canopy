@@ -18,12 +18,12 @@ local function settle(M, seconds) run(M, seconds) end
 print("\n-- a pulse injected at one node emerges from the others --")
 do
   local M = fresh(1)
-  -- cable four nodes spread round the ring to Knock inputs, so an arrival is
-  -- visible as a strike on a distinct voice.
-  M.patch.add(TAPROOT, "oak.knock", 1.0)
-  M.patch.add(WYRD, "rowan.knock", 1.0)
-  M.patch.add(HEARTH, "ash.knock", 1.0)
-  M.patch.add(BARROW, "hazel.knock", 1.0)
+  -- cable four nodes spread round the ring to trigger sockets, so an arrival
+  -- is visible as a strike on a distinct voice.
+  M.patch.add(TAPROOT, "oak.trig", 1.0)     -- engine voice 0
+  M.patch.add(WYRD, "hazel.trig", 1.0)     -- engine voice 1
+  M.patch.add(HEARTH, "alder.trig", 1.0)   -- engine voice 2, four hops away
+  M.patch.add(BARROW, "rowan.trig", 1.0)   -- engine voice 3
   for _, id in ipairs({TAPROOT, MYCEL, WYRD, LEY, HEARTH, HOLLOWAY, WARREN, BARROW}) do
     M.state.character[id] = 0.8 -- a good conductor: short hops, little loss
   end
@@ -62,9 +62,9 @@ do
   for _, id in ipairs({TAPROOT, MYCEL, WYRD, LEY, HEARTH, HOLLOWAY, WARREN, BARROW}) do
     M.state.character[id] = 1.0
   end
-  M.patch.add(TAPROOT, "oak.knock", 1.0)
+  M.patch.add(TAPROOT, "oak.trig", 1.0)
   -- injected *through* that same cable, as a D->H cable's pulse would be
-  M.heartwood.inject(TAPROOT, 1.0, "oak.knock")
+  M.heartwood.inject(TAPROOT, 1.0, "oak.trig")
 
   settle(M, 0.15)
   check("silent while it is still going round", #CALLS.strike == 0,
@@ -83,7 +83,7 @@ do
     end
     -- one tap on the far side of the ring, so nothing counted here is the
     -- injection itself -- only what actually travelled.
-    M.patch.add(HEARTH, "oak.knock", 1.0)
+    M.patch.add(HEARTH, "oak.trig", 1.0)
     M.heartwood.inject(TAPROOT, 1.0, "test")
     settle(M, 8)
     return #CALLS.strike
@@ -101,7 +101,7 @@ do
     for _, id in ipairs({TAPROOT, MYCEL, WYRD, LEY, HEARTH, HOLLOWAY, WARREN, BARROW}) do
       M.state.character[id] = 0.8
     end
-    M.patch.add(HEARTH, "oak.knock", 1.0)
+    M.patch.add(HEARTH, "oak.trig", 1.0)
     if shortcut then M.patch.add(TAPROOT, HEARTH, 1.0) end
     M.heartwood.inject(TAPROOT, 1.0, "test")
     settle(M, 4)
@@ -165,13 +165,13 @@ do
         back and back.src == M.bridge.bus("heart_out", mycel.index)
         and back.dst == M.bridge.bus("colour_mod", beck.index))
 
-  M.patch.add(MYCEL, "oak.sap", 0.4)
+  M.patch.add(MYCEL, "oak.mod", 0.4)
   local tap = CALLS.patch_add[#CALLS.patch_add]
-  check("H -> Sap taps the emergence bus into the voice",
+  check("H -> the M socket taps the emergence bus into the voice",
         tap.kind == "aa" and tap.src == M.bridge.bus("heart_out", mycel.index)
-        and tap.dst == M.bridge.bus("exc_in", oak.index - 1), tostring(tap.dst))
+        and tap.dst == M.bridge.bus("mod_in", oak.index - 1), tostring(tap.dst))
 
-  M.patch.remove(MYCEL, "oak.sap")
+  M.patch.remove(MYCEL, "oak.mod")
   M.patch.remove(BECK, MYCEL)
   check("all freed on remove", #CALLS.patch_free == 3, #CALLS.patch_free)
 end
@@ -179,7 +179,7 @@ end
 print("\n-- D -> H -> D closes a loop without running away --")
 do
   local M = fresh(3)
-  local GABRIEL, PUCK = "d.gabriel", "d.puck"
+  local GABRIEL, PUCK = "d.gabriel", "d.spriggan"
   for _, id in ipairs({TAPROOT, MYCEL, WYRD, LEY, HEARTH, HOLLOWAY, WARREN, BARROW}) do
     M.state.character[id] = 1.0 -- the most conductive lattice there is
   end
@@ -188,8 +188,8 @@ do
   M.patch.add(GABRIEL, TAPROOT, 1.0)
   M.patch.add(HEARTH, PUCK, 1.0)
   M.patch.add(PUCK, WARREN, 1.0)
-  M.patch.add(MYCEL, "oak.knock", 0.8)
-  M.patch.add(HOLLOWAY, "yew.knock", 0.8)
+  M.patch.add(MYCEL, "oak.trig", 0.8)
+  M.patch.add(HOLLOWAY, "alder.trig", 0.8)
   M.patch.add(LEY, "s.bracken", 0.8)
 
   local ok = pcall(run, M, 20)
@@ -207,7 +207,7 @@ do
   for _, id in ipairs({TAPROOT, MYCEL, WYRD, LEY, HEARTH, HOLLOWAY, WARREN, BARROW}) do
     M.state.character[id] = 0.8
   end
-  M.patch.add(HEARTH, "oak.knock", 1.0)
+  M.patch.add(HEARTH, "oak.trig", 1.0)
   M.heartwood.inject(TAPROOT, 1.0, "test")
 
   M.state.global.still = true

@@ -1,8 +1,8 @@
 -- grove.lua
--- the §2.6 pitch fields -- P cells. the six voices are fixed-pitch modal
+-- the §2.6 pitch fields -- F cells. the four voices are fixed-pitch modal
 -- resonators, and until this file existed nothing ever moved their
 -- fundamentals: a patch could be rhythmically alive and still be one chord
--- for as long as you left it running. a P cell is a *field*: a wandering
+-- for as long as you left it running. an F cell is a *field*: a wandering
 -- pitch that voices can be cabled into, so the melody comes out of the same
 -- patch graph everything else does rather than out of a sequencer.
 --
@@ -11,9 +11,9 @@
 --   * a strike. every voice a field tunes re-tunes just before it is struck
 --     (grove.on_strike), so one cable is enough to turn an existing rhythm
 --     into a melody with nothing else patched.
---   * a pulse. a D->P or H->P cable steps the field on its own clock,
+--   * a pulse. anything cabled into the field steps it on its own clock,
 --     independent of whoever is being struck (grove.step, via dispatch).
---   * time. the continuous modes (wander, gravity) and the P<->P pull run on
+--   * time. the continuous modes (wander, gravity) and the F<->F pull run on
 --     grove.tick, off the same 2 ms scheduler as the ramblers -- decimated,
 --     because a pitch field has no business being recomputed at 500 Hz.
 --
@@ -58,7 +58,7 @@ grove.SCALE = {0, 3, 5, 7, 10}
 -- microtonal detuner, at large Range it is a melody.
 local SNAP_MIN_SPAN = 1.5
 
--- how hard a P<->P cable pulls two fields together, in units of "normalised
+-- how hard an F<->F cable pulls two fields together, in units of "normalised
 -- position per second at unity gain". small: a cable between fields should
 -- bend a line, not weld two cells into one.
 local COUPLE_K = 0.9
@@ -68,7 +68,7 @@ local COUPLE_K = 0.9
 -- "the wood is breathing" turns into "this is out of tune".
 local DRIFT_BASE, DRIFT_MAX = 0.06, 0.35
 
--- each voice's drift runs at its own irrational-ish rate so six voices never
+-- each voice's drift runs at its own irrational-ish rate so no two voices
 -- breathe in step. index matches topology's voice index - 1.
 local DRIFT_RATES = {0.061, 0.083, 0.047, 0.113, 0.037, 0.071}
 
@@ -76,8 +76,8 @@ local DRIFT_RATES = {0.061, 0.083, 0.047, 0.113, 0.037, 0.071}
 -- rather than swooping into it, long enough not to zipper.
 local STRIKE_GLIDE = 0.012
 
-local fields = {}       -- p_id -> field record
-local order = {}        -- p_ids, stable iteration order
+local fields = {}       -- f_id -> field record
+local order = {}        -- f_ids, stable iteration order
 local voice_links = {}  -- voice_id -> {{f=, gain=}, ...}
 local tracked = {}      -- s_id -> true while some field is driving its Colour
 local last_hz = {}      -- voice_id -> the Hz last sent
@@ -107,7 +107,7 @@ local function snap_semitones(x)
 end
 
 -- modes ----------------------------------------------------------------------
--- a mode is to a P cell what a gait is to a D cell: the rule that decides
+-- a mode is to an F cell what a gait is to a D cell: the rule that decides
 -- where the field goes next. each works in a normalised position (-1..+1)
 -- which E2's Range then scales into semitones, so Range means the same thing
 -- in every mode and the mode only ever decides the *shape* of the line.
@@ -247,7 +247,7 @@ grove.MODES = MODES
 -- construction ----------------------------------------------------------------
 
 for id, cell in topology.each() do
-  if cell.type == "P" then
+  if cell.type == "F" then
     local f = {
       id = id,
       cell = cell,
@@ -322,18 +322,22 @@ local function rebuild_links()
       -- a one-way cable a->b only sends from a (§3), the rule rambler and
       -- heartwood both use. a field is always the sender here: nothing on
       -- the far end of a P cable ever writes back into the field except
-      -- another P cell, which is handled from that cell's own side.
+      -- another F cell, which is handled from that cell's own side.
       local can_send = (not edge.oneway) or (edge.a == f.id)
       local can_hear = (not edge.oneway) or (edge.b == f.id)
       if other then
-        if other.type == "node" and can_send then
+        -- only the P socket takes a field. cabling one to T, M or O is a
+        -- legal patch that simply means nothing on this side of the wall;
+        -- letting it retune the voice anyway would make the four sockets
+        -- interchangeable, which is the one thing they must not be.
+        if other.type == "node" and other.role == "pitch" and can_send then
           table.insert(f.voices, {id = other.voice, node = other_id, gain = edge.gain})
           voice_links[other.voice] = voice_links[other.voice] or {}
           table.insert(voice_links[other.voice], {f = f, gain = edge.gain})
         elseif other.type == "S" and can_send then
           table.insert(f.exciters, {id = other_id, index = other.index, gain = edge.gain})
           tracked[other_id] = true
-        elseif other.type == "P" and can_hear then
+        elseif other.type == "F" and can_hear then
           table.insert(f.p_links, {id = other_id, gain = edge.gain})
         end
       end
@@ -347,6 +351,17 @@ end
 -- (bipolar -- a negative cable inverts the field's contour) and normalised by
 -- the total weight, so cabling a second field to a voice averages the two
 -- rather than stacking them into a transposition nobody asked for.
+-- the P socket's own knob (§4.2 "depth") is a multiplier on everything the
+-- fields do to this voice: at 0 the cables are still there and still drawn,
+-- and the voice sits on its root anyway; at 2 a narrow field reads as a wide
+-- one. it is the per-voice answer to "that is too much melody".
+function grove.depth(voice_id)
+  local node_id = voice_id .. ".pitch"
+  local cell = topology.get(node_id)
+  if not cell then return 1 end
+  return state.get_character(node_id, cell, 0, 2)
+end
+
 function grove.offset(voice_id)
   local links = voice_links[voice_id]
   if not links or #links == 0 then return 0 end
@@ -355,13 +370,18 @@ function grove.offset(voice_id)
     sum = sum + grove.degree(l.f.id) * l.gain
     wsum = wsum + math.abs(l.gain)
   end
-  return util.clamp(sum / math.max(wsum, 1), -36, 36)
+  return util.clamp((sum / math.max(wsum, 1)) * grove.depth(voice_id), -36, 36)
 end
 
+-- root, plus the sound editor's Tune (§5.5), plus whatever the fields are
+-- doing, plus whatever per-strike detune the caller passes in. voice.lua owns
+-- Tune; this is the only place the three are ever summed.
 function grove.hz(voice_id, extra_semitones)
   local cell = topology.get(voice_id)
   if not cell or not cell.root then return nil end
-  return cell.root * (2 ^ ((grove.offset(voice_id) + (extra_semitones or 0)) / 12))
+  local st = grove.offset(voice_id) + wl("voice").tune_semitones(voice_id)
+             + (extra_semitones or 0)
+  return cell.root * (2 ^ (st / 12))
 end
 
 -- push one voice's pitch, if it actually moved. `glide` is the portamento to
@@ -478,11 +498,11 @@ local function step_field(f, w, now, trail)
   end
 end
 
--- a pulse cabled into a P cell (D->P, or one emerging from the heartwood).
--- dispatch routes it here; a field never emits a pulse of its own, which is
--- what keeps a D->P->Knock->... chain from being able to feed itself.
-function grove.step(p_id, w, src_id)
-  local f = fields[p_id]
+-- a pulse cabled into an F cell (from a D or R cell, or one emerging from
+-- the heartwood). dispatch routes it here; a field never emits a pulse of its
+-- own, which is what keeps an F cell out of every feedback path there is.
+function grove.step(f_id, w, src_id)
+  local f = fields[f_id]
   if not f then return end
   step_field(f, w, util.time(), true)
 end
@@ -520,7 +540,33 @@ function grove.on_strike(voice_id)
   push_voice(voice_id, glide, detune)
 end
 
--- the continuous half: the modes that move on their own, plus the P<->P pull
+-- voice.lua's Tune knob moved, so this voice's Hz did even though no field
+-- did: the same path as everything else, entered from the sound editor.
+function grove.push_voice_now(voice_id)
+  push_voice(voice_id)
+end
+
+-- a pulse arriving at a voice's P socket. every field tuning that voice takes
+-- a step and the voice is retuned, without anything being struck -- which is
+-- how you get a line that moves between the hits as well as on them.
+function grove.step_voice(voice_id, w)
+  local links = voice_links[voice_id]
+  if not links or #links == 0 then return end
+  local now = util.time()
+  local stepped = {}
+  deferring = true
+  for _, l in ipairs(links) do
+    if MODES[l.f.mode].steps_on_strike then
+      step_field(l.f, w or 1, now)
+      table.insert(stepped, l.f)
+    end
+  end
+  deferring = false
+  for _, f in ipairs(stepped) do refresh(f, MODES[f.mode].glide) end
+  push_voice(voice_id)
+end
+
+-- the continuous half: the modes that move on their own, plus the F<->F pull
 -- that applies to every mode. called from rambler.tick (so it freezes under
 -- Still with everything else) and decimated to TICK_EVERY.
 function grove.tick(now)
@@ -609,7 +655,7 @@ function grove.set_mode(id, key)
   return key
 end
 
--- K1+E2 while holding a P cell -- the same gesture that swaps a D cell's gait.
+-- K1+E2 while holding an F cell -- the same gesture that swaps a D cell's gait.
 function grove.cycle_mode(id, delta)
   local f = fields[id]
   if not f then return nil end
@@ -621,7 +667,7 @@ function grove.cycle_mode(id, delta)
   return grove.set_mode(id, grove.MODE_ORDER[((at - 1 + delta) % n) + 1])
 end
 
--- K1 + tap a P cell: snapped to the scale, or free to sit between the notes.
+-- K1 + tap an F cell: snapped to the scale, or free to sit between the notes.
 function grove.toggle_snap(id)
   local f = fields[id]
   if not f then return nil end

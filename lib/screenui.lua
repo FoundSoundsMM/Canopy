@@ -1,16 +1,25 @@
 -- screenui.lua
--- network / meters / cell / edge / lexicon views. (§5.2-5.4)
+-- network / meters / cell / edge / voice views. (§5.2-5.5)
+--
+-- the lexicon pages are gone. they were a manual you had to leave the patch
+-- to read, and everything worth reading off them -- what a cell's one knob
+-- means, what a cable between two types does -- is already printed on the
+-- cell and edge views, at the moment you are holding the thing it is about.
+-- what replaces them is §5.5: tap a voice cell and the screen becomes that
+-- voice's eight-parameter sound page.
 
-local topology = wl("topology")
-local patch    = wl("patch")
-local lexicon  = wl("lexicon")
-local state    = wl("state")
-local rambler  = wl("rambler")
+local topology  = wl("topology")
+local patch     = wl("patch")
+local lexicon   = wl("lexicon")
+local state     = wl("state")
+local rambler   = wl("rambler")
+local weave     = wl("weave")
 local heartwood = wl("heartwood")
-local grove    = wl("grove")
-local quantise = wl("quantise")
-local voice    = wl("voice")
-local exciter  = wl("exciter")
+local grove     = wl("grove")
+local climate   = wl("climate")
+local quantise  = wl("quantise")
+local voice     = wl("voice")
+local exciter   = wl("exciter")
 
 local screenui = {}
 
@@ -23,9 +32,18 @@ local function cell_xy(x, y)
   return OX + (x - 1) * PITCH + PITCH / 2, OY + (y - 1) * PITCH + PITCH / 2
 end
 
-local LEXICON_ROWS = 6
-
 -- network view --------------------------------------------------------------
+
+-- cables are drawn dim and dotted. at full brightness and solid, a patch of
+-- twenty cables is a ball of wool: the lines are the least important thing on
+-- this screen and they were shouting over the cells, the pulse dots and each
+-- other. dotted also gives negative gain somewhere to live that isn't a
+-- second line style competing for the same ink -- an inverting cable is drawn
+-- with the dots twice as far apart, so you read it as a thinner connection
+-- rather than a different kind of drawing.
+local CABLE_MAX_LEVEL = 5
+local DOT_SPACING = 2.6
+local DOT_SPACING_NEG = 5.0
 
 local function draw_cables()
   for _, edge in pairs(patch.edges) do
@@ -33,35 +51,25 @@ local function draw_cables()
     if ca and cb then
       local ax, ay = cell_xy(ca.coords[1][1], ca.coords[1][2])
       local bx, by = cell_xy(cb.coords[1][1], cb.coords[1][2])
-      local lvl = math.max(1, math.floor(math.abs(edge.gain) * 15))
-      screen.level(lvl)
-      screen.line_width(1)
-      if edge.gain < 0 then
-        -- dashed
-        local steps = 10
-        for s = 0, steps - 1, 2 do
-          local t0, t1 = s / steps, (s + 1) / steps
-          screen.move(ax + (bx - ax) * t0, ay + (by - ay) * t0)
-          screen.line(ax + (bx - ax) * t1, ay + (by - ay) * t1)
-          screen.stroke()
+      local dx, dy = bx - ax, by - ay
+      local dist = math.sqrt(dx * dx + dy * dy)
+      local spacing = (edge.gain < 0) and DOT_SPACING_NEG or DOT_SPACING
+      local n = math.floor(dist / spacing)
+      if n > 1 then
+        screen.level(1 + math.floor(math.abs(edge.gain) * (CABLE_MAX_LEVEL - 1)))
+        -- the endpoints themselves are left alone: the cell's own dot is
+        -- supposed to be the brightest thing at that coordinate.
+        for i = 1, n - 1 do
+          local t = i / n
+          screen.pixel(math.floor(ax + dx * t), math.floor(ay + dy * t))
         end
-      else
-        screen.move(ax, ay)
-        screen.line(bx, by)
-        screen.stroke()
-      end
-      if edge.oneway then
-        local dx, dy = bx - ax, by - ay
-        local d = math.sqrt(dx * dx + dy * dy)
-        if d > 0 then
-          local ux, uy = dx / d, dy / d
-          local hx, hy = bx - ux * 3, by - uy * 3
-          local px, py = -uy, ux
-          screen.move(bx, by)
-          screen.line(hx + px * 1.5, hy + py * 1.5)
-          screen.move(bx, by)
-          screen.line(hx - px * 1.5, hy - py * 1.5)
-          screen.stroke()
+        screen.fill()
+        if edge.oneway then
+          -- one brighter dot three quarters of the way along: enough to read
+          -- the direction, not enough to become an arrow made of five pixels.
+          screen.level(CABLE_MAX_LEVEL + 3)
+          screen.pixel(math.floor(ax + dx * 0.72), math.floor(ay + dy * 0.72))
+          screen.fill()
         end
       end
     end
@@ -78,7 +86,7 @@ local function draw_cells(meters_mode)
         local degree = patch.degree(id)
         lvl = cell.type == "voice" and 4 or (degree > 0 and 8 or 3)
       else
-        lvl = state.is_held(id) and 15 or (cell.type == "voice" and 6 or 3)
+        lvl = state.is_held(id) and 15 or (cell.type == "voice" and 8 or 4)
       end
       screen.level(lvl)
       if cell.type == "voice" then
@@ -98,7 +106,8 @@ end
 
 -- §5.2 "pulses render as a dot travelling the line". rambler.trails is a
 -- short capped ring of recent emissions; each is drawn at however far along
--- its cable it has got by now.
+-- its cable it has got by now. these stay bright: now that the cables
+-- themselves are dim, the travelling dots are what the network view is for.
 local function draw_trails()
   local now = util.time()
   for _, tr in ipairs(rambler.trails) do
@@ -118,8 +127,8 @@ local function draw_trails()
 end
 
 function screenui.draw_network()
-  draw_cells(false)
   draw_cables()
+  draw_cells(false)
   draw_trails()
   screen.level(15)
   screen.move(2, 62)
@@ -140,7 +149,7 @@ function screenui.draw_meters()
   screen.text("meters \xE2\x80\x94 back-channel is phase 7")
 end
 
--- cell view (one cell held) --------------------------------------------------
+-- shared widgets --------------------------------------------------------------
 
 local function bar(x, y, w, h, frac, lvl)
   screen.level(2)
@@ -154,13 +163,67 @@ local function bar(x, y, w, h, frac, lvl)
   end
 end
 
-function screenui.draw_cell(id)
+-- §5.5 voice page ---------------------------------------------------------------
+-- eight parameters, two columns of four. E1 walks them, E2 moves the one
+-- under the cursor coarsely and E3 finely. reached by tapping the voice cell
+-- (which keeps it open and gives it the encoders) or by holding it (which
+-- shows the same page for as long as you hold, without taking the encoders
+-- off the patch).
+
+local VP_ROWS = 4
+local VP_COL_X = {2, 66}
+local VP_COL_W = 60
+
+function screenui.draw_voice(id, live)
   local cell = topology.get(id)
   screen.level(15)
   screen.move(2, 8)
   screen.text(cell.name)
+  screen.level(live and 15 or 4)
   screen.move(126, 8)
-  screen.text_right(cell.type == "voice" and ("voice " .. cell.index) or cell.type)
+  screen.text_right(live and "sound" or "sound \xC2\xB7 hold")
+
+  screen.level(4)
+  screen.move(2, 11)
+  screen.line(126, 11)
+  screen.stroke()
+
+  local focus = util.clamp(state.vparam_focus or 1, 1, voice.PARAM_COUNT)
+  for i, p in ipairs(voice.PARAMS) do
+    local col = (i <= VP_ROWS) and 1 or 2
+    local row = ((i - 1) % VP_ROWS)
+    local x = VP_COL_X[col]
+    -- 10px rows starting at 20: the fourth bar ends at 54, which leaves the
+    -- hint line at 63 its own space on a 64px panel.
+    local y = 20 + row * 10
+    local on = (i == focus)
+    screen.level(on and 15 or 6)
+    screen.move(x, y)
+    screen.text(p.label)
+    screen.move(x + VP_COL_W, y)
+    screen.text_right(p.text(id))
+    bar(x, y + 2, VP_COL_W, 2, p.get(id), on and 12 or 4)
+  end
+
+  screen.level(2)
+  screen.move(2, 63)
+  screen.text(live and "E1 pick  E2/E3 coarse/fine" or "tap the cell to edit")
+end
+
+-- cell view (one cell held) --------------------------------------------------
+
+function screenui.draw_cell(id)
+  local cell = topology.get(id)
+  if cell.type == "voice" then
+    screenui.draw_voice(id, state.voice_edit == id)
+    return
+  end
+
+  screen.level(15)
+  screen.move(2, 8)
+  screen.text(cell.name)
+  screen.move(126, 8)
+  screen.text_right(cell.type)
 
   screen.level(4)
   screen.move(2, 12)
@@ -168,44 +231,57 @@ function screenui.draw_cell(id)
   screen.stroke()
 
   -- for a D cell the E2 knob means whatever its current gait says it means,
-  -- so the gait names the row and supplies its own units (§4.2).
-  local info = (cell.type == "D") and rambler.info(id) or nil
+  -- so the gait names the row and supplies its own units (§4.2) -- and the
+  -- same is true one type over for R's rule, F's mode and C's shape.
+  local info  = (cell.type == "D") and rambler.info(id) or nil
+  local winfo = (cell.type == "R") and weave.info(id) or nil
   local hinfo = (cell.type == "H") and heartwood.info(id) or nil
-  -- and a P cell's E2 means whatever its mode says, exactly as a D cell's
-  -- means whatever its gait says (§2.6).
-  local pinfo = (cell.type == "P") and grove.info(id) or nil
+  local finfo = (cell.type == "F") and grove.info(id) or nil
+  local cinfo = (cell.type == "C") and climate.info(id) or nil
 
   local ch = lexicon.character(id)
   local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
-  local v = state.get_character(id, cell, lo, hi)
-  local frac = (v - lo) / (hi - lo)
+  -- the bar draws the player's own setting; the number to its right is what
+  -- the cell is actually running on, so a climate cable is visible as the
+  -- two of them disagreeing (§2.8).
+  local base = state.base_character(id, lo, hi)
+  local eff = state.get_character(id, cell, lo, hi)
   screen.level(12)
   screen.move(2, 22)
-  screen.text(info and info.gait or (pinfo and pinfo.mode)
-              or (ch and ch.label or "character"))
+  screen.text(info and info.gait or winfo and winfo.rule or finfo and finfo.mode
+              or cinfo and cinfo.shape or (ch and ch.label or "character"))
   screen.move(126, 22)
-  screen.text_right(info and info.param or (pinfo and pinfo.param)
-                    or string.format("%.2f", v))
-  bar(2, 25, 124, 3, frac)
+  screen.text_right(info and info.param or winfo and winfo.param
+                    or finfo and finfo.param or cinfo and cinfo.param
+                    or string.format("%.2f", eff))
+  bar(2, 25, 124, 3, (base - lo) / (hi - lo))
+  if math.abs(eff - base) > 1e-4 then
+    -- a single bright pixel where the weather currently has it.
+    screen.level(15)
+    screen.pixel(2 + math.floor(124 * util.clamp((eff - lo) / (hi - lo), 0, 1)), 24)
+    screen.fill()
+  end
 
   if info then
     -- second half of the row is the grid Weather is holding this cell to
     -- (§4.1), or "free" once Weather has let go of it entirely.
-    local mode
-    if not info.phased then
-      mode = "reactive"
-    elseif info.rooted_ok and info.rooted then
-      mode = "rooted"
-    else
-      mode = "wild"
-    end
+    local mode = (info.rooted_ok and info.rooted) and "rooted" or "wild"
     mode = mode .. " \xC2\xB7 " .. (info.grid or "free")
     screen.level(12)
     screen.move(2, 36)
     screen.text(mode)
     screen.move(126, 36)
     screen.text_right(string.format("coupling %.2f", info.energy))
-    if info.phased then bar(2, 39, 124, 3, info.phase or 0, 6) end
+    bar(2, 39, 124, 3, info.phase or 0, 6)
+  elseif winfo then
+    -- an R cell has nothing of its own to show -- it is silent until spoken
+    -- to -- so what the row reads out is its place in the chain: how much
+    -- reaches it, how many ways out it has, and whether its gate is open.
+    screen.level(12)
+    screen.move(2, 36)
+    screen.text(string.format("%d in \xC2\xB7 %d out", winfo.ins, winfo.outs))
+    screen.move(126, 36)
+    screen.text_right(winfo.open and "open" or "shut")
   elseif hinfo then
     -- conductance is one knob standing for two quantities (§2.5), so the row
     -- under it reads out both, and the bar is what is actually still moving
@@ -217,22 +293,31 @@ function screenui.draw_cell(id)
     screen.move(126, 36)
     screen.text_right(string.format("loss %.2f", 1 - hinfo.loss))
     bar(2, 39, 124, 3, hinfo.charge, 6)
-  elseif pinfo then
+  elseif finfo then
     -- where the field is *right now*, in semitones off the root, and the bar
     -- is its position across the whole range rather than anything set: the
-    -- point of a P cell is that it is somewhere different every time you look.
+    -- point of an F cell is that it is somewhere different every time you look.
     screen.level(12)
     screen.move(2, 36)
     screen.text(string.format("%+.2f st \xC2\xB7 %d voice%s",
-                              pinfo.degree, pinfo.voices,
-                              pinfo.voices == 1 and "" or "s"))
+                              finfo.degree, finfo.voices,
+                              finfo.voices == 1 and "" or "s"))
     screen.move(126, 36)
-    screen.text_right(pinfo.snap and "snapped" or "free")
-    bar(2, 39, 124, 3, util.clamp((pinfo.pos + 1) / 2, 0, 1), 6)
+    screen.text_right(finfo.snap and "snapped" or "free")
+    bar(2, 39, 124, 3, util.clamp((finfo.pos + 1) / 2, 0, 1), 6)
+  elseif cinfo then
+    -- a climate cell's value is the whole of what it is, so it gets the bar,
+    -- centred: half-full is "doing nothing right now".
+    screen.level(12)
+    screen.move(2, 36)
+    screen.text(string.format("reaches %d", cinfo.reaches))
+    screen.move(126, 36)
+    screen.text_right(string.format("%+.2f", cinfo.value))
+    bar(2, 39, 124, 3, (cinfo.value + 1) / 2, 6)
   else
-    -- §4.2 E3 with no cable focused. a node hands the gesture to its voice,
+    -- §4.2 E3 with no cable focused. a socket hands the gesture to its voice,
     -- so the row names whose decay is actually moving. a voice can be read
-    -- out in seconds of ring time; an exciter has ten different envelopes
+    -- out in seconds of ring time; an exciter has twenty different envelopes
     -- and no single one to name, so it reads as a ratio (see exciter.lua).
     local target = state.decay_target(cell)
     local tcell = target and topology.get(target)
@@ -268,10 +353,9 @@ function screenui.draw_cell(id)
   screen.text(#edges .. " cable" .. (#edges == 1 and "" or "s"))
 
   -- §5.3 draws three cable rows, but only two baselines clear the hint line
-  -- on a 64px screen (the third landed at y=71, off the panel entirely, and
-  -- the second collided with the hint). so the list is a two-row window that
-  -- follows E1's focus instead of a fixed top-of-list slice -- otherwise
-  -- focusing cable 3+ would attenuvert something you cannot see.
+  -- on a 64px screen, so the list is a two-row window that follows E1's focus
+  -- instead of a fixed top-of-list slice -- otherwise focusing cable 3+ would
+  -- attenuvert something you cannot see.
   local CABLE_ROWS = 2
   local first = 1
   if focus > CABLE_ROWS then first = focus - CABLE_ROWS + 1 end
@@ -288,35 +372,48 @@ function screenui.draw_cell(id)
     screen.text_right(string.format("%+.2f", edge.gain))
   end
 
+  local swap = (cell.type == "D" and "gait") or (cell.type == "R" and "rule")
+            or (cell.type == "F" and "mode") or (cell.type == "C" and "shape")
   screen.level(2)
   screen.move(2, 63)
-  screen.text(info and "K2+K3 sever   K1+E2 gait"
-              or pinfo and "K2+K3 sever   K1+E2 mode"
-              or "K2+K3 sever")
+  screen.text(swap and ("K2+K3 sever   K1+E2 " .. swap) or "K2+K3 sever")
 end
 
 -- edge view (two cells held) -------------------------------------------------
 
 local INTERACTION_DESC = {
-  ["node|node"] = "audio/CV cross-feed both ways, per role",
-  ["D|node"] = "pulse strikes/chokes the node; node's out resets the D phase",
-  ["S|node"] = "stream drives the node; node's follower modulates S colour",
-  ["H|node"] = "node injects into the lattice; lattice returns to it",
+  ["node|node"] = "an out socket rings the other voice; T/P/M are inputs",
+  ["D|node"] = "pulse strikes / chokes / re-rolls, by socket",
+  ["R|node"] = "the transformed pulse strikes / chokes / re-rolls",
+  ["S|node"] = "stream drives the M socket; T and P take pulses only",
+  ["H|node"] = "the lattice returns into the M socket",
+  ["node|F"] = "no meaning: a field belongs on the P socket, not from it",
+  ["node|C"] = "the weather walks that socket's own knob",
   ["D|D"] = "mutual phase coupling (Kuramoto) + mutual triggering",
-  ["D|S"] = "D pulse envelopes S into a grain; S stream modulates D's rate",
+  ["D|R"] = "the pulse goes through the transform on its way out",
+  ["R|R"] = "transforms in series -- the chain is the pattern",
+  ["D|S"] = "pulse envelopes S into a grain; free-running otherwise",
+  ["R|S"] = "the transformed pulse fires the grain",
   ["D|H"] = "pulse enters the lattice and diffuses",
-  ["S|S"] = "cross-modulation: each modulates the other's colour and level",
+  ["R|H"] = "the transformed pulse enters the lattice",
+  ["S|S"] = "cross-modulation: each modulates the other's colour",
   ["H|S"] = "stream diffuses through the lattice",
-  ["H|H"] = "direct link — short-circuits two lattice points",
-  ["node|P"] = "the pitch field tunes this voice; gain sets how far",
-  ["D|P"] = "each pulse steps the field to a new degree",
-  ["S|P"] = "the exciter's colour rides the field's line",
-  ["H|P"] = "a pulse out of the lattice steps the field",
-  ["P|P"] = "the two fields pull together (or apart, at negative gain)",
+  ["H|H"] = "direct link -- short-circuits two lattice points",
+  ["D|F"] = "each pulse steps the field to a new degree",
+  ["R|F"] = "the transformed pulse steps the field",
+  ["S|F"] = "the exciter's colour rides the field's line",
+  ["H|F"] = "a pulse out of the lattice steps the field",
+  ["F|F"] = "the two fields pull together (or apart, at negative gain)",
+  ["D|C"] = "the weather walks this cell's rate",
+  ["R|C"] = "the weather walks this transform's own knob",
+  ["S|C"] = "the weather walks this exciter's Colour",
+  ["H|C"] = "the weather walks this node's conductance",
+  ["F|C"] = "the weather walks this field's Range",
+  ["C|C"] = "one weather sets how fast the other turns",
 }
 
 local function interaction_text(ta, tb)
-  local order = {node = 1, D = 2, S = 3, H = 4, P = 5}
+  local order = {node = 1, D = 2, R = 3, S = 4, H = 5, F = 6, C = 7}
   local a, b = ta, tb
   if (order[a] or 9) > (order[b] or 9) then a, b = b, a end
   return INTERACTION_DESC[a .. "|" .. b] or "no direct interaction defined"
@@ -357,7 +454,7 @@ function screenui.draw_edge(id_a, id_b)
   else
     screen.level(4)
     screen.move(2, 24)
-    screen.text("not yet cabled — tap-release one to connect")
+    screen.text("not yet cabled \xE2\x80\x94 tap-release one")
   end
 
   screen.level(8)
@@ -373,46 +470,6 @@ function screenui.draw_edge(id_a, id_b)
   screen.text("E3 sets gain")
 end
 
--- lexicon view ----------------------------------------------------------------
-
-function screenui.draw_lexicon()
-  local listing = lexicon.listing()
-  local total_pages = math.max(1, math.ceil(#listing / LEXICON_ROWS))
-  state.lexicon_page = util.clamp(state.lexicon_page or 1, 1, total_pages)
-  local start = (state.lexicon_page - 1) * LEXICON_ROWS + 1
-
-  screen.level(15)
-  screen.move(2, 8)
-  screen.text(string.format("lexicon  %d/%d", state.lexicon_page, total_pages))
-
-  for i = 0, LEXICON_ROWS - 1 do
-    local entry = listing[start + i]
-    if entry then
-      local y = 18 + i * 8
-      screen.level(12)
-      screen.move(2, y)
-      screen.text(entry.name)
-      screen.level(4)
-      screen.move(126, y)
-      local xy = entry.coords[1]
-      screen.text_right(string.format("(%d,%d)", xy[1], xy[2]))
-    end
-  end
-end
-
--- advances the lexicon page; returns true if it also needs to roll over
--- into the next top-level view (used by K3 in woodland.lua)
-function screenui.lexicon_advance()
-  local total_pages = math.max(1, math.ceil(#lexicon.listing() / LEXICON_ROWS))
-  local page = state.lexicon_page or 1
-  if page < total_pages then
-    state.lexicon_page = page + 1
-    return false
-  end
-  state.lexicon_page = 1
-  return true
-end
-
 -- top-level dispatch ----------------------------------------------------------
 
 function screenui.redraw()
@@ -422,12 +479,12 @@ function screenui.redraw()
     screenui.draw_edge(state.held[1], state.held[2])
   elseif #state.held == 1 then
     screenui.draw_cell(state.held[1])
+  elseif state.voice_edit then
+    screenui.draw_voice(state.voice_edit, true)
   elseif state.view == "network" then
     screenui.draw_network()
   elseif state.view == "meters" then
     screenui.draw_meters()
-  elseif state.view == "lexicon" then
-    screenui.draw_lexicon()
   end
 
   if state.confirm then

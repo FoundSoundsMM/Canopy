@@ -5,29 +5,32 @@ dofile(SP .. "/harness.lua")
 
 local KNOCKER, HOB, GRIM = "d.knocker", "d.hob", "d.grim"
 local GABRIEL, HUNT = "d.gabriel", "d.hunt"
-local KNOCK = "oak.knock"
+local KNOCK = "oak.trig"
 
+-- every gait in here free-runs now; the reactive ones moved to the weave
+-- when the panel was re-cut, and are covered by test/weave.lua instead.
 print("\n-- every gait produces pulses --")
-local REACTIVE = {divider = true, echo = true, coincidence = true}
-for _, gait in ipairs({"metric","euclidean","divider","slow","burst",
-                       "drifter","coincidence","echo","stochastic","accelerando"}) do
+for _, gait in ipairs(fresh(7).rambler.GAIT_ORDER) do
   local M = fresh(7)
   M.state.global.weather = 0.4
   M.rambler.set_gait(KNOCKER, gait)
   M.patch.add(KNOCKER, KNOCK, 0.8)
-  if REACTIVE[gait] then
-    -- reactive gaits only speak when spoken to: give them two drivers so
-    -- coincidence has two distinct sources to coincide.
-    M.rambler.set_gait(HOB, "metric")
-    M.rambler.set_gait(GRIM, "metric")
-    M.state.character[HOB] = 0.75
-    M.state.character[GRIM] = 0.78
-    M.patch.add(HOB, KNOCKER, 1.0)
-    M.patch.add(GRIM, KNOCKER, 1.0)
-  end
   run(M, 20)
   local n = #CALLS.strike
   check(gait .. " strikes", n > 0, "got " .. n)
+end
+
+print("\n-- figure plays its pattern --")
+do
+  local M = fresh(3)
+  M.rambler.set_gait(GRIM, "figure")
+  M.state.character[GRIM] = 0             -- pattern 1: four to the bar
+  M.state.rooted[GRIM] = true
+  M.rambler.get(GRIM).rooted = true
+  M.patch.add(GRIM, KNOCK, 1.0)
+  -- 4 steps/beat at 120bpm = 8 steps/s; 16s = 128 steps; 1 in 4 fires = 32
+  run(M, 16)
+  check("four to the bar", math.abs(#CALLS.strike - 32) <= 1, "got " .. #CALLS.strike)
 end
 
 print("\n-- rooted metric locks to the transport --")
@@ -77,7 +80,10 @@ local function two_drifters(seed, gain, weather, seconds)
   M.state.character[GABRIEL] = 0.20    -- 2.0 Hz
   M.state.character[HUNT]    = 0.28    -- 2.6 Hz
   if gain then M.patch.add(GABRIEL, HUNT, gain) end
-  run(M, 20)                           -- settle
+  -- 40s, not 20: the pair is genuinely locked well before then, but the last
+  -- of the approach to the standing offset is slow, and measuring during it
+  -- reads as a wider gap than the lock actually has.
+  run(M, 40)                           -- settle
   local lo, hi = 1, 0
   for _ = 1, math.floor((seconds or 5) * 500) do
     run(M, 1 / 500)
@@ -132,12 +138,13 @@ do
   end
   M.patch.add(ds[1], ds[5], -0.8)
   M.patch.add(ds[2], ds[7], 0.7)
-  M.rambler.set_gait(ds[3], "echo")
   M.rambler.set_gait(ds[4], "burst")
-  M.rambler.set_gait(ds[8], "echo")
   M.patch.add(ds[1], KNOCK, 0.9)
-  M.patch.add(ds[6], "rowan.knock", 0.9)
-  M.patch.add(ds[9], "ash.moss", 0.9)
+  M.patch.add(ds[6], "rowan.trig", 0.9)
+  M.patch.add(ds[8], "hazel.mod", 0.9)
+  -- and the loop the O socket made possible: Oak strikes, answers out of its
+  -- own out socket, and that lands back on a pulse-maker in the ring.
+  M.patch.add("oak.out", ds[2], 0.9)
   local t0 = os.clock()
   run(M, 30)
   local wall = os.clock() - t0

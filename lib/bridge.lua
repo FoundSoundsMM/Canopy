@@ -8,19 +8,23 @@
 
 local bridge = {}
 
--- offsets into Engine_Woodland.sc's single 54-channel `patchBus` (see the
+-- offsets into Engine_Woodland.sc's single 64-channel `patchBus` (see the
 -- classvar block at the top of that file). dispatch.lua resolves a cabled
 -- pair's endpoints to {bus name, per-cell index} and calls bridge.bus() to
 -- get the absolute number patch_add/patch_gain/patch_free expect. keep the
--- base/n pairs here identical to the .sc file's excBase/excInBase/etc.
+-- base/n pairs here identical to the .sc file's excBase/modInBase/etc.
+--
+-- the re-cut collapsed the three per-voice modulation buses (Sap/Sway/Moss)
+-- into the single `mod_in` a voice's M socket owns, and added `voice_out` --
+-- the O socket's audio tap, which is what makes voice<->voice feedback a
+-- cable rather than a phase-7 promise.
 bridge.BUS = {
-  exc        = {base = 0,  n = 10}, -- S cell raw outputs
-  exc_in     = {base = 10, n = 6},  -- per-voice Sap injection sum
-  sway       = {base = 16, n = 6},  -- per-voice Sway stream sum
-  moss       = {base = 22, n = 6},  -- per-voice Moss stream sum
-  colour_mod = {base = 28, n = 10}, -- per-S colour cross-mod sum
-  heart_in   = {base = 38, n = 8},  -- per-H lattice injection sum
-  heart_out  = {base = 46, n = 8},  -- per-H lattice emergence tap
+  exc        = {base = 0,  n = 20}, -- S cell raw outputs
+  colour_mod = {base = 20, n = 20}, -- per-S colour cross-mod sum
+  mod_in     = {base = 40, n = 4},  -- per-voice M socket input sum
+  voice_out  = {base = 44, n = 4},  -- per-voice O socket audio tap
+  heart_in   = {base = 48, n = 8},  -- per-H lattice injection sum
+  heart_out  = {base = 56, n = 8},  -- per-H lattice emergence tap
 }
 
 function bridge.bus(name, index)
@@ -50,14 +54,15 @@ function bridge.voice_drift(voice_index, depth, rate, seed)
   engine.voice_drift(voice_index, depth, rate, seed)
 end
 
-function bridge.voice_grain(voice_index, v)
-  engine.voice_grain(voice_index, v)
-end
-
--- §4.2 E3: the voice's resonator ring time, in seconds. voice.lua maps the
--- 0..1 knob to this around each voice's own default (topology's `decay`).
+-- §5.5 the sound editor's eight knobs. these are the individual resonator
+-- parameters the old Grain macro used to morph together behind your back;
+-- with a page of its own per voice there is no reason to hide them.
 function bridge.voice_decay(voice_index, seconds)
   engine.voice_decay(voice_index, seconds)
+end
+
+function bridge.voice_structure(voice_index, v)
+  engine.voice_structure(voice_index, v)
 end
 
 function bridge.voice_damp(voice_index, v)
@@ -84,24 +89,25 @@ function bridge.voice_modes(voice_index, n)
   engine.voice_modes(voice_index, n)
 end
 
--- §2.2 Moss: "a pulse chokes it". the duck envelope itself is in SC; this
--- only says when, how deep, and for how long.
+-- §2.2 M socket: "a pulse chokes it". the duck envelope itself is in SC;
+-- this only says when, how deep, and for how long.
 function bridge.voice_choke(voice_index, depth, time)
   engine.voice_choke(voice_index, depth, time)
 end
 
--- §2.2 stream-modulation half of Sap/Sway/Moss (as opposed to the
--- pulse-choke path voice_choke covers): each node's own E2 character.
-function bridge.voice_sap(voice_index, level)
-  engine.voice_sap(voice_index, level)
+-- §2.2 M socket, stream half: one balance knob deciding what a stream landing
+-- on this voice does -- 0 injects it into the resonator as excitation, 1
+-- lands it on the body as damping/brightness/structure bend, and everything
+-- between is a mix of the two.
+function bridge.voice_mod(voice_index, balance)
+  engine.voice_mod(voice_index, balance)
 end
 
-function bridge.voice_sway(voice_index, balance)
-  engine.voice_sway(voice_index, balance)
-end
-
-function bridge.voice_moss(voice_index, curve)
-  engine.voice_moss(voice_index, curve)
+-- §2.2 O socket, stream half: how loud this voice's audio tap is on the
+-- patch bus. the pulse half of the same socket never reaches the engine at
+-- all -- Lua knows when it struck the voice, so it emits that pulse itself.
+function bridge.voice_tap(voice_index, level)
+  engine.voice_tap(voice_index, level)
 end
 
 -- FM addendum: voice_fm's ratio/depth are engine-level knobs, not (yet) a
@@ -121,7 +127,7 @@ function bridge.voice_noise_q(voice_index, v)
 end
 
 -- §2.4 exciter cells: lazy on/off, Colour (E2), the gated flag (has this S
--- cell got an incoming D cable?), and the D->S grain trigger itself.
+-- cell got an incoming pulse cable?), and the grain trigger itself.
 function bridge.exciter_on(index)
   engine.exciter_on(index)
 end

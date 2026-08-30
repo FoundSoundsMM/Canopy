@@ -3,44 +3,48 @@
 -- endpoint types. two halves, because pulses and streams are delivered on
 -- entirely different clocks:
 --
--- `on_pulse` -- event-driven, fires once when a D cell wraps. build phase 3
--- wired D->Voice.Knock (strike) and D->Voice.Moss (choke); phase 4 adds
--- D->S (turns a free-running exciter into a fired grain, §2.4). D<->D lives
--- in rambler.lua, since it's coupling rather than delivery.
+-- `on_pulse` -- event-driven, fires when a pulse-carrying cell speaks. it
+-- covers everything a pulse can land on: a voice's T socket (strike), its M
+-- socket (choke), its P socket (re-roll the pitch), an S cell (fire a grain),
+-- an F cell (step the field), an H cell (into the lattice) and a C cell
+-- (restart the weather). pulse-cell to pulse-cell traffic never comes here --
+-- that is rambler's inbox, because it is coupling rather than delivery.
 --
--- `resync_matrix` -- graph-driven, not event-driven: continuous pairs (S<->S,
--- S<->Sap/Sway/Moss) are just live SC synths for as long as the cable
--- exists, so there is no per-pulse Lua work -- only "does this synth exist
--- and does its gain match", checked whenever patch.lua reports a change.
+-- `resync_matrix` -- graph-driven, not event-driven: continuous pairs are
+-- just live SC synths for as long as the cable exists, so there is no
+-- per-pulse Lua work -- only "does this synth exist and does its gain match",
+-- checked whenever patch.lua reports a change.
 --
--- build phase 5 adds H to both halves: a pulse cabled into a heartwood node
--- enters the lattice and diffuses (`on_pulse`), and a stream cabled to one
--- is injected into / tapped out of the lattice's audio side
--- (`resync_matrix`). the lattice's own walk lives in heartwood.lua.
---
--- node<->node and Sap/Sway/Moss's own *outputs* need a follower/analyser tap
--- this codebase doesn't have yet, so those stay no-ops (see the comment
--- above specs_for).
---
--- P (§2.6) appears only in the first half. a pitch field's whole output is a
--- number of semitones, which Lua turns into voice_pitch/exciter_colour calls
--- from grove.lua directly -- there is no stream to route, so P contributes no
--- specs to the continuous matrix at all.
+-- the re-cut closed the one hole that had been open since phase 4. a voice
+-- had inputs and no output, so §6's "audio/CV cross-feed both ways" was a
+-- promise rather than a cable. the O socket is that output, and it is
+-- androgynous in the way the spec always wanted: continuously it is the
+-- voice's audio on a bus, and discretely it is a pulse the instant the voice
+-- is struck. the discrete half costs nothing -- Lua is the thing doing the
+-- striking, so it already knows -- which is why voice<->voice feedback landed
+-- without ever needing the §7.4 metering back-channel.
 --
 -- both halves fall through silently for pairs with no handler.
 
-local topology = wl("topology")
-local state    = wl("state")
-local bridge   = wl("bridge")
-local patch    = wl("patch")
+local topology  = wl("topology")
+local state     = wl("state")
+local bridge    = wl("bridge")
+local patch     = wl("patch")
+local lexicon   = wl("lexicon")
 local heartwood = wl("heartwood")
-local grove    = wl("grove")
+local grove     = wl("grove")
+local climate   = wl("climate")
 
 local dispatch = {}
 
--- a struck-somewhere default; becomes a live/per-voice parameter once
--- voice_pos or a Sway-adjacent control is wired up (later phase).
-local STRIKE_POSITION_DEFAULT = 0.15
+-- a real drum head cannot be re-struck instantly, and neither can this one.
+-- it is a sound-design detail and it is also the safety rail on the new
+-- feedback paths: a voice cabled out of its O socket and back round into its
+-- own T socket is a legal, interesting patch, and this is what stops it from
+-- being a 500 Hz machine gun.
+local VOICE_REFRACTORY = 0.028
+
+local last_strike = {}  -- voice id -> util.time() of the last one that landed
 
 -- organic-rhythm addendum: real hands never land twice identically. every
 -- pulse-triggered audio event below gets a small parameter wobble (force,
@@ -55,38 +59,62 @@ local function wobble(v, amt, lo, hi)
   return util.clamp(v + (math.random() * 2 - 1) * amt, lo, hi)
 end
 
+local function node_char(id, cell)
+  local ch = lexicon.character(id)
+  local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
+  return state.get_character(id, cell, lo, hi)
+end
+
 local HANDLERS = {}
 
--- D -> Voice.Knock: pulse strikes the resonator, force = edge gain (§2.2),
--- scaled by the pulse's own weight so a Shuck thud and an echo tail's sixth
--- repeat do not land identically. force/hardness/position each get a small
--- per-hit wobble on top of that (see the organic-rhythm note above) -- no
--- two strikes land quite the same, the way no two real mallet hits do.
-HANDLERS["node:knock"] = function(source_id, target_id, edge, weight)
+-- -> T: the pulse strikes the resonator, force = edge gain (§2.2), scaled by
+-- the pulse's own weight so a Shuck thud and an echo tail's sixth repeat do
+-- not land identically. force/hardness/position each get a small per-hit
+-- wobble on top of that -- no two strikes land quite the same, the way no two
+-- real mallet hits do. and the voice answers out of its O socket, a tick
+-- later, so anything cabled there hears that it was hit.
+HANDLERS["node:trig"] = function(source_id, target_id, edge, weight)
   local node = topology.get(target_id)
-  local voice = topology.get(node.voice)
-  local hardness = state.get_character(target_id, node, 0, 1)
+  local voice_id = node.voice
+  local voice = topology.get(voice_id)
+  local now = util.time()
+  -- `>= 0` as well as `< refractory`: a clock that has gone backwards under us
+  -- (a reload, a test harness rewinding its virtual time) must read as "long
+  -- ago" rather than latch the voice silent forever.
+  local since = now - (last_strike[voice_id] or -1)
+  if since >= 0 and since < VOICE_REFRACTORY then return end
+  last_strike[voice_id] = now
+
+  local hardness = node_char(target_id, node)
   local force = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
   local wForce = wobble(force, 0.04, 0, 1)
   local wHardness = wobble(hardness, 0.05, 0, 1)
-  local wPosition = wobble(STRIKE_POSITION_DEFAULT, 0.07, 0, 1)
+  local wPosition = wobble(wl("voice").position(voice_id), 0.07, 0.01, 0.99)
   -- §2.6, and the pitch half of the wobble above: every field cabled to this
   -- voice takes a step and the new pitch is sent *before* the mallet, so the
   -- strike lands on the note the field just chose. a voice with no field
   -- still gets a few cents of per-strike detune out of this.
-  grove.on_strike(node.voice)
+  grove.on_strike(voice_id)
   bridge.strike(voice.index - 1, wForce, wHardness, wPosition)
   state.flash(target_id, force)
+
+  -- the O socket speaks. queued rather than walked here and now: the strike
+  -- is itself downstream of a pulse, so a lap of any feedback loop the player
+  -- has patched costs one scheduler tick, exactly like every other lap.
+  local out_id = voice_id .. ".out"
+  if patch.degree(out_id) > 0 then
+    state.flash(out_id, wForce)
+    wl("rambler").post_source(out_id, wForce)
+  end
 end
 
--- D -> Voice.Moss: "a pulse chokes it" (§2.2). a momentary duck on the voice,
--- depth from edge gain x pulse weight, length from the node's own damping
--- character. the envelope itself lives in SC -- Lua only says when and how
--- hard, per §7.2.
-HANDLERS["node:moss"] = function(source_id, target_id, edge, weight)
+-- -> M: "a pulse chokes it" (§2.2). a momentary duck on the voice, depth from
+-- edge gain x pulse weight, length from the socket's own balance knob. the
+-- envelope itself lives in SC -- Lua only says when and how hard, per §7.2.
+HANDLERS["node:mod"] = function(source_id, target_id, edge, weight)
   local node = topology.get(target_id)
   local voice = topology.get(node.voice)
-  local curve = state.get_character(target_id, node, 0, 1)
+  local curve = node_char(target_id, node)
   local depth = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
   local wDepth = wobble(depth, 0.04, 0, 1)
   local wTime = wobble(0.08 + curve * 0.5, 0.03, 0.01, 4)
@@ -94,13 +122,26 @@ HANDLERS["node:moss"] = function(source_id, target_id, edge, weight)
   state.flash(target_id, depth)
 end
 
+-- -> P: a pulse re-rolls the voice's pitch without striking it. every field
+-- cabled to that socket steps, and the voice is retuned -- so a line can move
+-- on a clock of its own instead of only on the beats that play it.
+HANDLERS["node:pitch"] = function(source_id, target_id, edge, weight)
+  local node = topology.get(target_id)
+  local w = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
+  grove.step_voice(node.voice, w)
+  state.flash(target_id, w)
+end
+
+-- -> O: nothing. the out socket is a source; a pulse arriving at one is a
+-- patch that means nothing, not an error.
+HANDLERS["node:out"] = function() end
+
 local DEFAULT_GATE_DUR = 0.15
 
--- D -> S: "an S cell is continuous until a pulse is cabled into it. a D->S
+-- -> S: "an S cell is continuous until a pulse is cabled into it. a pulse
 -- cable turns the exciter into an enveloped grain, fired by that pulse"
 -- (§2.4). exciter.lua sets the `gated` flag on the cable's existence; this
--- only fires the grain itself, same force-from-edge-gain-and-weight shape
--- as the Knock/Moss handlers above.
+-- only fires the grain itself.
 HANDLERS["S"] = function(source_id, target_id, edge, weight)
   local cell = topology.get(target_id)
   local amp = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
@@ -110,11 +151,11 @@ HANDLERS["S"] = function(source_id, target_id, edge, weight)
   state.flash(target_id, amp)
 end
 
--- -> P: a pulse steps the pitch field (§6's P column). the field moves on
--- its own clock rather than on whatever is being struck, which is how you
--- get a melody that is not locked to the rhythm playing it. a P cell never
--- emits a pulse of its own, so nothing here can feed back round into itself.
-HANDLERS["P"] = function(source_id, target_id, edge, weight)
+-- -> F: a pulse steps the pitch field (§6's F column). the field moves on its
+-- own clock rather than on whatever is being struck, which is how you get a
+-- melody that is not locked to the rhythm playing it. an F cell never emits a
+-- pulse, so nothing here can feed back round into itself.
+HANDLERS["F"] = function(source_id, target_id, edge, weight)
   local w = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
   grove.step(target_id, w, source_id)
 end
@@ -126,9 +167,24 @@ HANDLERS["H"] = function(source_id, target_id, edge, weight)
   heartwood.inject(target_id, w, source_id)
 end
 
--- fires when `source_id` (a D cell) wraps and has a cable to `target_id`.
--- also the path a pulse *emerging* from the lattice takes, with the H node
--- standing in for the D cell as the source.
+-- -> C: nothing, and deliberately.
+--
+-- an earlier version restarted the climate's cycle here, so that a slow gait
+-- cabled to one would begin its long shape on a downbeat. it does not
+-- survive contact with the panel: cables are undirected, so the *ordinary*
+-- way to use a climate cell -- cable it to a pulse-maker so the weather walks
+-- that cell's rate -- also points that pulse-maker's output back at the
+-- climate, and a gait running at a few Hz then resets a six-second shape
+-- thirty times a second. the feature was worth one bar of novelty; the trap
+-- was worth an unusable cell.
+--
+-- so a climate has no pulse input at all, and a C<->D cable means exactly one
+-- thing in both directions: the weather moves that cell's knob.
+HANDLERS["C"] = function() end
+
+-- fires when `source_id` speaks and has a cable to `target_id`. also the path
+-- a pulse *emerging* from the lattice takes, with the H node standing in for
+-- the source cell.
 function dispatch.on_pulse(source_id, target_id, edge, weight)
   local target = topology.get(target_id)
   if not target then return end
@@ -141,39 +197,31 @@ function dispatch.on_pulse(source_id, target_id, edge, weight)
 end
 
 -- continuous matrix (§6, the non-pulse pairs) ------------------------------
--- resolves a cabled pair to zero or more SC-side patch specs. no node<->node
--- or S<-node feedback: those need a stream *out* of a node (Sway's
--- amplitude envelope, Moss's spectral centroid, Sap's audio tap) and none of
--- those taps exist yet -- every node this phase only has an In. §6 also says
--- S<->S "modulates the other's colour AND level"; only colour is wired here.
+-- resolves a cabled pair to zero or more SC-side patch specs.
 
-local NODE_BUS = {sap = "exc_in", sway = "sway", moss = "moss"}
-
--- S -> a voice node: the stream lands on whichever of that voice's three
--- summing inputs the node's role owns. Knock has none (it is pulse-only).
-local function s_to_node_spec(s, node, gain)
-  local bus = NODE_BUS[node.role]
-  if not bus then return nil end
+-- S -> a voice's M socket: the stream lands on that voice's single modulation
+-- input, and the socket's own balance knob decides what it does when it gets
+-- there (inject into the resonator, or bend the body). the other three
+-- sockets take no stream: T and P are pulse-only, and O is an output.
+local function s_to_mod_spec(s, node, gain)
+  if node.role ~= "mod" then return nil end
   local voice = topology.get(node.voice)
   return {
     kind = "aa",
     src = bridge.bus("exc", s.index),
-    dst = bridge.bus(bus, voice.index - 1),
+    dst = bridge.bus("mod_in", voice.index - 1),
     gain = gain,
   }
 end
 
--- H -> a voice node: "lattice returns to the node" (§6). the other half of
--- that sentence -- "node injects into the lattice" -- needs a tap on the
--- node's out, which does not exist yet, so for now the lattice only speaks.
-local function h_to_node_spec(h, node, gain)
-  local bus = NODE_BUS[node.role]
-  if not bus then return nil end
+-- H -> a voice's M socket: "lattice returns to it" (§6).
+local function h_to_mod_spec(h, node, gain)
+  if node.role ~= "mod" then return nil end
   local voice = topology.get(node.voice)
   return {
     kind = "aa",
     src = bridge.bus("heart_out", h.index),
-    dst = bridge.bus(bus, voice.index - 1),
+    dst = bridge.bus("mod_in", voice.index - 1),
     gain = gain,
   }
 end
@@ -201,8 +249,8 @@ local function h_to_h_specs(a, b, edge, out)
 end
 
 -- S <-> H: "stream diffuses through the lattice" (§6). read androgynously,
--- like S<->S above -- the source feeds the lattice, and what the lattice
--- makes of it comes back as colour on the exciter.
+-- like S<->S -- the source feeds the lattice, and what the lattice makes of
+-- it comes back as colour on the exciter.
 local function s_to_h_specs(s, h, edge, out)
   table.insert(out, {
     kind = "aa",
@@ -218,9 +266,37 @@ local function s_to_h_specs(s, h, edge, out)
   })
 end
 
+-- the O socket's three continuous destinations. these are the cables that
+-- were not possible before the re-cut: one voice ringing another, a voice
+-- colouring an exciter, a voice pouring itself into the wood.
+local function out_specs(node, other, edge, out)
+  local v = topology.get(node.voice).index - 1
+  local src = bridge.bus("voice_out", v)
+  if other.type == "node" then
+    if other.role == "mod" then
+      table.insert(out, {
+        kind = "aa", src = src,
+        dst = bridge.bus("mod_in", topology.get(other.voice).index - 1),
+        gain = edge.gain,
+      })
+    end
+  elseif other.type == "S" then
+    table.insert(out, {
+      kind = "ak", src = src,
+      dst = bridge.bus("colour_mod", other.index), gain = edge.gain,
+    })
+  elseif other.type == "H" then
+    table.insert(out, {
+      kind = "aa", src = src,
+      dst = bridge.bus("heart_in", other.index), gain = edge.gain,
+    })
+  end
+end
+
 local function specs_for(edge)
   local a, b = topology.get(edge.a), topology.get(edge.b)
   local out = {}
+  if not a or not b then return out end
 
   -- the matrix is symmetric in the endpoints, so each pair is written once
   -- and `ordered` finds it whichever way round the cable was drawn.
@@ -229,6 +305,23 @@ local function specs_for(edge)
     if b.type == ta and a.type == tb then return b, a end
     return nil
   end
+
+  -- an O socket is a source whichever end of the cable it is on, and it is
+  -- the only socket that is, so it is resolved before the type matrix.
+  local function out_socket(x, y)
+    if x.type == "node" and x.role == "out" then
+      -- a one-way cable a->b only sends from a (§3). two O sockets cabled to
+      -- each other is a patch with no meaning; nothing here gives it one.
+      if (not edge.oneway) or edge.a == x.id then
+        out_specs(x, y, edge, out)
+      end
+      return true
+    end
+    return false
+  end
+  local handled = out_socket(a, b)
+  handled = out_socket(b, a) or handled
+  if handled then return out end
 
   local x, y
 
@@ -247,7 +340,7 @@ local function specs_for(edge)
 
   x, y = ordered("S", "node")
   if x then
-    local spec = s_to_node_spec(x, y, edge.gain)
+    local spec = s_to_mod_spec(x, y, edge.gain)
     if spec then table.insert(out, spec) end
     return out
   end
@@ -260,7 +353,7 @@ local function specs_for(edge)
 
   x, y = ordered("H", "node")
   if x then
-    local spec = h_to_node_spec(x, y, edge.gain)
+    local spec = h_to_mod_spec(x, y, edge.gain)
     if spec then table.insert(out, spec) end
     return out
   end

@@ -37,7 +37,7 @@ local function fresh_calls()
     strike = {}, choke = {},
     exciter_on = {}, exciter_off = {}, exciter_colour = {}, exciter_gated = {}, exciter_gate = {},
     patch_add = {}, patch_gain = {}, patch_free = {},
-    voice_sap = {}, voice_sway = {}, voice_moss = {},
+    voice_mod = {}, voice_tap = {}, voice_structure = {},
     heart_conductance = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {},
@@ -67,12 +67,12 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.patch_gain, {t = T, id = a[1], gain = a[2]})
     elseif k == "patch_free" then
       table.insert(CALLS.patch_free, {t = T, id = a[1]})
-    elseif k == "voice_sap" then
-      table.insert(CALLS.voice_sap, {t = T, voice = a[1], v = a[2]})
-    elseif k == "voice_sway" then
-      table.insert(CALLS.voice_sway, {t = T, voice = a[1], v = a[2]})
-    elseif k == "voice_moss" then
-      table.insert(CALLS.voice_moss, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_mod" then
+      table.insert(CALLS.voice_mod, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_tap" then
+      table.insert(CALLS.voice_tap, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_structure" then
+      table.insert(CALLS.voice_structure, {t = T, voice = a[1], v = a[2]})
     elseif k == "heart_conductance" then
       table.insert(CALLS.heart_conductance, {t = T, index = a[1], v = a[2]})
     elseif k == "voice_pitch" then
@@ -107,8 +107,8 @@ function fresh(seed)
   _woodland_mods = {}
   local M = {}
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
-                      "heartwood", "grove", "dispatch", "voice", "rambler",
-                      "exciter"}) do
+                      "lexicon", "heartwood", "grove", "climate", "weave",
+                      "dispatch", "voice", "rambler", "exciter"}) do
     M[n] = wl(n)
   end
   return M
