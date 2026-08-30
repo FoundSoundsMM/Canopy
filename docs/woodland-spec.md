@@ -255,8 +255,10 @@ in the norns PARAMS menu, not on the grid.
 | bezel | 0 | — |
 
 **Patch reveal** — while a cell is held: held cell solid 15; every cell cabled to
-it blinks at 13 in sync; everything else scales ×0.4. This is how you read a
-patch on the grid.
+it blinks at 13 in sync; every other node/D/S/H cell (a valid patch target) is
+floored to a minimum readable brightness so it doesn't vanish; voice cells
+(never cable endpoints themselves) scale ×0.4 toward black. This is how you
+read a patch — and see what's still available to patch into — on the grid.
 
 ### 5.2 Screen — Network view (nothing held)
 

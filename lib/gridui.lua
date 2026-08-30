@@ -204,13 +204,21 @@ function gridui.grid_redraw(g)
       end
     end
     local blink = (math.floor(util.time() * 4) % 2 == 0)
-    for id in pairs(levels) do
+    -- unconnected node/D/S/H cells are still valid patch targets, so they
+    -- get a visibility floor rather than a straight ×0.4 (idle brightness
+    -- is already low enough that ×0.4 floors most of them to 0-1 and hides
+    -- every cell you could tap next). voice cells aren't cable endpoints
+    -- (only their nodes are), so they still fade toward black.
+    local TARGET_FLOOR = 3
+    for id, cell in topology.each() do
       if state.is_held(id) then
         levels[id] = 15
       elseif revealed[id] then
         levels[id] = blink and 13 or 6
-      else
+      elseif cell.type == "voice" then
         levels[id] = math.floor(levels[id] * 0.4)
+      else
+        levels[id] = math.max(levels[id], TARGET_FLOOR)
       end
     end
   end
