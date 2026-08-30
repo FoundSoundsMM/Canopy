@@ -36,17 +36,35 @@ local dispatch = {}
 -- voice_pos or a Sway-adjacent control is wired up (later phase).
 local STRIKE_POSITION_DEFAULT = 0.15
 
+-- organic-rhythm addendum: real hands never land twice identically. every
+-- pulse-triggered audio event below gets a small parameter wobble (force,
+-- hardness, strike position, choke depth/time, grain amp/dur each move a
+-- few percent per hit) on top of the edge-gain/weight shaping that was
+-- already there. deliberately NOT touching rambler.lua's phase/coupling
+-- timing itself, and not deferring the call either -- that timing is
+-- calibrated for Kuramoto stability (PULSE_NUDGE etc.) and for the exact
+-- gait-rate counts the test suite checks; this only wobbles *what* a pulse
+-- that already landed sounds like, not *when*.
+local function wobble(v, amt, lo, hi)
+  return util.clamp(v + (math.random() * 2 - 1) * amt, lo, hi)
+end
+
 local HANDLERS = {}
 
 -- D -> Voice.Knock: pulse strikes the resonator, force = edge gain (§2.2),
 -- scaled by the pulse's own weight so a Shuck thud and an echo tail's sixth
--- repeat do not land identically.
+-- repeat do not land identically. force/hardness/position each get a small
+-- per-hit wobble on top of that (see the organic-rhythm note above) -- no
+-- two strikes land quite the same, the way no two real mallet hits do.
 HANDLERS["node:knock"] = function(source_id, target_id, edge, weight)
   local node = topology.get(target_id)
   local voice = topology.get(node.voice)
   local hardness = state.get_character(target_id, node, 0, 1)
   local force = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
-  bridge.strike(voice.index - 1, force, hardness, STRIKE_POSITION_DEFAULT)
+  local wForce = wobble(force, 0.04, 0, 1)
+  local wHardness = wobble(hardness, 0.05, 0, 1)
+  local wPosition = wobble(STRIKE_POSITION_DEFAULT, 0.07, 0, 1)
+  bridge.strike(voice.index - 1, wForce, wHardness, wPosition)
   state.flash(target_id, force)
 end
 
@@ -59,7 +77,9 @@ HANDLERS["node:moss"] = function(source_id, target_id, edge, weight)
   local voice = topology.get(node.voice)
   local curve = state.get_character(target_id, node, 0, 1)
   local depth = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
-  bridge.voice_choke(voice.index - 1, depth, 0.08 + curve * 0.5)
+  local wDepth = wobble(depth, 0.04, 0, 1)
+  local wTime = wobble(0.08 + curve * 0.5, 0.03, 0.01, 4)
+  bridge.voice_choke(voice.index - 1, wDepth, wTime)
   state.flash(target_id, depth)
 end
 
@@ -73,7 +93,9 @@ local DEFAULT_GATE_DUR = 0.15
 HANDLERS["S"] = function(source_id, target_id, edge, weight)
   local cell = topology.get(target_id)
   local amp = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
-  bridge.exciter_gate(cell.index, DEFAULT_GATE_DUR, amp)
+  local wAmp = wobble(amp, 0.04, 0, 1)
+  local wDur = wobble(DEFAULT_GATE_DUR, 0.02, 0.02, 4)
+  bridge.exciter_gate(cell.index, wDur, wAmp)
   state.flash(target_id, amp)
 end
 

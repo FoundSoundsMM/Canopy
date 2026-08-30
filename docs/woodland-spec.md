@@ -131,6 +131,17 @@ This is the whole rhythm engine — no step sequencer anywhere.
 Metric gaits (Knocker, Hob) are *rooted* to the norns clock by default; free
 gaits are *wild*. `K1 + tap` a D cell toggles rooted/wild.
 
+**Organic rhythm.** The phase/coupling math above stays exact — it is
+calibrated for Kuramoto stability, and for the gait-rate counts the test
+suite checks; nudging it risks the whole rhythm engine. What's humanized
+instead is every pulse's *audible result*: dispatch gives each triggered
+strike/choke/grain a small parameter wobble (force, hardness, strike
+position, choke depth/time, grain amp/dur each move a few percent per hit)
+on top of the edge-gain/weight shaping already there, so no two hits sound
+quite the same the way a real mallet never repeats itself either. Timing
+itself is untouched — the wobble is on *what* a pulse sounds like, not
+*when* it lands.
+
 ### 2.4 Exciter cells — S (10)
 
 Continuous stream sources — noise colours, textures, and slow modulators. They
@@ -427,7 +438,9 @@ saved patches.
 
 ## 8. Sound engine — making it woody
 
-Modal synthesis (`DynKlank`), excited by short filtered noise bursts. Six
+Modal synthesis (`DynKlank`-style, hand-built), excited by short filtered
+noise bursts through a plain, tuneable, pinged bank of resonant filters — no
+body-cavity diffuser any more (see the FM/noise addendum below for why). Six
 recipe parameters per voice, all reachable from Grain (E2) as a macro plus
 individually from PARAMS.
 
@@ -439,17 +452,37 @@ individually from PARAMS.
 2. **Frequency-dependent damping.** `decay_n = decay * ratio_n ^ -damp_exp`,
    with `damp_exp ≈ 0.7..1.2`. High modes *must* die fast. This is the single
    biggest woodiness factor after the exciter.
-3. **A noise-burst exciter, never a raw impulse.** 2-8 ms of white noise through
-   a bandpass whose centre = mallet hardness. Hard mallet = brighter, shorter.
+3. **A noise-burst exciter, never a raw impulse.** 2-8 ms of *pink* noise
+   through a bandpass whose centre = mallet hardness, further offset by an
+   independently tuneable octave (`voice_noise_tune`) and resonance
+   (`voice_noise_q`). Hard mallet = brighter, shorter; pink rather than white
+   keeps the burst warmer, less hiss-forward.
 4. **Strike position.** Multiply mode `n`'s amplitude by `sin(pi * position * n)`
    — comb-notching that removes modes with a node at the strike point. Cheap,
    and it is what makes a struck object sound *struck somewhere*.
-5. **Gentle nonlinearity.** `tanh` on the resonator sum, plus a small
-   amplitude-dependent pitch drop (`freq * (1 - amp * 0.02)`) — the "thunk" of
-   real wood under a hard hit.
+5. **Gentle nonlinearity.** `tanh` on the resonator sum (dialled back — see
+   below), plus a small amplitude-dependent pitch drop (`freq * (1 - amp *
+   0.02)`) — the "thunk" of real wood under a hard hit.
 
-Then a short lowpassed allpass diffuser per voice as the body cavity, and one
-shared plate/hall — **Canopy** — across the whole instrument.
+One shared plate/hall — **Canopy** — across the whole instrument. There is
+deliberately no per-voice body-cavity diffuser: the original design cascaded
+two `AllpassC` stages (~20 ms / ~31 ms) after the mode bank, and in practice
+that read as a slapback/flutter echo through a resonant filter bank, not as
+diffusion — the "odd reverb-like/slappy" artifact. It's gone; the tanh stage
+is still there (a much gentler `x0.8` drive instead of the original `x3`) but
+purely as the DC-blocked, soft-saturating, limited safety net §6 wants once
+voice↔voice feedback lands, not as a tone-shaping effect in its own right.
+
+**FM and tuneable-noise addendum.** Every voice, and every S-cell exciter, now
+also takes an `fmRatio`/`fmDepth` pair: an internal sine modulator (ratio =
+multiple of that voice/exciter's own natural frequency) FM's the voice's mode
+bank or the exciter's own frequency-determining parameter (a BPF/RLPF/LPF
+centre, a Dust rate, a comb delay time, or — Mistle — a genuine SinOsc
+carrier). `fmDepth=0` is a no-op, so nothing about the existing sound changes
+until it's turned up. This is engine-level only for now — reachable via
+`voice_fm`/`exciter_fm` (and PARAMS, once PARAMS exist), not yet a patchable
+grid cable; making FM a first-class §6 cable type is future work, not
+included here.
 
 **Per-voice defaults:**
 
@@ -470,8 +503,11 @@ voice_pitch(voice, hz)          voice_grain(voice, v)
 voice_damp(voice, v)            voice_bright(voice, v)
 voice_pos(voice, v)             voice_drive(voice, v)
 voice_amp(voice, v)             voice_modes(voice, n)
+voice_fm(voice, ratio, depth)
+voice_noise_tune(voice, v)      voice_noise_q(voice, v)
 exciter_on(id, kind)            exciter_off(id)
 exciter_set(id, key, v)         exciter_gate(id, dur, amp)
+exciter_fm(id, ratio, depth)
 patch_add(id, kind, src, dst, gain)
 patch_gain(id, gain)            patch_free(id)
 canopy(size, damp, mix)         watch(rate)

@@ -83,6 +83,22 @@ function bridge.voice_moss(voice_index, curve)
   engine.voice_moss(voice_index, curve)
 end
 
+-- FM addendum: voice_fm's ratio/depth are engine-level knobs, not (yet) a
+-- patchable cable -- see docs/woodland-spec.md §8. depth=0 is a no-op.
+function bridge.voice_fm(voice_index, ratio, depth)
+  engine.voice_fm(voice_index, ratio, depth)
+end
+
+-- the tuneable-pink-noise half of the same addendum: bipolar octave tune
+-- and bandpass Q for the voice's own strike exciter, on top of hardness.
+function bridge.voice_noise_tune(voice_index, v)
+  engine.voice_noise_tune(voice_index, v)
+end
+
+function bridge.voice_noise_q(voice_index, v)
+  engine.voice_noise_q(voice_index, v)
+end
+
 -- §2.4 exciter cells: lazy on/off, Colour (E2), the gated flag (has this S
 -- cell got an incoming D cable?), and the D->S grain trigger itself.
 function bridge.exciter_on(index)
@@ -103,6 +119,11 @@ end
 
 function bridge.exciter_gate(index, dur, amp)
   engine.exciter_gate(index, dur, amp)
+end
+
+-- FM addendum, S-cell half (see bridge.voice_fm above).
+function bridge.exciter_fm(index, ratio, depth)
+  engine.exciter_fm(index, ratio, depth)
 end
 
 -- §2.5 heartwood: per-node conductance (E2 while holding), which sets that

@@ -79,7 +79,8 @@ Engine_Woodland : CroneEngine {
 				oddOnly=0, decayBase=2.0, amp=1.0, modes=6,
 				t_choke=0, chokeDepth=0.9, chokeTime=0.25,
 				excIn=0, swayIn=0, mossIn=0,
-				sapLevel=0.6, swayBalance=0, mossCurve=0.5;
+				sapLevel=0.6, swayBalance=0, mossCurve=0.5,
+				fmRatio=2.0, fmDepth=0, noiseTune=0, exciteQ=0.35;
 
 			var harmonicRatio = [1, 2, 3, 4, 5, 6];
 			var barRatio = [1, 2.756, 5.404, 8.933, 13.34, 18.64];
@@ -102,18 +103,29 @@ Engine_Woodland : CroneEngine {
 			var brightMod = mossStream * mossCurve * 0.6;
 
 			// §8.3: a noise-burst exciter, never a raw impulse. hard mallet
-			// (hardness -> 1) = brighter, shorter burst.
+			// (hardness -> 1) = brighter, shorter burst. pink, not white --
+			// warmer, less hiss-y -- and independently tuneable: noiseTune
+			// (bipolar, +-1 octave) and exciteQ sit on top of hardness's own
+			// brightness/duration mapping rather than replacing it.
 			var burstDur = 0.008 - (hardness.clip(0, 1) * 0.006);
-			var bpFreq = 800 + (hardness.clip(0, 1) * 5200);
+			var bpFreq = (800 + (hardness.clip(0, 1) * 5200)) * (2 ** noiseTune);
 			// .ar, not .kr: burstDur is 2-8 ms and a control period is ~1.3 ms
 			// at norns' block size, so a kr envelope quantises the whole burst
 			// to one or two steps and `hardness` stops shortening it at all.
 			var env = EnvGen.ar(Env.perc(0.0003, burstDur), t_trig);
-			var exc = BPF.ar(WhiteNoise.ar(1), bpFreq, 0.35) * env * force;
+			var exc = BPF.ar(PinkNoise.ar(1), bpFreq, exciteQ) * env * force;
 			var totalExc = exc + (extExc * sapLevel);
 
 			// §8.5: amplitude-dependent pitch drop -- the "thunk" of a hard hit.
 			var pitchDrop = 1 - (force.clip(0, 1) * 0.02);
+
+			// FM: every voice can be frequency-modulated now (engine-level --
+			// not yet a patchable cable). fmDepth=0 is a no-op, so nothing
+			// about the existing sound changes until it's turned up. one
+			// shared modulator ahead of the mode ratios, so all six modes
+			// move together instead of detuning against each other.
+			var fmOsc = SinOsc.ar((freq * fmRatio).max(0.1)) * fmDepth;
+			var freqFM = freq * (1 + fmOsc);
 
 			var modeSig = Mix.fill(6, { |i|
 				var n = i + 1;
@@ -123,7 +135,7 @@ Engine_Woodland : CroneEngine {
 					harmonicRatio[i] + ((barRatio[i] - harmonicRatio[i]) * structureEff),
 					(2 * n) - 1
 				]);
-				var mfreq = freq * ratio * pitchDrop * (1 + pitchBend);
+				var mfreq = freqFM * ratio * pitchDrop * (1 + pitchBend);
 				// §8.2: frequency-dependent damping -- high modes die fast.
 				var mdecay = (decayBase * (ratio ** (damp + dampMod).neg)).clip(0.02, 20);
 				// §8.4: strike position comb-notches modes with a node there.
@@ -132,15 +144,17 @@ Engine_Woodland : CroneEngine {
 				Ringz.ar(totalExc, mfreq, mdecay) * mamp * active;
 			});
 
-			// body cavity + §8.5 gentle nonlinearity + the safety net every
-			// voice bus needs once feedback patching exists (§6 notes) --
-			// cheap to add now, load-bearing later. two cascaded (not
-			// parallel-array) allpass stages, so this stays strictly mono --
-			// an array delaytime here would multichannel-expand to stereo
-			// and bleed this voice's second channel into the next voice's
-			// bus slot.
-			var body = AllpassC.ar(AllpassC.ar(modeSig, 0.05, 0.0207, 0.2), 0.05, 0.0313, 0.2);
-			var driven = (body * (1 + (drive * 3))).tanh;
+			// no body-cavity diffuser any more: two cascaded AllpassC stages
+			// at ~20/31 ms (the previous design) read as a slapback/flutter
+			// echo once heard through a resonant mode bank, not as diffusion
+			// -- that was the "odd reverb-like/slappy" complaint. what's left
+			// is a plain, tuneable, pinged resonant-filter bank plus a much
+			// gentler tanh than before. the tanh itself stays. it is still
+			// the DC-blocked, soft-saturating, limited safety net §6 wants
+			// once voice<->voice feedback lands ("do not prevent the loop"),
+			// just dialled back from a x3 drive to a x0.8 one so it no longer
+			// colours the tone on its own.
+			var driven = (modeSig * (1 + (drive * 0.8))).tanh;
 			var toned = LPF.ar(driven, 400 + ((bright + brightMod).clip(0, 1) * 9000));
 
 			// §2.2 Moss: "a pulse chokes it". a hand on the bar -- duck fast,
@@ -186,46 +200,62 @@ Engine_Woodland : CroneEngine {
 		// feedback path round the node order, so it has to read last cycle's
 		// block -- with plain In.ar the cross-modulation is a permanent no-op.
 
+		// every exciter below now also takes fmRatio/fmDepth (§ FM addendum,
+		// same engine-level deal as the voice's fmDepth=0 no-op): each one's
+		// own natural "frequency" parameter -- a BPF/RLPF/LPF centre, a Dust
+		// rate, a comb delay time, or (Mistle) a genuine SinOsc carrier --
+		// gets an audio-rate `* (1 + SinOsc.ar(base * fmRatio) * fmDepth)`
+		// on top of what Colour already does to it.
+
 		SynthDef(\wl_exc_bracken, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
-			var bp = BPF.ar(WhiteNoise.ar(1), 500 + (c * 4000), 0.5);
+			var base = 500 + (c * 4000);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var bp = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.5);
 			var crackle = Decay2.ar(Dust.ar(15 + (c * 45)), 0.001, 0.02) * WhiteNoise.ar(1);
 			var sig = (bp * 0.6) + (crackle * 0.5);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_gorse, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
-			var sig = BPF.ar(WhiteNoise.ar(1), 3500 + (c * 5000), 0.06);
+			var base = 3500 + (c * 5000);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var sig = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.06);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_ember, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
-			var trig = Dust.ar(4 + (c * 40));
+			var base = 4 + (c * 40);
+			var fm = SinOsc.ar(base.max(0.1) * fmRatio) * fmDepth;
+			var trig = Dust.ar((base * (1 + fm)).max(0.1));
 			var sig = Decay2.ar(trig, 0.0005, 0.03 + (c * 0.05)) * WhiteNoise.ar(1);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_windfall, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(2 + (c * 10));
 			var genv = EnvGen.ar(Env.perc(0.001, 0.04 + (c * 0.08)), trig);
-			var sig = BPF.ar(WhiteNoise.ar(1), 900 + (c * 3000), 0.3) * genv * 2;
+			var base = 900 + (c * 3000);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var sig = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.3) * genv * 2;
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_mistle, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(1 + (c * 4));
 			var fenv = EnvGen.ar(Env([1800 + (c * 1500), 3200 + (c * 2000), 2200], [0.02, 0.06], \exp), trig);
 			var aenv = EnvGen.ar(Env.perc(0.005, 0.09), trig);
-			var sig = SinOsc.ar(fenv) * aenv;
+			var fm = SinOsc.ar(fenv * fmRatio) * fmDepth;
+			var sig = SinOsc.ar(fenv * (1 + fm)) * aenv;
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
@@ -233,40 +263,52 @@ Engine_Woodland : CroneEngine {
 		// K2A.ar upsamples it onto the shared audio-rate exciter bus so it
 		// can sum and gate the same way as the other nine.
 		SynthDef(\wl_exc_wisp, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
-			var sig = K2A.ar(LFNoise1.kr(0.3 + (c * 2)).range(-1, 1));
+			var base = 0.3 + (c * 2);
+			// stays control-rate throughout, like the rest of Wisp -- an
+			// audio-rate FM term here would wiggle faster than LFNoise1.kr
+			// ever samples it and do nothing audible.
+			var fm = SinOsc.kr(base * fmRatio) * fmDepth;
+			var sig = K2A.ar(LFNoise1.kr((base * (1 + fm)).max(0.05)).range(-1, 1));
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_hollow, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
-			var sig = CombL.ar(PinkNoise.ar(1), 0.3, 0.05 + (c * 0.2), 3 + (c * 5));
+			var base = 0.05 + (c * 0.2);
+			var fm = SinOsc.ar((1 / base).max(0.1) * fmRatio) * fmDepth;
+			var sig = CombL.ar(PinkNoise.ar(1), 0.3, (base * (1 + fm)).clip(0.001, 0.3), 3 + (c * 5));
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_drizzle, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(1 + (c * 8));
 			var tail = Decay2.ar(trig, 0.001, 0.15 + (c * 0.3)) * PinkNoise.ar(1);
-			var sig = BPF.ar(tail, 2000, 0.6) * 3;
+			var base = 2000;
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var sig = BPF.ar(tail, base * (1 + fm), 0.6) * 3;
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_loam, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
-			var sig = LPF.ar(BrownNoise.ar(1), 80 + (c * 500));
+			var base = 80 + (c * 500);
+			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
+			var sig = LPF.ar(BrownNoise.ar(1), (base * (1 + fm)).max(20));
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_beck, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var cutoff = SinOsc.kr(0.1 + (c * 0.4)).range(300, 1200 + (c * 1500));
-			var sig = RLPF.ar(PinkNoise.ar(1), cutoff, 0.25);
+			var fm = SinOsc.ar(cutoff.max(20) * fmRatio) * fmDepth;
+			var sig = RLPF.ar(PinkNoise.ar(1), (cutoff * (1 + fm)).max(20), 0.25);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
 		}).add;
 
@@ -470,6 +512,30 @@ Engine_Woodland : CroneEngine {
 			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\mossCurve, msg[2]) };
 		});
 
+		// voice_fm(voice, ratio, depth) -- FM addendum, engine-level: ratio
+		// is the modulator's ratio to the voice's own fundamental, depth is
+		// 0..~2 modulation index. depth=0 (the default) is a no-op.
+		this.addCommand("voice_fm", "iff", { |msg|
+			var v = msg[1].asInteger;
+			if (v >= 0 and: { v < 6 }) {
+				voiceSynths[v].set(\fmRatio, msg[2], \fmDepth, msg[3]);
+			};
+		});
+
+		// voice_noise_tune/voice_noise_q(voice, v) -- the tuneable-pink-noise
+		// half of the same addendum: noiseTune is bipolar octaves on top of
+		// hardness's own burst-brightness mapping, exciteQ is the burst
+		// bandpass's resonance.
+		this.addCommand("voice_noise_tune", "if", { |msg|
+			var v = msg[1].asInteger;
+			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\noiseTune, msg[2]) };
+		});
+
+		this.addCommand("voice_noise_q", "if", { |msg|
+			var v = msg[1].asInteger;
+			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\exciteQ, msg[2]) };
+		});
+
 		// exciter_on/off(index) -- §2.4 lazy allocation: an S cell only runs
 		// while it has at least one cable.
 		this.addCommand("exciter_on", "i", { |msg|
@@ -512,6 +578,16 @@ Engine_Woodland : CroneEngine {
 			var i = msg[1].asInteger;
 			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
 				excSynths[i].set(\gateDur, msg[2], \gateAmp, msg[3], \t_gate, 1);
+			};
+		});
+
+		// exciter_fm(index, ratio, depth) -- same FM addendum as voice_fm,
+		// for the S cells. no-op (depth=0) until an exciter is on, same as
+		// every other per-exciter set command.
+		this.addCommand("exciter_fm", "iff", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
+				excSynths[i].set(\fmRatio, msg[2], \fmDepth, msg[3]);
 			};
 		});
 
