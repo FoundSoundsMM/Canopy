@@ -164,7 +164,15 @@ function gridui.on_norns_enc(n, d, keystate)
     local delta = d / 100
     local f = state.get_focus(id)
     if f == 0 or #edges == 0 then
-      state.trim[id] = util.clamp(state.get_trim(id) + delta, -1, 1)
+      -- §4.2: E3 with nothing focused is this sound's decay. a voice's four
+      -- nodes are parts of the voice rather than sounds of their own, so the
+      -- gesture on any of them reaches the voice's resonator (state.lua's
+      -- decay_target decides that, not this).
+      local target = state.decay_target(cell)
+      if target then
+        state.decay[target] = util.clamp(state.get_decay(target) + delta, 0, 1)
+        state.notify_decay_change(target)
+      end
     else
       local edge = edges[f]
       if edge then

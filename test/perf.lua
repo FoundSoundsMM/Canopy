@@ -1,7 +1,8 @@
 arg = {os.getenv("ROOT")}
 dofile(os.getenv("SP") .. "/harness.lua")
-local function bench(label, setup)
+local function bench(label, setup, weather)
   local M = fresh(2)
+  if weather then M.state.global.weather = weather end
   setup(M)
   local t0 = os.clock()
   run(M, 60)
@@ -61,3 +62,23 @@ bench("saturated (all 10 D ringed)", function(M)
   for i = 1, 6 do M.patch.add(ds[i], ds[((i + 4) % #ds) + 1], 0.5) end
   M.patch.add(ds[1], "oak.knock", 0.9)
 end)
+
+-- the quantised path is the one added in phase 5c: at W=0 every emission is
+-- placed on a grid line and rides the scheduled queue for up to a grid
+-- interval instead of going out on the tick it was made. this is the same
+-- saturated ring as the row above, run at both ends of the Weather knob, so
+-- the cost of holding the whole patch in time is visible next to the cost of
+-- letting it go.
+local function saturated(M)
+  local ds = {}
+  for id, cell in M.topology.each() do
+    if cell.type == "D" then table.insert(ds, id) end
+  end
+  for i, id in ipairs(ds) do M.patch.add(id, ds[(i % #ds) + 1], 0.9) end
+  M.patch.add(ds[1], "oak.knock", 0.9)
+  M.patch.add(ds[6], "rowan.knock", 0.9)
+  M.patch.add(ds[9], "ash.moss", 0.9)
+end
+bench("saturated, quantised (W=0)", saturated, 0)
+bench("saturated, swung (W=0.5)", saturated, 0.5)
+bench("saturated, loose (W=1)", saturated, 1.0)

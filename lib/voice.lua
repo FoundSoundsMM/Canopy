@@ -13,6 +13,27 @@ local lexicon  = wl("lexicon")
 
 local voice = {}
 
+-- §4.2 E3 with no cable focused: this sound's decay. 0.5 is the voice's own
+-- default ring time (topology's `decay`, mirroring the SC voiceDefs table);
+-- the knob sweeps two octaves of ratio either side of it, so Yew can be cut
+-- down to a knock and Hazel stretched out into a bell without either losing
+-- the spectrum that makes it itself -- the mode bank's frequency-dependent
+-- damping still shortens the high modes relative to whatever this sets.
+voice.DECAY_OCTAVES = 2
+
+-- seconds, for the engine and for the cell view's readout.
+function voice.decay_seconds(id)
+  local cell = topology.get(id)
+  if not cell or cell.type ~= "voice" then return nil end
+  local d = state.get_decay(id)
+  return cell.decay * (2 ^ ((d - 0.5) * 2 * voice.DECAY_OCTAVES))
+end
+
+local function push_decay(id)
+  local secs = voice.decay_seconds(id)
+  if secs then bridge.voice_decay(topology.get(id).index - 1, secs) end
+end
+
 -- role -> the bridge call that forwards that node's E2 character, or nil if
 -- this role has no continuous forward (Knock is pulse-only, §2.2).
 local NODE_FORWARD = {
@@ -26,6 +47,7 @@ function voice.init()
     if cell.type == "voice" then
       local g = state.get_character(id, cell, 0, 1)
       bridge.voice_grain(cell.index - 1, g) -- engine voices are 0-indexed
+      push_decay(id)
     elseif cell.type == "node" then
       local fwd = NODE_FORWARD[cell.role]
       if fwd then
@@ -50,6 +72,11 @@ state.on_character_change(function(id)
       fwd(voice_cell.index - 1, state.character[id])
     end
   end
+end)
+
+state.on_decay_change(function(id)
+  local cell = topology.get(id)
+  if cell and cell.type == "voice" then push_decay(id) end
 end)
 
 return voice

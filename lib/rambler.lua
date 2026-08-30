@@ -14,6 +14,13 @@
 -- rooted gaits (§2.3) get their tempo relation back by reading
 -- clock.get_beats() directly rather than by integrating a rate, which locks
 -- them to the transport exactly instead of approximately.
+--
+-- build phase 5c puts quantise.lua between every gait and its output: a gait
+-- still free-runs at whatever rate it likes, but *when it is heard* is
+-- Weather's call -- snapped to a grid at W=0, swung through the lower half,
+-- loosened and scattered through the upper. see quantise.lua for the shape
+-- of that sweep. rate drift moved onto the upper half with it, so the lower
+-- half is a groove rather than a groove being wobbled.
 
 local topology = wl("topology")
 local patch    = wl("patch")
@@ -21,6 +28,7 @@ local state    = wl("state")
 local dispatch = wl("dispatch")
 local heartwood = wl("heartwood")
 local grove    = wl("grove")
+local quantise = wl("quantise")
 
 local rambler = {}
 
@@ -72,7 +80,7 @@ end
 --   phased          does it free-run on a phase, or only react to input?
 --   rooted_ok       can it lock to the norns clock (§2.3)?
 --   coupling        multiplier on K for this gait
---   drift           multiplier on Weather-driven rate drift
+--   drift           multiplier on the chaos-driven rate drift (§4.1)
 --   read(r)         -> value, display text   (E2, the one knob per §4.2)
 --   rate(r)         -> Hz                    (phased, wild)
 --   cycles_per_beat -> multiplier            (phased, rooted)
@@ -147,23 +155,37 @@ GAITS.slow = {
 }
 
 -- burst: one wrap fires a ratchet of 2-7. Weather picks how many.
+-- §4.1 wants the burst itself triggered on the beat, so it overrides the
+-- rate-derived grid with a whole beat, and lays its ratchet out on a
+-- subdivision of that beat rather than on a fraction of its own cycle -- the
+-- flam lands on grid lines and finishes before the next beat. the old
+-- free spacing comes back as chaos rises, blended in rather than switched.
 GAITS.burst = {
   phased = true, rooted_ok = false, coupling = 1.0, drift = 1.0,
+  quant_grid = 1.0,
   read = function(r)
     local hz = 0.3 + char(r) * 2.7
     return hz, string.format("%.2f Hz", hz)
   end,
   rate = function(r) return (GAITS.burst.read(r)) end,
-  wrap = function(r)
+  ratchet = function(r, t0, weight)
     local n = 2 + math.floor((state.global.weather or 0.4) * 5 + 0.5)
-    local gap = (1 / math.max(GAITS.burst.read(r), 0.01)) * 0.45 / n
-    local w = 1.0
+    if n < 2 then return end
+    local chaos = quantise.chaos()
+    local grid_gap = quantise.ratchet_gap(n) * quantise.spb()
+    local free_gap = (1 / math.max(GAITS.burst.read(r), 0.01)) * 0.45 / n
+    local gap = grid_gap + (free_gap - grid_gap) * chaos
+    local w = weight
     for i = 1, n - 1 do
       w = w * 0.78
-      rambler.schedule(r, i * gap, w)
+      local jitter = 0
+      if chaos > 0 then
+        jitter = (math.random() * 2 - 1) * chaos * chaos * gap * 0.5
+      end
+      rambler.push(t0 + i * gap + jitter, r, w, true)
     end
-    return 1.0
   end,
+  wrap = function(r) return 1.0 end,
 }
 
 -- drifter: fast, free, strongest coupling constant.
@@ -322,9 +344,16 @@ rebuild_links()
 
 -- emission -------------------------------------------------------------------
 
-function rambler.schedule(r, delay, w)
+-- `exact` taps were placed on the grid when they were made (a burst ratchet)
+-- and fire as-is; the rest go back through the quantiser when they come due,
+-- so an echo tail is snapped into time the same way anything else is.
+function rambler.push(t, r, w, exact)
   if #scheduled >= MAX_SCHEDULED then return end
-  table.insert(scheduled, {t = util.time() + delay, r = r, w = w})
+  table.insert(scheduled, {t = t, r = r, w = w, exact = exact or false})
+end
+
+function rambler.schedule(r, delay, w)
+  rambler.push(util.time() + delay, r, w, false)
 end
 
 -- §5.2's pulse dots. heartwood.lua draws on the same list, so a pulse
@@ -346,7 +375,33 @@ function rambler.inject(id, w, src, sign)
   })
 end
 
+-- a phased gait's cycle length in seconds, which is what picks its grid.
+-- reactive gaits have no rate of their own and fall through to the default.
+local function period_of(gait, r)
+  if not gait.rate then return nil end
+  local hz = gait.rate(r)
+  if not hz or hz <= 0 then return nil end
+  return 1 / hz
+end
+
+-- the front door: everything that wants to speak comes through here, and
+-- Weather decides whether it speaks now or on the next grid line (§4.1, and
+-- quantise.lua for the sweep). the ratchet hook hangs off the *quantised*
+-- time, not the raw one, so a burst's flam is laid out from where the burst
+-- is actually heard.
 function rambler.emit(r, weight)
+  local now = util.time()
+  local gait = GAITS[r.gait]
+  local t = quantise.snap(now, period_of(gait, r), gait.quant_grid)
+  if gait.ratchet then gait.ratchet(r, t, util.clamp(weight or 1, 0, 1)) end
+  if t <= now + 1e-9 then
+    rambler.emit_now(r, weight)
+  else
+    rambler.push(t, r, weight, true)
+  end
+end
+
+function rambler.emit_now(r, weight)
   if emits_this_tick >= MAX_EMITS_PER_TICK then return end
   emits_this_tick = emits_this_tick + 1
 
@@ -429,11 +484,15 @@ local function advance_rooted(r, gait)
   r.abs = cyc
 end
 
-local function advance_wild(r, gait, K, weather)
-  -- §4.1 Weather is also "gait drift": a slow random walk on the rate.
-  if gait.drift > 0 and weather > 0 then
+local function advance_wild(r, gait, K, chaos)
+  -- §4.1 Weather is also "gait drift": a slow random walk on the rate. it
+  -- rides chaos rather than raw Weather now, so the lower half of the knob
+  -- is a groove being swung rather than a groove being wobbled -- there is
+  -- nothing to be gained from drifting a rate whose output is about to be
+  -- snapped back onto the grid anyway.
+  if gait.drift > 0 and chaos > 0 then
     r.drift = util.clamp(
-      r.drift + (math.random() - 0.5) * weather * gait.drift * 0.01, -0.4, 0.4)
+      r.drift + (math.random() - 0.5) * chaos * gait.drift * 0.01, -0.4, 0.4)
   else
     r.drift = 0
   end
@@ -501,13 +560,19 @@ function rambler.tick()
   --     the lattice does, so a frozen patch is frozen in pitch too.
   grove.tick(now)
 
-  -- 1. scheduled taps (burst ratchets, echo repeats)
+  -- 1. scheduled taps (quantised emissions, burst ratchets, echo repeats).
+  --    due and keep are split *before* anything fires, because firing can
+  --    push a fresh entry (an un-quantised tap re-snapping itself onto the
+  --    grid) and that entry must survive the swap rather than be dropped.
   if #scheduled > 0 then
-    local keep = {}
+    local due, keep = {}, {}
     for _, ev in ipairs(scheduled) do
-      if ev.t <= now then rambler.emit(ev.r, ev.w) else table.insert(keep, ev) end
+      if ev.t <= now then table.insert(due, ev) else table.insert(keep, ev) end
     end
     scheduled = keep
+    for _, ev in ipairs(due) do
+      if ev.exact then rambler.emit_now(ev.r, ev.w) else rambler.emit(ev.r, ev.w) end
+    end
   end
 
   -- 2. last tick's D<->D traffic
@@ -528,6 +593,7 @@ function rambler.tick()
 
   local weather = state.global.weather or 0.4
   local K = K_BASE * (0.15 + weather * 1.85)
+  local chaos = quantise.chaos()
 
   for _, id in ipairs(order) do
     local r = ramblers[id]
@@ -536,7 +602,7 @@ function rambler.tick()
       if r.rooted and gait.rooted_ok then
         advance_rooted(r, gait)
       else
-        advance_wild(r, gait, K, weather)
+        advance_wild(r, gait, K, chaos)
       end
     end
   end
@@ -561,6 +627,16 @@ function rambler.level(id, base)
   return util.clamp(math.floor(lvl), 0, 15)
 end
 
+-- which grid this cell is currently being held to, or nil once Weather has
+-- let go of it entirely (§5.3 reads this out under the gait).
+function rambler.grid_name(id)
+  local r = ramblers[id]
+  if not r then return nil end
+  if quantise.chaos() >= 1 then return nil end
+  local gait = GAITS[r.gait]
+  return quantise.name(gait.quant_grid or quantise.grid_beats(period_of(gait, r)))
+end
+
 function rambler.info(id)
   local r = ramblers[id]
   if not r then return nil end
@@ -574,6 +650,7 @@ function rambler.info(id)
     phased = gait.phased,
     phase = r.phase,
     energy = r.energy,
+    grid = rambler.grid_name(id),
   }
 end
 

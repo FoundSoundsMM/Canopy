@@ -25,21 +25,23 @@ end
 
 -- 2.1 voices ------------------------------------------------------------
 
--- `root` is the voice's fundamental in Hz -- the same number as column 2 of
--- Engine_Woodland.sc's `voiceDefs` table, duplicated here because grove.lua
--- has to compute an absolute Hz from a semitone offset on the Lua side. the
--- two lists must stay in step, exactly like the S/H index lists below.
+-- `root` is the voice's fundamental in Hz and `decay` its default ring time
+-- in seconds -- columns 2 and 6 of Engine_Woodland.sc's `voiceDefs` table,
+-- duplicated here because both are needed on the Lua side: grove.lua computes
+-- an absolute Hz from a semitone offset, and voice.lua maps E3's 0..1 decay
+-- knob to seconds around each voice's own default. the two lists must stay in
+-- step, exactly like the S/H index lists below.
 local VOICES = {
-  {id = "oak",   name = "Oak",   index = 1, root = 65,  coords = {{2, 2}}},
-  {id = "rowan", name = "Rowan", index = 2, root = 330, coords = {{2, 7}}},
-  {id = "ash",   name = "Ash",   index = 3, root = 146, coords = {{15, 2}}},
-  {id = "hazel", name = "Hazel", index = 4, root = 220, coords = {{15, 7}}},
-  {id = "yew",   name = "Yew",   index = 5, root = 49,  coords = {{8, 2}, {9, 2}}},
-  {id = "alder", name = "Alder", index = 6, root = 98,  coords = {{8, 7}, {9, 7}}},
+  {id = "oak",   name = "Oak",   index = 1, root = 65,  decay = 2.4,  coords = {{2, 2}}},
+  {id = "rowan", name = "Rowan", index = 2, root = 330, decay = 1.8,  coords = {{2, 7}}},
+  {id = "ash",   name = "Ash",   index = 3, root = 146, decay = 1.2,  coords = {{15, 2}}},
+  {id = "hazel", name = "Hazel", index = 4, root = 220, decay = 0.35, coords = {{15, 7}}},
+  {id = "yew",   name = "Yew",   index = 5, root = 49,  decay = 6.0,  coords = {{8, 2}, {9, 2}}},
+  {id = "alder", name = "Alder", index = 6, root = 98,  decay = 2.0,  coords = {{8, 7}, {9, 7}}},
 }
 
 for _, v in ipairs(VOICES) do
-  reg("voice", v.id, v.name, v.coords, {index = v.index, root = v.root})
+  reg("voice", v.id, v.name, v.coords, {index = v.index, root = v.root, decay = v.decay})
 end
 
 -- 2.2 voice nodes (24) ----------------------------------------------------

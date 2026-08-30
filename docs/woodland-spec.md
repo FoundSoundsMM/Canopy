@@ -285,12 +285,35 @@ Constraints: no self-cables; no duplicate edges; a soft cap of 64 cables.
 | Control | Function |
 |---------|----------|
 | E1 | **Canopy** — global space/reverb amount |
-| E2 | **Weather** — global wildness: coupling strength K, gait drift, exciter variance |
-| E3 | Master level |
+| E2 | **Weather** — the groove knob (see below) |
+| E3 | **Tempo** — transport BPM, 1 per detent (writes `clock_tempo`) |
+| K1 + E3 | Master level |
 | K2 | **Still** — freeze all pulse gaits; resonators ring out. Tap again to resume |
 | K3 | cycle screen view: Network → Meters → Lexicon |
 | K1 + K2 | **Regrow** — seeded random patch (hold to confirm) |
 | K1 + K3 | **Clearing** — cut every cable (hold to confirm) |
+
+**Weather (E2) is one sweep through three regimes.** It decides *when* a pulse
+is allowed to land, not what it sounds like; `lib/quantise.lua` owns the whole
+mapping and `lib/rambler.lua` routes every emission through it.
+
+| Weather | What the patch does |
+|---------|---------------------|
+| 0 | **Locked.** Every emission snaps forward onto a grid line, whatever rate the cell free-runs at, so unrelated gaits cohere into one groove |
+| 0 → 0.5 | **Swing.** The grid itself is warped: each pair of 8ths is stretched then squeezed, so off-beats land late and beats never move. Full swing is a 3:1 long-short; the triplet 2:1 feel sits two thirds up |
+| 0.5 → 1 | **Chaos.** The snap loosens toward the time the cell actually wanted, and a widening random displacement grows in its place. Rate drift comes back here too |
+| 1 | **Rain.** Nothing is held at all — the free-running behaviour the gaits had before any of this |
+
+The grid is per cell, not global: each is quantised to the coarsest of
+8th / 16th / 32nd / 64th that still fits inside one cycle of its own rate, so a
+Shuck lands on 8ths and a Gabriel on 64ths and both stay in time with each
+other. A **burst** overrides that and is triggered on the beat, with its ratchet
+laid out on a subdivision so the whole flam sits on grid lines.
+
+Snapping is *forward* to the next line, never back to the nearest — a wrap is
+only known about once it has happened. The cost is up to one grid interval of
+latency, and since the grid is never coarser than the cell's own cycle, it never
+costs the cell a pulse.
 
 ### 4.2 Holding a grid cell
 
@@ -298,7 +321,7 @@ Constraints: no self-cables; no duplicate edges; a soft cap of 64 cables.
 |---------|----------|
 | E1 | select which cable at this cell is focused (ALL → 1..n) |
 | E2 | the cell's **character** parameter (see below) |
-| E3 | attenuvert — focused cable's gain, or node trim when ALL is selected |
+| E3 | attenuvert — focused cable's gain, or that sound's **decay** when ALL is selected |
 | K1 + E2 | secondary character parameter (D cells: swap gait; P cells: swap mode) |
 | K2 + K3 | sever all cables at this cell |
 
@@ -315,6 +338,16 @@ Constraints: no self-cables; no duplicate edges; a soft cap of 64 cables.
 | S cell | **Colour** — the source's filter/character | 0..1 |
 | H cell | **Conductance** — hop delay and loss | 0..1 |
 | P cell | **Range** — how far the field roams (25 cents .. 2 octaves) | 0..1 |
+
+**E3 with no cable focused — decay.** 0.5 is whatever that sound's own default
+is; the knob is symmetrical around it.
+
+| Cell type | E3 = | Range |
+|-----------|------|-------|
+| Voice | resonator ring time, in seconds | ×0.25 .. ×4 of the voice's default |
+| Voice node | its voice's ring time — a node is part of the voice, not a sound of its own | as above |
+| S cell | a ratio on the exciter's grain envelope and on whatever tail its recipe has | ×0.35 .. ×2.8 |
+| D / H / P | nothing — these have no sound of their own, and their row is already their gait / conductance / field readout | — |
 
 Deeper per-voice controls (base pitch, mode count, drive, pan, scale snap) live
 in the norns PARAMS menu, not on the grid.
@@ -366,7 +399,7 @@ a dot travelling the line. Bottom line: the most recent event.
  OAK                          voice 1
  ─────────────────────────────────────
  grain      ▐▓▓▓▓▓▓▓░░░░░       0.62
- trim       ▐────●────▌        +0.35
+ decay      ▐▓▓▓▓▓░░░░░░░      2.40 s
  ─────────────────────────────────────
  3 cables   ▸ Knocker           +0.80
              Bracken            -0.40
@@ -426,6 +459,7 @@ woodland/
     patch.lua               -- graph: add/remove/trim edges, serialisation
     dispatch.lua            -- the §6 type-interaction matrix
     rambler.lua             -- D-cell gaits + the phase-coupling scheduler
+    quantise.lua            -- the Weather groove: quantise -> swing -> chaos
     exciter.lua             -- S-cell control layer (audio side lives in SC)
     heartwood.lua           -- diffusion lattice
     grove.lua               -- pitch fields: modes, coupling, voice retuning

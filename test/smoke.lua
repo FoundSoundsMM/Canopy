@@ -29,7 +29,7 @@ do
   local names, n = {}, 0
   for k in pairs(M) do table.insert(names, k) n = n + 1 end
   table.sort(names)
-  check("all 13 modules memoised, one copy each", n == 13, table.concat(names, ","))
+  check("all 14 modules memoised, one copy each", n == 14, table.concat(names, ","))
 end
 
 -- the whole point of the memo: one graph, seen by everyone
@@ -89,6 +89,23 @@ end)
 check("keys and encoders survive", ok, tostring(err))
 check("K1+E2 swapped Knocker's gait", M.rambler.info("d.knocker").gait ~= "metric",
       M.rambler.info("d.knocker").gait)
+
+-- §4.1: E3 is the transport with nothing held, master level under K1.
+do
+  local before = M.state.global.bpm
+  enc(3, 6)
+  check("E3 moves the tempo", M.state.global.bpm == before + 6,
+        tostring(M.state.global.bpm))
+  check("and the norns clock went with it", clock.get_tempo() == before + 6,
+        tostring(clock.get_tempo()))
+  local level = M.state.global.level
+  key(1, 1)
+  enc(3, 10)
+  key(1, 0)
+  check("K1+E3 moves the master level instead", M.state.global.level > level)
+  check("and leaves the tempo alone", M.state.global.bpm == before + 6)
+  enc(3, -6)
+end
 
 ok, err = pcall(cleanup)
 check("cleanup", ok, tostring(err))

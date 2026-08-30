@@ -22,6 +22,17 @@ local function colour_of(id, cell)
   return util.clamp(state.get_character(id, cell, 0, 1) + (colour_offset[id] or 0), 0, 1)
 end
 
+-- §4.2 E3 with no cable focused, S-cell half. an exciter has no single ring
+-- time to name in seconds the way a voice does -- ten recipes, ten different
+-- envelopes -- so the knob is a ratio instead: 0.5 leaves every time constant
+-- the recipe chose for itself, and the sweep is 1.5 octaves either side of
+-- that, applied to the grain envelope and to whatever tail the recipe has.
+exciter.DECAY_OCTAVES = 1.5
+
+function exciter.decay_scale(id)
+  return 2 ^ ((state.get_decay(id) - 0.5) * 2 * exciter.DECAY_OCTAVES)
+end
+
 -- deliberately D cables only, not "anything that can carry a pulse": the
 -- heartwood can deliver one too, but an S<->H cable's *usual* meaning is the
 -- stream diffusing through the lattice (§6), and gating on it would silence
@@ -49,6 +60,7 @@ function exciter.resync()
         -- cell's character/gating already are so it doesn't briefly sound
         -- wrong if they were set while it was unpatched.
         bridge.exciter_colour(cell.index, colour_of(id, cell))
+        bridge.exciter_decay(cell.index, exciter.decay_scale(id))
         gated_state[id] = has_d_neighbor(id)
         bridge.exciter_gated(cell.index, gated_state[id])
       elseif (not live) and on_state[id] then
@@ -82,6 +94,13 @@ state.on_character_change(function(id)
   local cell = topology.get(id)
   if cell and cell.type == "S" and on_state[id] then
     bridge.exciter_colour(cell.index, colour_of(id, cell))
+  end
+end)
+
+state.on_decay_change(function(id)
+  local cell = topology.get(id)
+  if cell and cell.type == "S" and on_state[id] then
+    bridge.exciter_decay(cell.index, exciter.decay_scale(id))
   end
 end)
 

@@ -98,15 +98,27 @@ or copy this repo to `~/dust/code/Woodland` by hand. Then select
 - Hold a cell + `K2`+`K3`: sever every cable at that cell.
 - Hold a cell: `E1` selects the focused cable, `E2` is its character
   parameter (an H cell's is its conductance, a P cell's its range), `E3` is
-  the focused cable's gain (or the cell's trim, when no cable is focused).
+  the focused cable's gain — or, with no cable focused, that sound's decay:
+  a voice's ring time in seconds, or an exciter's envelopes as a ratio.
+  Holding any of a voice's four nodes moves that voice's decay, since a node
+  is part of the voice rather than a sound of its own.
 - Hold a D cell + `K1`, turn `E2`: swap its gait. Same gesture on a P cell
   swaps its pitch-field mode.
 - `K1` + tap a D cell (nothing else held): root it to the norns clock, or
   set it wild. Only metric and euclidean have anything to root to. Same
   gesture on a P cell snaps its field to the scale, or sets it free.
-- Nothing held: `E1`/`E2`/`E3` are Canopy/Weather/Level; `K2` toggles
-  Still; `K3` cycles Network → Meters → Lexicon (paging through the
-  lexicon before advancing).
+- Nothing held: `E1`/`E2`/`E3` are Canopy/Weather/Tempo, and `K1`+`E3` is
+  the master level; `K2` toggles Still; `K3` cycles Network → Meters →
+  Lexicon (paging through the lexicon before advancing).
+- **Weather (`E2`) is the groove knob.** At 0 every pulse — however freely
+  its cell runs — snaps onto a grid line, and unrelated gaits cohere into one
+  groove: each cell quantises to the coarsest of 8th/16th/32nd/64th that fits
+  inside its own cycle, and a burst is triggered on the beat with its ratchet
+  on a subdivision. From 0 to 0.5 swing ramps in, warping the grid so
+  off-beats land late and beats stay put. Past 0.5 the snap loosens and
+  jitter grows in its place, until at 1 nothing is held at all and the patch
+  is rainfall in a forest. The corner of the network view reads out the tempo
+  and where the knob has it: `lock` / `swNN` / `lsNN` / `rain`.
 - `K1`+`K2` (hold ~1s): Regrow — a seeded random patch.
 - `K1`+`K3` (hold ~1s): Clearing — cut every cable.
 
@@ -118,6 +130,7 @@ lib/
   topology.lua              the map: cell records, coords, types, adjacency
   lexicon.lua               names, descriptions, per-cell defaults
   patch.lua                 the cable graph: add/remove/trim, serialisation
+  quantise.lua              the Weather groove: quantise -> swing -> chaos
   state.lua                 shared runtime UI state
   gridui.lua                grid render + hold/tap state machine
   screenui.lua              network / cell / edge / lexicon / meters views

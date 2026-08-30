@@ -288,9 +288,17 @@ do
   M.patch.add(PLOVER, "oak.sway", 1.0)  -- wander: moves on the tick, unprompted
   M.state.character[PLOVER] = 1.0
   M.state.notify_character_change(PLOVER)
-  run(M, 2)
+  -- 4s, not 2: a wander field emits a retune each time its glide crosses a
+  -- step, which at the low end of its rate is only ~2.5 a second. a 2s window
+  -- sat one retune above the threshold and turned any change in how the RNG
+  -- stream is consumed elsewhere into a failure here.
+  run(M, 4)
   local before = #pitches_for(0)
   check("a continuous field moves on its own", before > 5, "#" .. before)
+  local first, last = pitches_for(0)[1].hz, pitches_for(0)[before].hz
+  check("and it is genuinely moving, not repeating one pitch",
+        math.abs(st(last) - st(first)) > 0.25,
+        string.format("%.2f -> %.2f st", st(first), st(last)))
 
   M.state.global.still = true
   run(M, 4)

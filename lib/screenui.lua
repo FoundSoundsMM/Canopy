@@ -8,6 +8,9 @@ local state    = wl("state")
 local rambler  = wl("rambler")
 local heartwood = wl("heartwood")
 local grove    = wl("grove")
+local quantise = wl("quantise")
+local voice    = wl("voice")
+local exciter  = wl("exciter")
 
 local screenui = {}
 
@@ -120,11 +123,14 @@ function screenui.draw_network()
   draw_trails()
   screen.level(15)
   screen.move(2, 62)
-  screen.text(string.sub(state.last_event or "", 1, 24))
-  -- Weather (E2) now audibly sets the coupling constant, so it needs a readout
+  screen.text(string.sub(state.last_event or "", 1, 18))
+  -- Weather (E2) is the groove knob and E3 is the transport, so the corner
+  -- reads out both: the tempo everything quantises against, and a four-letter
+  -- tag for where on the sweep Weather has it (lock / swNN / lsNN / rain).
   screen.level(3)
   screen.move(127, 62)
-  screen.text_right(string.format("W%.2f", state.global.weather or 0))
+  screen.text_right(string.format("%.0f %s", state.global.bpm or 120,
+                                  quantise.tag()))
 end
 
 function screenui.draw_meters()
@@ -183,14 +189,17 @@ function screenui.draw_cell(id)
   bar(2, 25, 124, 3, frac)
 
   if info then
+    -- second half of the row is the grid Weather is holding this cell to
+    -- (§4.1), or "free" once Weather has let go of it entirely.
     local mode
     if not info.phased then
       mode = "reactive"
     elseif info.rooted_ok and info.rooted then
-      mode = "rooted \xC2\xB7 clock"
+      mode = "rooted"
     else
-      mode = "wild \xC2\xB7 free"
+      mode = "wild"
     end
+    mode = mode .. " \xC2\xB7 " .. (info.grid or "free")
     screen.level(12)
     screen.move(2, 36)
     screen.text(mode)
@@ -221,13 +230,30 @@ function screenui.draw_cell(id)
     screen.text_right(pinfo.snap and "snapped" or "free")
     bar(2, 39, 124, 3, util.clamp((pinfo.pos + 1) / 2, 0, 1), 6)
   else
-    local trim = state.get_trim(id)
+    -- §4.2 E3 with no cable focused. a node hands the gesture to its voice,
+    -- so the row names whose decay is actually moving. a voice can be read
+    -- out in seconds of ring time; an exciter has ten different envelopes
+    -- and no single one to name, so it reads as a ratio (see exciter.lua).
+    local target = state.decay_target(cell)
+    local tcell = target and topology.get(target)
+    local d = target and state.get_decay(target) or 0
+    local label, readout = "decay", string.format("%.2f", d)
+    if not tcell then
+      label, readout = "", ""
+    elseif tcell.type == "voice" then
+      readout = string.format("%.2f s", voice.decay_seconds(target))
+      if cell.type == "node" then label = "decay \xC2\xB7 " .. tcell.name end
+    elseif tcell.type == "S" then
+      readout = string.format("x%.2f", exciter.decay_scale(target))
+    end
     screen.level(12)
     screen.move(2, 36)
-    screen.text("trim")
-    screen.move(126, 36)
-    screen.text_right(string.format("%+.2f", trim))
-    bar(2, 39, 124, 3, (trim + 1) / 2)
+    screen.text(label)
+    if tcell then
+      screen.move(126, 36)
+      screen.text_right(readout)
+      bar(2, 39, 124, 3, d)
+    end
   end
 
   screen.level(4)

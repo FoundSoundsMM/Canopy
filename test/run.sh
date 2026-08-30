@@ -6,6 +6,8 @@ set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 export ROOT SP="$ROOT/test"
 echo "== rhythm =="; lua "$SP/rhythm.lua"
+echo; echo "== groove =="; lua "$SP/groove.lua"
+echo; echo "== decay =="; lua "$SP/decay.lua"
 echo; echo "== exciter =="; lua "$SP/exciter.lua"
 echo; echo "== heartwood =="; lua "$SP/heartwood.lua"
 echo; echo "== grove =="; lua "$SP/grove.lua"

@@ -11,6 +11,7 @@
 -- hold a D cell, K1+E2: swap its gait.
 -- hold a P cell, K1+E2: swap its pitch-field mode.
 -- K1 + tap a P cell: snap its field to the scale, or set it free.
+-- E1/E2/E3 with nothing held: Canopy, Weather, BPM. K1+E3: master level.
 -- K3: cycle the screen (network -> meters -> lexicon).
 -- K2: freeze the pulse gaits (Still).
 -- K1+K2 (hold): Regrow — seeded random patch.
@@ -19,6 +20,9 @@
 -- build phase 5: the heartwood diffusion lattice, discrete and continuous.
 -- build phase 5b: the grove -- eight P cells, each a wandering pitch field a
 -- voice can be cabled into, plus an always-on per-voice detune drift in SC.
+-- build phase 5c: Weather is the groove knob -- quantise -> swing -> chaos
+-- (lib/quantise.lua) -- E3 is the transport tempo, and E3 with no cable
+-- focused sets the decay of whichever sound is held.
 -- voice<->voice feedback, the metering back-channel and PARAMS/PSET
 -- persistence are still ahead (docs/woodland-spec.md §9 has the build order).
 
@@ -56,6 +60,21 @@ local grove     = wl("grove")
 -- fixed for now; only the overall wet amount (E1: Canopy) is exposed yet.
 local CANOPY_SIZE = 0.6
 local CANOPY_DAMP = 0.5
+
+-- §4.1 E3 is the transport now: the whole patch quantises against it at low
+-- Weather, so it has to be reachable without diving into PARAMS. one BPM per
+-- detent. norns' clock reads its tempo from the clock_tempo param rather
+-- than from a setter, so that is what gets written -- and it is guarded,
+-- because the offline test harness has no params menu.
+local BPM_MIN, BPM_MAX = 20, 300
+
+local function set_bpm(v)
+  state.global.bpm = util.clamp(v, BPM_MIN, BPM_MAX)
+  if params and params.set then
+    params:set("clock_tempo", state.global.bpm)
+  end
+  state.set_event(string.format("%.0f BPM", state.global.bpm), 0.8)
+end
 
 local g = nil
 local screen_metro, grid_metro
@@ -168,8 +187,12 @@ function enc(n, d)
   elseif n == 2 then
     state.global.weather = util.clamp(state.global.weather + d / 500, 0, 1)
   elseif n == 3 then
-    state.global.level = util.clamp(state.global.level + d / 500, 0, 1)
-    bridge.master_level(state.global.level)
+    if keystate.k1 then
+      state.global.level = util.clamp(state.global.level + d / 500, 0, 1)
+      bridge.master_level(state.global.level)
+    else
+      set_bpm(state.global.bpm + d)
+    end
   end
 end
 
@@ -190,6 +213,10 @@ function init()
     if g then gridui.grid_redraw(g) end
   end, 1 / 30, -1)
   grid_metro:start()
+
+  -- adopt whatever tempo the clock is already on, so E3 starts from there
+  -- rather than snapping the transport to state.lua's default on load.
+  state.global.bpm = util.clamp(clock.get_tempo() or 120, BPM_MIN, BPM_MAX)
 
   voice.init()
   heartwood.init()

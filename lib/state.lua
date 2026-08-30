@@ -21,8 +21,9 @@ end
 -- §4.1 global macros
 state.global = {
   canopy = 0.3,   -- E1: reverb amount
-  weather = 0.4,  -- E2: wildness (coupling K, gait drift, exciter variance)
-  level = 0.8,    -- E3: master level
+  weather = 0.4,  -- E2: groove -- quantise -> swing -> chaos (see quantise.lua)
+  bpm = 120,      -- E3: transport tempo, mirrored onto the norns clock param
+  level = 0.8,    -- K1+E3: master level
   still = false,  -- K2: freeze all pulse gaits
 }
 
@@ -34,7 +35,7 @@ state.held_t = {}   -- id -> util.time() at press
 state.focus = {}       -- id -> focused edge index (0 = ALL)
 state.character = {}   -- id -> primary character value (E2)
 state.character2 = {}  -- id -> secondary character value (K1+E2)
-state.trim = {}        -- id -> node/cell trim (E3 when focus == ALL)
+state.decay = {}       -- id -> that sound's decay (E3 when focus == ALL)
 state.gait = {}        -- D id -> gait key (K1+E2 swaps it, §4.2)
 state.rooted = {}      -- D id -> locked to the norns clock? (K1+tap, §2.3)
 state.mode = {}        -- P id -> pitch-field mode key (K1+E2 swaps it, §2.6)
@@ -45,9 +46,26 @@ function state.get_focus(id)
   return state.focus[id]
 end
 
-function state.get_trim(id)
-  if state.trim[id] == nil then state.trim[id] = 0.0 end
-  return state.trim[id]
+-- 0.5 is "whatever this sound's own default is"; the knob is symmetrical
+-- around it in both directions. voice.lua and exciter.lua own the mapping
+-- from this number to seconds -- state.lua stays ignorant of audio.
+function state.get_decay(id)
+  if state.decay[id] == nil then state.decay[id] = 0.5 end
+  return state.decay[id]
+end
+
+-- which cell's decay a gesture on this one moves, or nil if it moves none.
+-- a voice's four nodes are parts of that voice, not sounds of their own, so
+-- the gesture on any of them reaches the voice's resonator. D, H and P cells
+-- have no sound to decay -- they make pulses, diffuse energy and choose
+-- pitches -- and their E3-with-nothing-focused is deliberately inert rather
+-- than quietly storing a number nothing reads.
+local DECAY_TYPES = {voice = true, node = true, S = true}
+
+function state.decay_target(cell)
+  if not cell or not DECAY_TYPES[cell.type] then return nil end
+  if cell.type == "node" then return cell.voice end
+  return cell.id
 end
 
 function state.get_character(id, cell, lo, hi)
@@ -94,6 +112,17 @@ function state.on_character_change(fn)
 end
 function state.notify_character_change(id)
   for _, fn in ipairs(state._character_listeners) do fn(id) end
+end
+
+-- the same shape for decay (E3 with no cable focused), so voice.lua and
+-- exciter.lua can each forward the cells they own without gridui knowing
+-- which of them a given id belongs to.
+state._decay_listeners = {}
+function state.on_decay_change(fn)
+  table.insert(state._decay_listeners, fn)
+end
+function state.notify_decay_change(id)
+  for _, fn in ipairs(state._decay_listeners) do fn(id) end
 end
 
 function state.is_held(id)

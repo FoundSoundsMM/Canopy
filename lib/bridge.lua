@@ -54,6 +54,12 @@ function bridge.voice_grain(voice_index, v)
   engine.voice_grain(voice_index, v)
 end
 
+-- §4.2 E3: the voice's resonator ring time, in seconds. voice.lua maps the
+-- 0..1 knob to this around each voice's own default (topology's `decay`).
+function bridge.voice_decay(voice_index, seconds)
+  engine.voice_decay(voice_index, seconds)
+end
+
 function bridge.voice_damp(voice_index, v)
   engine.voice_damp(voice_index, v)
 end
@@ -126,6 +132,12 @@ end
 
 function bridge.exciter_colour(index, v)
   engine.exciter_colour(index, v)
+end
+
+-- §4.2 E3, S-cell half: a plain multiplier on this exciter's grain envelope
+-- and on whatever tail its own recipe has. exciter.lua owns the mapping.
+function bridge.exciter_decay(index, scale)
+  engine.exciter_decay(index, scale)
 end
 
 function bridge.exciter_gated(index, flag)

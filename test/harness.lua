@@ -21,6 +21,13 @@ function clock.sleep() end
 metro = {}
 function metro.init() return {start = function() end, stop = function() end} end
 
+-- the clock_tempo param E3 writes through. the real one lives in norns'
+-- PARAMS menu; here it just moves the harness's own TEMPO.
+params = {
+  set = function(_, k, v) if k == "clock_tempo" then TEMPO = v end end,
+  get = function(_, k) if k == "clock_tempo" then return TEMPO end end,
+}
+
 screen = setmetatable({}, {__index = function() return function() end end})
 grid = {connect = function() return {key = nil, led = function() end, all = function() end,
                                      refresh = function() end} end}
@@ -33,6 +40,7 @@ local function fresh_calls()
     voice_sap = {}, voice_sway = {}, voice_moss = {},
     heart_conductance = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
+    voice_decay = {}, exciter_decay = {},
   }
 end
 CALLS = fresh_calls()
@@ -73,6 +81,10 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.voice_glide, {t = T, voice = a[1], v = a[2]})
     elseif k == "voice_drift" then
       table.insert(CALLS.voice_drift, {t = T, voice = a[1], depth = a[2], rate = a[3]})
+    elseif k == "voice_decay" then
+      table.insert(CALLS.voice_decay, {t = T, voice = a[1], secs = a[2]})
+    elseif k == "exciter_decay" then
+      table.insert(CALLS.exciter_decay, {t = T, index = a[1], scale = a[2]})
     end
   end
 end})
@@ -94,8 +106,9 @@ function fresh(seed)
   CALLS = fresh_calls()
   _woodland_mods = {}
   local M = {}
-  for _, n in ipairs({"topology", "patch", "state", "bridge", "heartwood",
-                      "grove", "dispatch", "voice", "rambler", "exciter"}) do
+  for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
+                      "heartwood", "grove", "dispatch", "voice", "rambler",
+                      "exciter"}) do
     M[n] = wl(n)
   end
   return M

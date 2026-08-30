@@ -165,7 +165,10 @@ Engine_Woodland : CroneEngine {
 				]);
 				var mfreq = freqFM * ratio * pitchDrop * (1 + pitchBend);
 				// §8.2: frequency-dependent damping -- high modes die fast.
-				var mdecay = (decayBase * (ratio ** (damp + dampMod).neg)).clip(0.02, 20);
+				// the ceiling is above the longest decayBase E3 can ask for
+				// (Yew's 6s default, x4 at the top of the knob), so the ring
+				// time the cell view reads out is the one you actually hear.
+				var mdecay = (decayBase * (ratio ** (damp + dampMod).neg)).clip(0.02, 30);
 				// §8.4: strike position comb-notches modes with a node there.
 				var mamp = (pi * position * n).sin;
 				var active = i < modes;
@@ -209,8 +212,13 @@ Engine_Woodland : CroneEngine {
 		// continuous until a pulse is cabled into it. a D->S cable turns the
 		// exciter into an enveloped grain, fired by that pulse"). `gated`
 		// flips that switch; `t_gate` fires one grain while gated.
-		gateMul = { |tGate, gated, dur, amp|
-			var env = EnvGen.ar(Env.perc(0.002, dur.clip(0.02, 4)), tGate) * amp;
+		// `decay` (E3 on an S cell, §4.2) is a plain multiplier on every time
+		// constant the exciter has: the grain envelope here, and -- for the
+		// six recipes that have a tail of their own -- that tail as well. the
+		// 0..1 knob is mapped to this multiplier on the Lua side, so the
+		// engine only ever sees a ratio.
+		gateMul = { |tGate, gated, dur, amp, decay|
+			var env = EnvGen.ar(Env.perc(0.002, (dur * decay).clip(0.02, 4)), tGate) * amp;
 			Select.ar(gated, [DC.ar(1), env]);
 		};
 
@@ -236,62 +244,68 @@ Engine_Woodland : CroneEngine {
 		// on top of what Colour already does to it.
 
 		SynthDef(\wl_exc_bracken, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var base = 500 + (c * 4000);
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var bp = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.5);
-			var crackle = Decay2.ar(Dust.ar(15 + (c * 45)), 0.001, 0.02) * WhiteNoise.ar(1);
+			var crackle = Decay2.ar(Dust.ar(15 + (c * 45)), 0.001, 0.02 * decay) * WhiteNoise.ar(1);
 			var sig = (bp * 0.6) + (crackle * 0.5);
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_gorse, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var base = 3500 + (c * 5000);
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var sig = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.06);
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_ember, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var base = 4 + (c * 40);
 			var fm = SinOsc.ar(base.max(0.1) * fmRatio) * fmDepth;
 			var trig = Dust.ar((base * (1 + fm)).max(0.1));
-			var sig = Decay2.ar(trig, 0.0005, 0.03 + (c * 0.05)) * WhiteNoise.ar(1);
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			var sig = Decay2.ar(trig, 0.0005, (0.03 + (c * 0.05)) * decay) * WhiteNoise.ar(1);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_windfall, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(2 + (c * 10));
-			var genv = EnvGen.ar(Env.perc(0.001, 0.04 + (c * 0.08)), trig);
+			var genv = EnvGen.ar(Env.perc(0.001, (0.04 + (c * 0.08)) * decay), trig);
 			var base = 900 + (c * 3000);
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var sig = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.3) * genv * 2;
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_mistle, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(1 + (c * 4));
 			var fenv = EnvGen.ar(Env([1800 + (c * 1500), 3200 + (c * 2000), 2200], [0.02, 0.06], \exp), trig);
-			var aenv = EnvGen.ar(Env.perc(0.005, 0.09), trig);
+			var aenv = EnvGen.ar(Env.perc(0.005, 0.09 * decay), trig);
 			var fm = SinOsc.ar(fenv * fmRatio) * fmDepth;
 			var sig = SinOsc.ar(fenv * (1 + fm)) * aenv;
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		// control-rate by spec ("slow wandering random walk, control-rate");
 		// K2A.ar upsamples it onto the shared audio-rate exciter bus so it
 		// can sum and gate the same way as the other nine.
 		SynthDef(\wl_exc_wisp, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var base = 0.3 + (c * 2);
 			// stays control-rate throughout, like the rest of Wisp -- an
@@ -299,45 +313,49 @@ Engine_Woodland : CroneEngine {
 			// ever samples it and do nothing audible.
 			var fm = SinOsc.kr(base * fmRatio) * fmDepth;
 			var sig = K2A.ar(LFNoise1.kr((base * (1 + fm)).max(0.05)).range(-1, 1));
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_hollow, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var base = 0.05 + (c * 0.2);
 			var fm = SinOsc.ar((1 / base).max(0.1) * fmRatio) * fmDepth;
-			var sig = CombL.ar(PinkNoise.ar(1), 0.3, (base * (1 + fm)).clip(0.001, 0.3), 3 + (c * 5));
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			var sig = CombL.ar(PinkNoise.ar(1), 0.3, (base * (1 + fm)).clip(0.001, 0.3), (3 + (c * 5)) * decay);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_drizzle, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var trig = Dust.ar(1 + (c * 8));
-			var tail = Decay2.ar(trig, 0.001, 0.15 + (c * 0.3)) * PinkNoise.ar(1);
+			var tail = Decay2.ar(trig, 0.001, (0.15 + (c * 0.3)) * decay) * PinkNoise.ar(1);
 			var base = 2000;
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var sig = BPF.ar(tail, base * (1 + fm), 0.6) * 3;
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_loam, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var base = 80 + (c * 500);
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var sig = LPF.ar(BrownNoise.ar(1), (base * (1 + fm)).max(20));
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		SynthDef(\wl_exc_beck, { arg out=0, colour=0.5, colourModIn=0,
-				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0;
+				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
+				decay=1.0;
 			var c = (colour + InFeedback.ar(colourModIn, 1)).clip(0, 1);
 			var cutoff = SinOsc.kr(0.1 + (c * 0.4)).range(300, 1200 + (c * 1500));
 			var fm = SinOsc.ar(cutoff.max(20) * fmRatio) * fmDepth;
 			var sig = RLPF.ar(PinkNoise.ar(1), (cutoff * (1 + fm)).max(20), 0.25);
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
 		// §2.5 the heartwood. "not a bus. a diffusion lattice." eight nodes,
@@ -500,6 +518,19 @@ Engine_Woodland : CroneEngine {
 			};
 		});
 
+		// voice_decay(voice, seconds) -- §4.2 E3 with no cable focused. this
+		// is the resonator's own ring time, straight onto `decayBase`: the
+		// mode bank's frequency-dependent damping still shortens the high
+		// modes relative to it, so the voice keeps its character and only
+		// its length changes. voice.lua maps the 0..1 knob to seconds around
+		// each voice's default from the voiceDefs table above.
+		this.addCommand("voice_decay", "if", { |msg|
+			var v = msg[1].asInteger;
+			if (v >= 0 and: { v < 6 }) {
+				voiceSynths[v].set(\decayBase, msg[2].clip(0.02, 30));
+			};
+		});
+
 		this.addCommand("voice_damp", "if", { |msg|
 			var v = msg[1].asInteger;
 			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\damp, msg[2]) };
@@ -608,6 +639,16 @@ Engine_Woodland : CroneEngine {
 			var i = msg[1].asInteger;
 			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
 				excSynths[i].set(\colour, msg[2]);
+			};
+		});
+
+		// exciter_decay(index, scale) -- the other half of §4.2's E3: a plain
+		// multiplier on this exciter's grain envelope and on whatever tail
+		// its own recipe has. see the gateMul comment above.
+		this.addCommand("exciter_decay", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < 10 } and: { excSynths[i].notNil }) {
+				excSynths[i].set(\decay, msg[2].clip(0.05, 20));
 			};
 		});
 
