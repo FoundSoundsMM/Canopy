@@ -47,6 +47,7 @@ HANDLERS["node:knock"] = function(source_id, target_id, edge, weight)
   local hardness = state.get_character(target_id, node, 0, 1)
   local force = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
   bridge.strike(voice.index - 1, force, hardness, STRIKE_POSITION_DEFAULT)
+  state.flash(target_id, force)
 end
 
 -- D -> Voice.Moss: "a pulse chokes it" (§2.2). a momentary duck on the voice,
@@ -59,6 +60,7 @@ HANDLERS["node:moss"] = function(source_id, target_id, edge, weight)
   local curve = state.get_character(target_id, node, 0, 1)
   local depth = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
   bridge.voice_choke(voice.index - 1, depth, 0.08 + curve * 0.5)
+  state.flash(target_id, depth)
 end
 
 local DEFAULT_GATE_DUR = 0.15
@@ -72,6 +74,7 @@ HANDLERS["S"] = function(source_id, target_id, edge, weight)
   local cell = topology.get(target_id)
   local amp = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
   bridge.exciter_gate(cell.index, DEFAULT_GATE_DUR, amp)
+  state.flash(target_id, amp)
 end
 
 -- -> H: "pulse enters the lattice and diffuses" (§6). heartwood.lua walks it

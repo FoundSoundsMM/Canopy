@@ -113,4 +113,27 @@ end
 -- confirm-hold gestures (Regrow / Clearing), read by screenui for a progress readout
 state.confirm = nil -- {label=, started=, duration=} or nil
 
+-- §5.1 "signal magnitude through it" -- a decaying flash for any cell whose
+-- pulse arrival is Lua-known (node strike/choke, a D->S grain firing), the
+-- same flash-on-pulse-then-decay-to-15 shape rambler.lua and heartwood.lua
+-- each already keep for D and H cells, just without a dedicated per-cell
+-- object to hang it on. continuous audio-rate response -- a node under a
+-- steady stream, S's own shimmer, a voice's amplitude envelope -- still
+-- needs the metering back-channel (§7.4) and isn't lit by this.
+state.FLASH_DECAY = 0.12
+state._flash = {} -- id -> {t=, w=}
+
+function state.flash(id, weight)
+  state._flash[id] = {t = util.time(), w = util.clamp(weight or 1, 0, 1)}
+end
+
+function state.flash_level(id, base)
+  local f = state._flash[id]
+  if not f then return base end
+  local age = util.time() - f.t
+  if age < 0 or age >= state.FLASH_DECAY then return base end
+  local k = 1 - (age / state.FLASH_DECAY)
+  return base + math.floor((15 - base) * k * f.w)
+end
+
 return state

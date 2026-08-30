@@ -248,9 +248,9 @@ in the norns PARAMS menu, not on the grid.
 | Cell | Idle | Live |
 |------|------|------|
 | Voice | 4 | amplitude envelope, 4→15, with the resonant tail visible |
-| Voice node | 2 unpatched, 6 patched | + signal magnitude through it |
+| Voice node | 2 unpatched, 6 patched | flash on a Lua-known pulse arriving (Knock strike, Moss choke), decay ~120 ms, weighted by force/depth; continuous magnitude from a stream still needs the metering back-channel (§7.4) |
 | D | 3 | flash 15 on pulse, decay ~120 ms; base rises with coupling strength |
-| S | 3 unpatched, 5 patched | + stream amplitude ×10, continuous shimmer |
+| S | 3 unpatched, 5 patched | flash on a D→S grain firing, decay ~120 ms, weighted by amp; continuous stream-amplitude shimmer still needs the metering back-channel (§7.4) |
 | H | 2 | local lattice energy — signals are visibly seen spreading |
 | bezel | 0 | — |
 
