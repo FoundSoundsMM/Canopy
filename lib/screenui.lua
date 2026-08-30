@@ -1,10 +1,11 @@
 -- screenui.lua
 -- network / meters / cell / edge / lexicon views. (§5.2-5.4)
 
-local topology = include("Woodland/lib/topology")
-local patch = include("Woodland/lib/patch")
-local lexicon = include("Woodland/lib/lexicon")
-local state = include("Woodland/lib/state")
+local topology = wl("topology")
+local patch    = wl("patch")
+local lexicon  = wl("lexicon")
+local state    = wl("state")
+local rambler  = wl("rambler")
 
 local screenui = {}
 
@@ -90,19 +91,45 @@ local function draw_cells(meters_mode)
   end
 end
 
+-- §5.2 "pulses render as a dot travelling the line". rambler.trails is a
+-- short capped ring of recent emissions; each is drawn at however far along
+-- its cable it has got by now.
+local function draw_trails()
+  local now = util.time()
+  for _, tr in ipairs(rambler.trails) do
+    local age = now - tr.t
+    if age >= 0 and age < rambler.TRAIL_LIFE then
+      local ca, cb = topology.get(tr.from), topology.get(tr.to)
+      if ca and cb then
+        local ax, ay = cell_xy(ca.coords[1][1], ca.coords[1][2])
+        local bx, by = cell_xy(cb.coords[1][1], cb.coords[1][2])
+        local f = age / rambler.TRAIL_LIFE
+        screen.level(15)
+        screen.rect(ax + (bx - ax) * f - 1, ay + (by - ay) * f - 1, 2, 2)
+        screen.fill()
+      end
+    end
+  end
+end
+
 function screenui.draw_network()
   draw_cells(false)
   draw_cables()
+  draw_trails()
   screen.level(15)
   screen.move(2, 62)
-  screen.text(state.last_event or "")
+  screen.text(string.sub(state.last_event or "", 1, 24))
+  -- Weather (E2) now audibly sets the coupling constant, so it needs a readout
+  screen.level(3)
+  screen.move(127, 62)
+  screen.text_right(string.format("W%.2f", state.global.weather or 0))
 end
 
 function screenui.draw_meters()
   draw_cells(true)
   screen.level(4)
   screen.move(2, 62)
-  screen.text("meters — engine not yet online")
+  screen.text("meters \xE2\x80\x94 back-channel is phase 7")
 end
 
 -- cell view (one cell held) --------------------------------------------------
@@ -132,24 +159,45 @@ function screenui.draw_cell(id)
   screen.line(126, 12)
   screen.stroke()
 
+  -- for a D cell the E2 knob means whatever its current gait says it means,
+  -- so the gait names the row and supplies its own units (§4.2).
+  local info = (cell.type == "D") and rambler.info(id) or nil
+
   local ch = lexicon.character(id)
   local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
   local v = state.get_character(id, cell, lo, hi)
   local frac = (v - lo) / (hi - lo)
   screen.level(12)
   screen.move(2, 22)
-  screen.text(ch and ch.label or "character")
+  screen.text(info and info.gait or (ch and ch.label or "character"))
   screen.move(126, 22)
-  screen.text_right(string.format("%.2f", v))
+  screen.text_right(info and info.param or string.format("%.2f", v))
   bar(2, 25, 124, 3, frac)
 
-  local trim = state.get_trim(id)
-  screen.level(12)
-  screen.move(2, 36)
-  screen.text("trim")
-  screen.move(126, 36)
-  screen.text_right(string.format("%+.2f", trim))
-  bar(2, 39, 124, 3, (trim + 1) / 2)
+  if info then
+    local mode
+    if not info.phased then
+      mode = "reactive"
+    elseif info.rooted_ok and info.rooted then
+      mode = "rooted \xC2\xB7 clock"
+    else
+      mode = "wild \xC2\xB7 free"
+    end
+    screen.level(12)
+    screen.move(2, 36)
+    screen.text(mode)
+    screen.move(126, 36)
+    screen.text_right(string.format("coupling %.2f", info.energy))
+    if info.phased then bar(2, 39, 124, 3, info.phase or 0, 6) end
+  else
+    local trim = state.get_trim(id)
+    screen.level(12)
+    screen.move(2, 36)
+    screen.text("trim")
+    screen.move(126, 36)
+    screen.text_right(string.format("%+.2f", trim))
+    bar(2, 39, 124, 3, (trim + 1) / 2)
+  end
 
   screen.level(4)
   screen.move(2, 44)
@@ -175,7 +223,7 @@ function screenui.draw_cell(id)
 
   screen.level(2)
   screen.move(2, 63)
-  screen.text("K2+K3 sever")
+  screen.text(info and "K2+K3 sever   K1+E2 gait" or "K2+K3 sever")
 end
 
 -- edge view (two cells held) -------------------------------------------------

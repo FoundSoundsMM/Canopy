@@ -44,6 +44,12 @@ function bridge.voice_modes(voice_index, n)
   engine.voice_modes(voice_index, n)
 end
 
+-- §2.2 Moss: "a pulse chokes it". the duck envelope itself is in SC; this
+-- only says when, how deep, and for how long.
+function bridge.voice_choke(voice_index, depth, time)
+  engine.voice_choke(voice_index, depth, time)
+end
+
 function bridge.canopy(size, damp, mix)
   engine.canopy(size, damp, mix)
 end

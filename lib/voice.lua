@@ -4,9 +4,9 @@
 -- to the engine. deeper per-voice PARAMS (pitch, drive, pos, ...) and
 -- node-role param mapping land with later phases.
 
-local topology = include("Woodland/lib/topology")
-local state = include("Woodland/lib/state")
-local bridge = include("Woodland/lib/bridge")
+local topology = wl("topology")
+local state    = wl("state")
+local bridge   = wl("bridge")
 
 local voice = {}
 

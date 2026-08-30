@@ -35,6 +35,8 @@ state.focus = {}       -- id -> focused edge index (0 = ALL)
 state.character = {}   -- id -> primary character value (E2)
 state.character2 = {}  -- id -> secondary character value (K1+E2)
 state.trim = {}        -- id -> node/cell trim (E3 when focus == ALL)
+state.gait = {}        -- D id -> gait key (K1+E2 swaps it, §4.2)
+state.rooted = {}      -- D id -> locked to the norns clock? (K1+tap, §2.3)
 
 function state.get_focus(id)
   if state.focus[id] == nil then state.focus[id] = 0 end
@@ -59,6 +61,18 @@ function state.get_character2(id)
   return state.character2[id]
 end
 
+-- gait/rooted default to topology's per-cell value on first read; the caller
+-- passes it in so state.lua stays ignorant of the map.
+function state.get_gait(id, default)
+  if state.gait[id] == nil then state.gait[id] = default end
+  return state.gait[id]
+end
+
+function state.get_rooted(id, default)
+  if state.rooted[id] == nil then state.rooted[id] = default and true or false end
+  return state.rooted[id]
+end
+
 -- fires when a cell's primary character (E2) changes, so voice.lua etc. can
 -- forward the new value to the engine without gridui knowing about audio.
 state._character_listeners = {}
@@ -79,8 +93,22 @@ end
 -- lexicon view pagination
 state.lexicon_page = 1
 
--- §5.2 network view bottom line: text of the most recent patching event
+-- §5.2 network view bottom line: text of the most recent event.
+-- once the scheduler is running, pulse traffic would otherwise overwrite a
+-- patching message within a few milliseconds and you would never read it, so
+-- a message can claim the line for `hold` seconds before anything else may
+-- replace it. pulses claim it with no hold at all.
 state.last_event = ""
+state._event_t = 0
+state._event_hold = 0
+
+function state.set_event(text, hold)
+  local now = util.time()
+  if now - state._event_t < state._event_hold then return end
+  state.last_event = text
+  state._event_t = now
+  state._event_hold = hold or 0
+end
 
 -- confirm-hold gestures (Regrow / Clearing), read by screenui for a progress readout
 state.confirm = nil -- {label=, started=, duration=} or nil

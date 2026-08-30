@@ -7,25 +7,44 @@
 -- hold a cell, tap another: patch them together.
 -- hold a cell, tap a connected one: unpatch them.
 -- hold two cells together: read/set that edge's gain on E3.
+-- K1 + tap a D cell: root it to the clock, or set it wild.
+-- hold a D cell, K1+E2: swap its gait.
 -- K3: cycle the screen (network -> meters -> lexicon).
 -- K2: freeze the pulse gaits (Still).
 -- K1+K2 (hold): Regrow — seeded random patch.
 -- K1+K3 (hold): Clearing — cut every cable.
 --
--- build phase 2: the SC engine's six modal voices + strike, with Knocker
--- (the one D cell whose gait is implemented so far) driving them from Lua.
--- (see docs/woodland-spec.md §9 for the full build order).
+-- build phase 3: all ten D-cell gaits, D<->D Kuramoto phase coupling, and
+-- the 2ms scheduler. exciters, heartwood and the metering back-channel are
+-- still ahead (see docs/woodland-spec.md §9 for the full build order).
 
 engine.name = "Woodland"
 
-local topology = include("Woodland/lib/topology")
-local patch = include("Woodland/lib/patch")
-local state = include("Woodland/lib/state")
-local gridui = include("Woodland/lib/gridui")
-local screenui = include("Woodland/lib/screenui")
-local bridge = include("Woodland/lib/bridge")
-local voice = include("Woodland/lib/voice")
-local rambler = include("Woodland/lib/rambler")
+-- norns' global include() is dofile-based: it re-executes the file and hands
+-- back a NEW table every call. topology/patch/state are shared mutable
+-- singletons, so plain include()s would give gridui, screenui and the
+-- scheduler three separate patch graphs that never see each other's cables.
+-- everything goes through this memo instead. globals outlive a script, so the
+-- table is cleared here -- at load time -- to keep reloads clean.
+_woodland_mods = {}
+
+function wl(name)
+  local m = _woodland_mods[name]
+  if m == nil then
+    m = include("Woodland/lib/" .. name)
+    _woodland_mods[name] = m
+  end
+  return m
+end
+
+local topology = wl("topology")
+local patch    = wl("patch")
+local state    = wl("state")
+local gridui   = wl("gridui")
+local screenui = wl("screenui")
+local bridge   = wl("bridge")
+local voice    = wl("voice")
+local rambler  = wl("rambler")
 
 -- fixed for now; only the overall wet amount (E1: Canopy) is exposed yet.
 local CANOPY_SIZE = 0.6
@@ -70,7 +89,7 @@ local function do_regrow()
       if patch.add(a, b, gain, false) then made = made + 1 end
     end
   end
-  state.last_event = "regrew " .. made .. " cables"
+  state.set_event("regrew " .. made .. " cables", 1.5)
 end
 
 local function start_confirm(kind, label)
@@ -82,7 +101,7 @@ local function start_confirm(kind, label)
         do_regrow()
       elseif kind == "clear" then
         patch.clear()
-        state.last_event = "cleared every cable"
+        state.set_event("cleared every cable", 1.5)
       end
     end
     state.confirm = nil
@@ -103,7 +122,7 @@ function key(n, z)
     keystate.k2 = (z == 1)
     if z == 0 and #state.held == 0 and k2_solo_press then
       state.global.still = not state.global.still
-      state.last_event = state.global.still and "Still" or "resumed"
+      state.set_event(state.global.still and "Still" or "resumed", 1.5)
     end
   elseif n == 3 then
     if z == 1 then

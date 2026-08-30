@@ -1,12 +1,18 @@
 -- gridui.lua
 -- grid render + hold/tap patching state machine. (§3, §4.2, §5.1)
 
-local topology = include("Woodland/lib/topology")
-local patch = include("Woodland/lib/patch")
-local lexicon = include("Woodland/lib/lexicon")
-local state = include("Woodland/lib/state")
+local topology = wl("topology")
+local patch    = wl("patch")
+local lexicon  = wl("lexicon")
+local state    = wl("state")
+local rambler  = wl("rambler")
 
 local gridui = {}
+
+-- K1+E2 cycles a D cell's gait (§4.2). one gait per three detents, so a
+-- normal flick of the encoder moves one step rather than five.
+local GAIT_DETENTS = 3
+local gait_acc = {}
 
 -- below this held-duration, releasing a second cell while a first is still
 -- held counts as a "tap" (toggles the cable). at/above it, the two-down
@@ -56,7 +62,21 @@ function gridui.on_grid_key(x, y, z, keystate)
         local result = patch.toggle(anchor, id, oneway, 0.6)
         local verb = (result == "added") and "->" or (result == "removed") and "x" or nil
         if verb then
-          state.last_event = anchor_cell.name .. " " .. verb .. " " .. this_cell.name
+          state.set_event(anchor_cell.name .. " " .. verb .. " " .. this_cell.name, 1.5)
+        end
+      end
+    elseif not anchor and held_dur < gridui.TAP_THRESHOLD
+        and keystate and keystate.k1 then
+      -- §2.3: K1 + tap a D cell toggles rooted (locked to the norns clock)
+      -- against wild (free-running). unambiguous against the K1+tap one-way
+      -- cable gesture, which only exists while another cell is held.
+      local cell = topology.get(id)
+      if cell.type == "D" then
+        local rooted = rambler.toggle_rooted(id)
+        if rooted == nil then
+          state.set_event(cell.name .. ": nothing to root to", 1.5)
+        else
+          state.set_event(cell.name .. (rooted and " rooted" or " wild"), 1.5)
         end
       end
     end
@@ -73,7 +93,7 @@ function gridui.check_sever_combo(keystate)
       local id = state.held[#state.held]
       local n = patch.sever_all(id)
       if n > 0 then
-        state.last_event = "severed " .. topology.get(id).name .. " (" .. n .. ")"
+        state.set_event("severed " .. topology.get(id).name .. " (" .. n .. ")", 1.5)
       end
       sever_fired = true
     end
@@ -112,7 +132,16 @@ function gridui.on_norns_enc(n, d, keystate)
     state.focus[id] = util.clamp(f, 0, #edges)
   elseif n == 2 then
     local delta = d / 100
-    if keystate and keystate.k1 then
+    if keystate and keystate.k1 and cell.type == "D" then
+      -- §4.2: "K1 + E2 secondary character parameter (D cells: swap gait)"
+      gait_acc[id] = (gait_acc[id] or 0) + d
+      while math.abs(gait_acc[id]) >= GAIT_DETENTS do
+        local step = gait_acc[id] > 0 and 1 or -1
+        gait_acc[id] = gait_acc[id] - step * GAIT_DETENTS
+        local key = rambler.cycle_gait(id, step)
+        if key then state.set_event(cell.name .. ": " .. key, 1.5) end
+      end
+    elseif keystate and keystate.k1 then
       state.character2[id] = util.clamp(state.get_character2(id) + delta, 0, 1)
     else
       local ch = lexicon.character(id)
@@ -138,9 +167,10 @@ function gridui.on_norns_enc(n, d, keystate)
 end
 
 -- rendering -----------------------------------------------------------------
--- §5.1 idle brightness. live signal magnitude (amplitude envelopes, pulse
--- flashes, lattice energy) arrives with the engine/scheduler in later
--- build phases; this is the static baseline.
+-- §5.1 idle brightness. D cells are live from here on -- they flash 15 on a
+-- pulse and decay over ~120ms, over a base that rises with how strongly the
+-- cell is coupled. voice envelopes, S shimmer and lattice energy still need
+-- the metering back-channel (§7.4) and stay static for now.
 
 function gridui.brightness(id, cell)
   if cell.type == "voice" then
@@ -148,7 +178,7 @@ function gridui.brightness(id, cell)
   elseif cell.type == "node" then
     return patch.degree(id) > 0 and 6 or 2
   elseif cell.type == "D" then
-    return 3
+    return rambler.level(id, 3)
   elseif cell.type == "S" then
     return patch.degree(id) > 0 and 5 or 3
   elseif cell.type == "H" then

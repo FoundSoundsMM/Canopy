@@ -44,7 +44,8 @@ Engine_Woodland : CroneEngine {
 		SynthDef(\woodland_voice, {
 			arg out=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
 				freq=110, damp=0.8, bright=0.5, drive=0.2, structure=0.5,
-				oddOnly=0, decayBase=2.0, amp=1.0, modes=6;
+				oddOnly=0, decayBase=2.0, amp=1.0, modes=6,
+				t_choke=0, chokeDepth=0.9, chokeTime=0.25;
 
 			var harmonicRatio = [1, 2, 3, 4, 5, 6];
 			var barRatio = [1, 2.756, 5.404, 8.933, 13.34, 18.64];
@@ -86,7 +87,16 @@ Engine_Woodland : CroneEngine {
 			var body = AllpassC.ar(AllpassC.ar(modeSig, 0.05, 0.0207, 0.2), 0.05, 0.0313, 0.2);
 			var driven = (body * (1 + (drive * 3))).tanh;
 			var toned = LPF.ar(driven, 400 + (bright.clip(0, 1) * 9000));
-			var sig = Limiter.ar(LeakDC.ar(toned), 0.95) * amp * 0.35;
+
+			// §2.2 Moss: "a pulse chokes it". a hand on the bar -- duck fast,
+			// let it back in over chokeTime. \exp needs a non-zero floor, and
+			// clipping chokeDepth guarantees one whatever Lua sends.
+			var chokeFloor = 1 - (chokeDepth.clip(0, 1) * 0.98);
+			var choke = EnvGen.kr(
+				Env([1, chokeFloor, 1], [0.006, chokeTime.clip(0.01, 4)], \exp),
+				t_choke);
+
+			var sig = Limiter.ar(LeakDC.ar(toned), 0.95) * amp * 0.35 * choke;
 
 			Out.ar(out, sig);
 		}).add;
@@ -180,6 +190,16 @@ Engine_Woodland : CroneEngine {
 		this.addCommand("voice_modes", "ii", { |msg|
 			var v = msg[1].asInteger;
 			if (v >= 0 and: { v < 6 }) { voiceSynths[v].set(\modes, msg[2]) };
+		});
+
+		// voice_choke(voice, depth, time) -- see §2.2 Moss.
+		this.addCommand("voice_choke", "iff", { |msg|
+			var v = msg[1].asInteger;
+			if (v >= 0 and: { v < 6 }) {
+				voiceSynths[v].set(
+					\chokeDepth, msg[2], \chokeTime, msg[3], \t_choke, 1
+				);
+			};
 		});
 
 		this.addCommand("canopy", "fff", { |msg|
