@@ -165,17 +165,14 @@ end
 print("\n-- redraw survives every pair of cells held --")
 do
   -- one representative of every type against one of every other type, both
-  -- ways round, so every branch of the edge view's interaction table is drawn.
+  -- ways round, so every branch of the edge view's interaction table is
+  -- drawn. "node" is gone -- the socket collapse means a voice is one cable
+  -- endpoint, already covered by "voice" -- and GVOICE, TM, SEQ and O are
+  -- new since the re-cut.
   local reps = {}
-  for _, kind in ipairs({"voice", "node", "D", "R", "S", "H", "F", "C"}) do
+  for _, kind in ipairs({"voice", "D", "R", "GVOICE", "E", "H", "F", "C", "TM", "SEQ", "O"}) do
     local list = ids_of(kind)
     table.insert(reps, list[1])
-    if kind == "node" then
-      -- one of each role, since the four are the whole point
-      for _, r in ipairs({"trig", "pitch", "mod", "out"}) do
-        table.insert(reps, "oak." .. r)
-      end
-    end
   end
 
   local ok, pairs_drawn = true, 0
@@ -296,7 +293,7 @@ do
   check("the sound page: under 200 commands", calls < 200, calls .. " calls")
   M.state.voice_edit = nil
 
-  M.state.held = {"d.knocker"}
+  M.state.held = {"d.hob"}
   calls, paint = frame()
   check("the cell view: under 150 commands", calls < 150, calls .. " calls")
   M.state.held = {}

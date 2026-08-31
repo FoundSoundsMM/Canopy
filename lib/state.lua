@@ -44,7 +44,6 @@ state.held_t = {}   -- id -> util.time() at press
 -- per-cell UI params, lazily defaulted
 state.focus = {}       -- id -> focused edge index (0 = ALL)
 state.character = {}   -- id -> primary character value (E2), player-set
-state.character_mod = {} -- id -> climate.lua's offset, in 0..1 of the range
 state.character2 = {}  -- id -> secondary character value (K1+E2)
 state.decay = {}       -- id -> that sound's decay (E3 when focus == ALL)
 state.gait = {}        -- D id -> gait key (K1+E2 swaps it, §4.2)
@@ -52,8 +51,8 @@ state.rooted = {}      -- D id -> locked to the norns clock? (K1+tap, §2.3)
 state.rule = {}        -- R id -> weave rule key (K1+E2 swaps it, §2.7)
 state.mode = {}        -- F id -> pitch-field mode key (K1+E2 swaps it, §2.6)
 state.snap = {}        -- F id -> quantised to the scale? (K1+tap, §2.6)
-state.shape = {}       -- C id -> climate shape key (K1+E2 swaps it, §2.8)
 state.vparam = {}      -- voice id -> {key -> 0..1} (§5.5 sound editor)
+state.step_active = {} -- SEQ id -> step on/off, a tap toggle, not a cable
 
 function state.get_focus(id)
   if state.focus[id] == nil then state.focus[id] = 0 end
@@ -69,24 +68,22 @@ function state.get_decay(id)
 end
 
 -- which cell's decay a gesture on this one moves, or nil if it moves none.
--- a voice's four sockets are parts of that voice, not sounds of their own, so
--- the gesture on any of them reaches the voice's resonator. D, R, H, F and C
--- cells have no sound to decay -- they make pulses, bend them, diffuse
--- energy, choose pitches and change the weather -- and their E3-with-nothing-
--- focused is deliberately inert rather than quietly storing a number nothing
--- reads. a G cell (§2.7b) is a sound of its own, same as a voice or an S
--- cell -- it just has no separate sockets, so the gesture reaches its own id
--- directly rather than by way of `cell.voice`.
-local DECAY_TYPES = {voice = true, node = true, S = true, G = true}
+-- the voice socket collapse means a voice's own point already carries its
+-- decay directly -- there is no separate socket to forward through any more.
+-- D, R, H, F and C cells have no sound to decay -- they make pulses, bend
+-- them, diffuse energy, choose pitches and track the clock -- and their
+-- E3-with-nothing-focused is deliberately inert rather than quietly storing
+-- a number nothing reads. a GVOICE cell is a sound of its own, same as a
+-- voice or an E cell.
+local DECAY_TYPES = {voice = true, GVOICE = true, E = true}
 
 function state.decay_target(cell)
   if not cell or not DECAY_TYPES[cell.type] then return nil end
-  if cell.type == "node" then return cell.voice end
   return cell.id
 end
 
--- the player's own setting, untouched by the weather (§2.8). this is what
--- E2 moves and what the cell view's bar draws.
+-- the player's own setting. this is what E2 moves and what the cell view's
+-- bar draws.
 function state.base_character(id, lo, hi)
   if state.character[id] == nil then
     lo, hi = lo or 0, hi or 1
@@ -95,17 +92,9 @@ function state.base_character(id, lo, hi)
   return state.character[id]
 end
 
--- what the cell actually runs on: the player's setting plus whatever any
--- cabled climate cell is currently adding. every consumer reads through
--- here, so a C cable moves the sound without ever overwriting the knob.
+-- what the cell actually runs on. every consumer reads through here.
 function state.get_character(id, cell, lo, hi)
-  lo, hi = lo or 0, hi or 1
-  local base = state.base_character(id, lo, hi)
-  local mod = state.character_mod[id]
-  if not mod or mod == 0 then return base end
-  local v = base + mod * (hi - lo)
-  if v < lo then return lo elseif v > hi then return hi end
-  return v
+  return state.base_character(id, lo, hi)
 end
 
 function state.get_character2(id)
@@ -140,11 +129,6 @@ end
 function state.get_snap(id, default)
   if state.snap[id] == nil then state.snap[id] = default and true or false end
   return state.snap[id]
-end
-
-function state.get_shape(id, default)
-  if state.shape[id] == nil then state.shape[id] = default end
-  return state.shape[id]
 end
 
 -- §5.5 the eight per-voice sound parameters, all stored 0..1. voice.lua owns

@@ -29,7 +29,13 @@ do
   local names, n = {}, 0
   for k in pairs(M) do table.insert(names, k) n = n + 1 end
   table.sort(names)
-  check("all 19 modules memoised, one copy each", n == 19, table.concat(names, ","))
+  -- climate.lua is gone and clockcell.lua/sequencer.lua are new. the offline
+  -- harness's own fresh() pulls in 18 core modules (topology, patch, state,
+  -- bridge, quantise, lexicon, heartwood, grove, clockcell, weave, dispatch,
+  -- voice, gvoice, rambler, exciter, gparam, tm, sequencer); this is a cold
+  -- load of the real Canopy.lua, so it also pulls in the two UI-layer
+  -- modules those other tests never touch -- gridui and screenui -- for 20.
+  check("all 20 modules memoised, one copy each", n == 20, table.concat(names, ","))
 end
 
 -- the whole point of the memo: one graph, seen by everyone
@@ -39,18 +45,22 @@ check("gridui and screenui share one patch graph",
 check("three metros started", #metros == 3 and metros[1].running and metros[3].running,
       "#" .. #metros)
 
--- hold Knocker (7,4), tap Oak.Trig (2,1)
+-- hold Hob (7,4) -- Knocker's old coordinates, now Hob's -- and tap Oak
+-- (2,2) directly: the socket collapse means there is no more .trig socket
+-- to reach for, so a tap on the voice's own cell is the cable endpoint.
 gridobj.key(7, 4, 1)
 T = T + 0.05
-gridobj.key(2, 1, 1)
+gridobj.key(2, 2, 1)
 T = T + 0.05
-gridobj.key(2, 1, 0)
+gridobj.key(2, 2, 0)
 check("grid patching reaches the shared graph", M.patch.count() == 1,
       "count " .. M.patch.count())
-check("event line records it", M.state.last_event:find("Knocker") ~= nil,
+check("event line records it", M.state.last_event:find("Hob") ~= nil,
       M.state.last_event)
 
--- release Knocker, then let the scheduler run: Knocker is metric+rooted
+-- release Hob, then let the scheduler run. no D cell defaults to rooted any
+-- more, but Hob's own default gait (euclidean) still free-runs and fires on
+-- its own, so this still proves the scheduler drives the engine end to end.
 gridobj.key(7, 4, 0)
 for _ = 1, 5000 do T = T + M.rambler.TICK; M.rambler.tick() end
 check("scheduler drives the engine end to end", #CALLS.strike > 0,
@@ -60,10 +70,13 @@ check("scheduler drives the engine end to end", #CALLS.strike > 0,
 local ok, err = pcall(function()
   redraw()                                    -- the global param page
   gridobj.key(7, 4, 1); redraw()              -- cell view, a D cell
-  gridobj.key(2, 1, 1); redraw()              -- edge view
-  gridobj.key(2, 1, 0); gridobj.key(7, 4, 0)
-  for _, id in ipairs({"oak", "oak.pitch", "s.beck", "h.wyrd", "f.cuckoo",
-                       "r.holt", "c.moon", "g.yaffle"}) do
+  gridobj.key(2, 2, 1); redraw()              -- edge view
+  gridobj.key(2, 2, 0); gridobj.key(7, 4, 0)
+  -- one representative of every current cell type, including the ones the
+  -- re-cut added (O, GVOICE/E rename, C-as-clock, SEQ).
+  for _, id in ipairs({"oak", "d.hob", "tm.padfoot", "clk.toll", "h.wyrd",
+                       "f.cuckoo", "r.thicket", "gv.yaffle", "e.bracken",
+                       "o.1", "q4.1", "q6.1"}) do
     local c = M.topology.get(id)
     gridobj.key(c.coords[1][1], c.coords[1][2], 1); redraw()
     gridobj.key(c.coords[1][1], c.coords[1][2], 0)
@@ -87,8 +100,8 @@ ok, err = pcall(function()
   gridobj.key(7, 4, 0)
 end)
 check("keys and encoders survive", ok, tostring(err))
-check("K1+E2 swapped Knocker's gait", M.rambler.info("d.knocker").gait ~= "metric",
-      M.rambler.info("d.knocker").gait)
+check("K1+E2 swapped Hob's gait", M.rambler.info("d.hob").gait ~= "euclidean",
+      M.rambler.info("d.hob").gait)
 
 -- §5.5: tapping a voice cell opens its sound page and hands it the encoders;
 -- tapping it again gives them back. Oak's cell is at (2,2).
@@ -111,7 +124,7 @@ do
         string.format("%.5f vs %.5f", fine, coarse))
 
   enc(1, 1)
-  check("E1 walks the nine", M.state.vparam_focus == 2,
+  check("E1 walks the twelve", M.state.vparam_focus == 2,
         tostring(M.state.vparam_focus))
 
   ok, err = pcall(redraw)

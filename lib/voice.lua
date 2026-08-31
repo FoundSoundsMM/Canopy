@@ -1,8 +1,9 @@
 -- voice.lua
--- voice state / param mapping, and the eight-parameter sound editor behind
--- §5.5's voice page. it also forwards the two voice sockets that have a
--- continuous engine-side meaning -- M's balance and O's tap level -- so
--- gridui never has to know which cell type talks to which command.
+-- voice state / param mapping, and the sound editor behind §5.5's voice
+-- page. the grid overhaul's socket collapse folded the old T/P/M sockets'
+-- own knobs (hardness, depth, balance) in here as three more rows -- there
+-- is no socket left to carry them, and the sound page is where every other
+-- cell type without one keeps its parameters.
 --
 -- the old Grain macro is gone. it morphed structure/damp/bright/drive
 -- together behind one knob because there was nowhere to put four knobs; the
@@ -12,7 +13,6 @@
 local topology = wl("topology")
 local state    = wl("state")
 local bridge   = wl("bridge")
-local lexicon  = wl("lexicon")
 
 local voice = {}
 
@@ -160,6 +160,37 @@ voice.PARAMS = {
       bridge.voice_amp(topology.get(id).index - 1, voice.level(id))
     end,
   },
+  {
+    -- the collapsed point's strike-side knob: mallet hardness, read live at
+    -- strike time (dispatch.lua) rather than pushed -- the same "takes
+    -- effect on the next event" shape a TM cell's Prob/Drift/Bias rows use.
+    -- used to live on the T socket's own character knob; there is no socket
+    -- left to carry it, so it moved here.
+    key = "hardness", label = "Hardness", default = 0.5,
+    get = vp_get("hardness", 0.5), set = vp_set("hardness"),
+    text = function(id) return string.format("%.2f", state.get_vparam(id, "hardness", 0.5)) end,
+    push = function() end,
+  },
+  {
+    -- how far a field or a TM cell moves this voice's pitch -- the old P
+    -- socket's own knob, 0..2 so the player can flatten the melody to
+    -- nothing or double how wide it reads.
+    key = "depth", label = "Depth", default = 0.5,
+    get = vp_get("depth", 0.5), set = vp_set("depth"),
+    text = function(id) return string.format("%.2f", voice.depth(id)) end,
+    push = function(id) wl("grove").push_voice_now(id) end,
+  },
+  {
+    -- the old M socket's balance knob: 0 injects a cabled stream into the
+    -- resonator as excitation, 1 lands it on the body as damping/brightness/
+    -- structure bend, and everything between is a mix of the two.
+    key = "balance", label = "Balance", default = 0.5,
+    get = vp_get("balance", 0.5), set = vp_set("balance"),
+    text = function(id) return string.format("%.2f", state.get_vparam(id, "balance", 0.5)) end,
+    push = function(id)
+      bridge.voice_mod(topology.get(id).index - 1, state.get_vparam(id, "balance", 0.5))
+    end,
+  },
 }
 
 voice.PARAM_COUNT = #voice.PARAMS
@@ -182,6 +213,14 @@ function voice.position(id)
   return 0.02 + state.get_vparam(id, "strike", 0.3) * 0.48
 end
 
+-- the Depth knob in real units: 0..2, a plain multiplier on everything a
+-- cabled field or TM cell does to this voice's pitch (grove.offset,
+-- grove.hz). 0.5 on the stored 0..1 knob is 1x -- unchanged from what a
+-- freshly patched voice always did.
+function voice.depth(id)
+  return state.get_vparam(id, "depth", 0.5) * 2
+end
+
 function voice.level(id)
   return state.get_vparam(id, "level", 0.7) * 1.4
 end
@@ -202,37 +241,13 @@ function voice.push_all(id)
   for _, p in ipairs(voice.PARAMS) do p.push(id) end
 end
 
--- the two sockets with a continuous engine-side meaning ---------------------
-
-local function push_node(id, cell)
-  local v = topology.get(cell.voice).index - 1
-  local ch = lexicon.character(id)
-  local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
-  local value = state.get_character(id, cell, lo, hi)
-  if cell.role == "mod" then
-    bridge.voice_mod(v, value)
-  elseif cell.role == "out" then
-    bridge.voice_tap(v, value)
-  end
-  -- trig's hardness and pitch's depth are read at the moment they are used
-  -- (dispatch's strike, grove's offset) rather than pushed, so there is
-  -- nothing to forward for those two.
-end
-
 function voice.init()
   for id, cell in topology.each() do
     if cell.type == "voice" then
       voice.push_all(id)
-    elseif cell.type == "node" then
-      push_node(id, cell)
     end
   end
 end
-
-state.on_character_change(function(id)
-  local cell = topology.get(id)
-  if cell and cell.type == "node" then push_node(id, cell) end
-end)
 
 state.on_decay_change(function(id)
   local cell = topology.get(id)

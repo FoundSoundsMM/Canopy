@@ -278,11 +278,13 @@ for id, cell in topology.each() do
   end
 end
 
--- P-socket linking -------------------------------------------------------------
--- same shape as grove.lua's rebuild_links: a cable from this cell to a
--- voice's P socket makes it a pitch source for that voice, summed with
--- whatever fields are also cabled there (§2.6's "neither" family -- a number,
--- not a pulse or a stream -- so this bypasses dispatch.lua entirely).
+-- pitch linking -------------------------------------------------------------
+-- same shape as grove.lua's rebuild_links: a cable from this cell to a voice
+-- makes it a pitch source for that voice, summed with whatever fields are
+-- also cabled there (§2.6's "neither" family -- a number, not a pulse or a
+-- stream -- so this bypasses dispatch.lua entirely). the socket collapse
+-- means that's just any cable to the voice's own point now -- there is no
+-- separate P socket left to require.
 
 local function rebuild_links()
   voice_links = {}
@@ -296,10 +298,10 @@ local function rebuild_links()
       -- a one-way cable a->b only sends from a (§3), the same rule grove.lua
       -- and rambler.lua apply.
       local can_send = (not edge.oneway) or (edge.a == r.id)
-      if other and other.type == "node" and other.role == "pitch" and can_send then
-        table.insert(r.voices, {id = other.voice, gain = edge.gain})
-        voice_links[other.voice] = voice_links[other.voice] or {}
-        table.insert(voice_links[other.voice], {m = r.id, gain = edge.gain})
+      if other and other.type == "voice" and can_send then
+        table.insert(r.voices, {id = other_id, gain = edge.gain})
+        voice_links[other_id] = voice_links[other_id] or {}
+        table.insert(voice_links[other_id], {m = r.id, gain = edge.gain})
       end
     end
   end

@@ -1,11 +1,12 @@
 -- §2.3b: the four TM cells (lib/tm.lua). that they're registered right,
--- above Hob/Grim and below Spriggan/Gabriel; that a TM cell never moves on
--- its own -- only a pulse cabled into it ever steps the register; that
--- Prob=1/Drift=0 is a pure rotation of the register (so its evolution is
--- fully predictable, which is what the rest of these tests lean on); that Tap
+-- flanking the D-cell block on row 4; that a TM cell never moves on its own
+-- -- only a pulse cabled into it ever steps the register; that Prob=1/
+-- Drift=0 is a pure rotation of the register (so its evolution is fully
+-- predictable, which is what the rest of these tests lean on); that Tap
 -- gates the outgoing pulse to exactly the steps where that bit reads high;
--- that a P-socket cable feeds a voice's pitch the same way a field does, and
--- Range/Bits push it live; and that TM<->TM stays bounded.
+-- that cabling a TM cell directly to a voice feeds its pitch the same way a
+-- field does (the socket collapse means there is no separate P socket left
+-- to require), and Range/Bits push it live; and that TM<->TM stays bounded.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -13,8 +14,8 @@ dofile(SP .. "/harness.lua")
 
 local PADFOOT, BARGHEST = "tm.padfoot", "tm.barghest"
 local PUCK, TATTERFOAL = "tm.puck", "tm.tatterfoal"
-local KNOCKER = "d.knocker"
-local BECK = "s.beck"
+local KNOCKER = "d.hob"
+local BECK = "e.bracken"
 
 local function gates(index)
   local n = 0
@@ -49,7 +50,7 @@ local function set_length(M, id, n)
   M.state.set_vparam(id, "length", (n - 2) / 14)
 end
 
-print("\n-- four TM cells, above Hob/Grim and below Spriggan/Gabriel --")
+print("\n-- four TM cells, flanking the D-cell block on row 4 --")
 do
   local M = fresh(1)
   local ids = {}
@@ -62,10 +63,13 @@ do
     local c = M.topology.get(id)
     at[c.coords[1][1] .. "," .. c.coords[1][2]] = id
   end
-  check("above Hob (8,4) and Grim (9,4)", at["8,3"] and at["9,3"],
-        "8,3=" .. tostring(at["8,3"]) .. " 9,3=" .. tostring(at["9,3"]))
-  check("below Spriggan (8,5) and Gabriel (9,5)", at["8,6"] and at["9,6"],
-        "8,6=" .. tostring(at["8,6"]) .. " 9,6=" .. tostring(at["9,6"]))
+  -- row 4 now reads: F . . TM TM C T T T T C TM TM . . H (topology.lua §2)
+  check("Padfoot and Barghest sit left of it, at (4,4)/(5,4)",
+        at["4,4"] and at["5,4"],
+        "4,4=" .. tostring(at["4,4"]) .. " 5,4=" .. tostring(at["5,4"]))
+  check("Puck and Tatterfoal sit right of it, at (12,4)/(13,4)",
+        at["12,4"] and at["13,4"],
+        "12,4=" .. tostring(at["12,4"]) .. " 13,4=" .. tostring(at["13,4"]))
   check("a TM cell is a pulse cell, same family as D and R",
         M.topology.PULSE_TYPES.TM == true)
   check("eight parameters", M.tm.PARAM_COUNT == 8, tostring(M.tm.PARAM_COUNT))
@@ -74,7 +78,7 @@ end
 print("\n-- nothing moves it but a trigger --")
 do
   local M = fresh(2)
-  M.patch.add(PADFOOT, "oak.pitch", 1.0)
+  M.patch.add(PADFOOT, "oak", 1.0)
   local before = #pitches_for(0)
   run(M, 10) -- ten seconds of scheduler ticks, nothing cabled to PADFOOT itself
   check("no further pitch pushes without a trigger", #pitches_for(0) == before,
@@ -123,19 +127,19 @@ do
   local M = fresh(4)
   driver(M, KNOCKER, 1.0) -- 4 x beat, rooted
   M.patch.add(KNOCKER, PADFOOT, 1.0)
-  M.patch.add(PADFOOT, "oak.pitch", 1.0)
+  M.patch.add(PADFOOT, "oak", 1.0)
   local before = #pitches_for(0)
   run(M, 5)
   check("the register did step from Knocker's pulses", #pitches_for(0) > before,
         before .. " -> " .. #pitches_for(0))
 end
 
-print("\n-- a P-socket cable is a pitch source, same shape as a field --")
+print("\n-- cabling a TM cell to a voice is a pitch source, same shape as a field --")
 do
   local M = fresh(5)
   set_length(M, PADFOOT, 8)
   M.state.set_vparam(PADFOOT, "prob", 0) -- fresh coin every step: guaranteed movement
-  M.patch.add(PADFOOT, "oak.pitch", 1.0)
+  M.patch.add(PADFOOT, "oak", 1.0)
   local seen = {}
   for i = 1, 12 do
     M.tm.pulse_in(PADFOOT, 1, nil, 0)
@@ -156,7 +160,7 @@ do
   -- nudges are large on purpose, so the snapped degree is guaranteed to cross
   -- into a different scale tone rather than landing near a boundary.
   M.state.set_vparam(PADFOOT, "range", 0)
-  M.patch.add(PADFOOT, "oak.pitch", 1.0)
+  M.patch.add(PADFOOT, "oak", 1.0)
 
   local before = #pitches_for(0)
   M.tm.nudge(PADFOOT, 5, 0.9) -- Range, narrow -> wide

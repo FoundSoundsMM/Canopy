@@ -361,15 +361,14 @@ local function rebuild_links()
       local can_send = (not edge.oneway) or (edge.a == f.id)
       local can_hear = (not edge.oneway) or (edge.b == f.id)
       if other then
-        -- only the P socket takes a field. cabling one to T, M or O is a
-        -- legal patch that simply means nothing on this side of the wall;
-        -- letting it retune the voice anyway would make the four sockets
-        -- interchangeable, which is the one thing they must not be.
-        if other.type == "node" and other.role == "pitch" and can_send then
-          table.insert(f.voices, {id = other.voice, node = other_id, gain = edge.gain})
-          voice_links[other.voice] = voice_links[other.voice] or {}
-          table.insert(voice_links[other.voice], {f = f, gain = edge.gain})
-        elseif other.type == "S" and can_send then
+        -- the socket collapse means a field cabled to a voice always tunes
+        -- it -- there is no separate P socket left to require, and no other
+        -- meaning a pulse-less "neither" family link to a voice could have.
+        if other.type == "voice" and can_send then
+          table.insert(f.voices, {id = other_id, gain = edge.gain})
+          voice_links[other_id] = voice_links[other_id] or {}
+          table.insert(voice_links[other_id], {f = f, gain = edge.gain})
+        elseif other.type == "E" and can_send then
           table.insert(f.exciters, {id = other_id, index = other.index, gain = edge.gain})
           tracked[other_id] = true
         elseif other.type == "F" and can_hear then
@@ -386,15 +385,13 @@ end
 -- (bipolar -- a negative cable inverts the field's contour) and normalised by
 -- the total weight, so cabling a second field to a voice averages the two
 -- rather than stacking them into a transposition nobody asked for.
--- the P socket's own knob (§4.2 "depth") is a multiplier on everything the
+-- the sound page's own Depth knob (the old P socket's knob, before the
+-- socket collapse -- see voice.lua) is a multiplier on everything the
 -- fields do to this voice: at 0 the cables are still there and still drawn,
 -- and the voice sits on its root anyway; at 2 a narrow field reads as a wide
 -- one. it is the per-voice answer to "that is too much melody".
 function grove.depth(voice_id)
-  local node_id = voice_id .. ".pitch"
-  local cell = topology.get(node_id)
-  if not cell then return 1 end
-  return state.get_character(node_id, cell, 0, 2)
+  return wl("voice").depth(voice_id)
 end
 
 function grove.offset(voice_id)

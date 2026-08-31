@@ -85,7 +85,7 @@ local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/
 local heartwood = wl("heartwood")
 local grove     = wl("grove")
 local weave     = wl("weave")   -- Regrow seeds rules through it; also loaded
-local climate   = wl("climate") -- for the listeners each of them registers
+                                 -- for the listeners each of them registers
 
 local g = nil
 local screen_metro, grid_metro
@@ -191,10 +191,10 @@ local function do_regrow()
   local voices  = shuffled(ids_of("voice"))
   local dcells  = shuffled(ids_of("D"))
   local rcells  = shuffled(ids_of("R"))
-  local scells  = shuffled(ids_of("S"))
+  local ecells  = shuffled(ids_of("E"))
   local fcells  = shuffled(ids_of("F"))
-  local ccells  = shuffled(ids_of("C"))
   local hcells  = shuffled(ids_of("H"))
+  local ocells  = shuffled(ids_of("O"))
 
   local n_voices = math.min(#voices, 2 + math.random(3))
   local used_d = {}
@@ -207,36 +207,48 @@ local function do_regrow()
     table.insert(used_d, d)
 
     -- half the time the pulse goes through a transform on its way to the
-    -- trigger, which is where most of the character of a part comes from.
-    local trig = v .. ".trig"
+    -- voice, which is where most of the character of a part comes from. the
+    -- socket collapse means the voice's own id is the cable target now --
+    -- there is no separate ".trig" to reach for.
     local r = (math.random() < 0.55) and seed_r(take(rcells)) or nil
     if r then
       patch.add(d, r, gain(0.6, 1.0), false)
-      patch.add(r, trig, gain(0.5, 0.95), false)
+      patch.add(r, v, gain(0.5, 0.95), false)
     else
-      patch.add(d, trig, gain(0.5, 0.95), false)
+      patch.add(d, v, gain(0.5, 0.95), false)
     end
 
-    -- something under the voice: an exciter on the mod socket, and sometimes
-    -- the same pulse gating that exciter into a grain rather than a wash.
+    -- something under the voice: an exciter feeding its mod path, and
+    -- sometimes the same pulse gating that exciter into a grain rather than
+    -- a wash.
     if math.random() < 0.7 then
-      local s = take(scells)
-      if s then
-        patch.add(s, v .. ".mod", gain(0.3, 0.8), false)
-        if math.random() < 0.5 then patch.add(d, s, gain(0.4, 0.9), false) end
+      local e = take(ecells)
+      if e then
+        patch.add(e, v, gain(0.3, 0.8), false)
+        if math.random() < 0.5 then patch.add(d, e, gain(0.4, 0.9), false) end
       end
     end
 
-    -- and now and then a field on the pitch socket, which is the difference
-    -- between a drum part and a tune.
+    -- and now and then a field, which is the difference between a drum part
+    -- and a tune -- also cabled straight to the voice's own point now.
     if math.random() < 0.45 then
       local f = take(fcells)
       if f then
         -- a modest range: at the top of the knob a field is two octaves wide,
         -- which is a melody nobody asked for under a drum part.
         state.character[f] = 0.15 + math.random() * 0.4
-        patch.add(f, v .. ".pitch", gain(0.4, 0.9), false)
+        patch.add(f, v, gain(0.4, 0.9), false)
       end
+    end
+
+    -- and always an Output cable, or nothing regrown is ever heard: one or
+    -- two cells, so a couple of voices don't land on exactly the same pan
+    -- position by chance as often as not.
+    local o = take(ocells)
+    if o then patch.add(v, o, gain(0.6, 1.0), false) end
+    if math.random() < 0.4 then
+      local o2 = take(ocells)
+      if o2 then patch.add(v, o2, gain(0.3, 0.7), false) end
     end
   end
 
@@ -248,7 +260,7 @@ local function do_regrow()
     local v = voices[math.random(n_voices)]
     if r and v then
       patch.add(d, r, gain(0.5, 0.9), false)
-      patch.add(r, v .. ".trig", gain(0.4, 0.8), false)
+      patch.add(r, v, gain(0.4, 0.8), false)
     end
   end
 
@@ -261,10 +273,11 @@ local function do_regrow()
     patch.add(a, b, gg, false)
   end
 
-  -- one voice ringing another: the cable the panel did not have until the O
-  -- socket landed.
+  -- one voice ringing another: fully symmetric now the socket collapse made
+  -- every voice one androgynous point (§1's own principle, finally taken at
+  -- its word).
   if n_voices >= 2 and math.random() < 0.45 then
-    patch.add(voices[1] .. ".out", voices[2] .. ".mod", gain(0.2, 0.5), true)
+    patch.add(voices[1], voices[2], gain(0.2, 0.5), true)
   end
 
   -- into the wood, and out of it somewhere else.
@@ -274,22 +287,7 @@ local function do_regrow()
       patch.add(used_d[math.random(#used_d)], h, gain(0.4, 0.8), false)
       local h2 = take(hcells)
       local v = voices[math.random(n_voices)]
-      if h2 and v then patch.add(h2, v .. ".mod", gain(0.2, 0.6), false) end
-    end
-  end
-
-  -- and finally the weather, on whatever is most worth moving slowly.
-  for _ = 1, math.random(2) do
-    local c = take(ccells)
-    local target = (math.random() < 0.5) and used_d[math.random(math.max(#used_d, 1))]
-                                        or scells[#scells]
-    if c and target then
-      -- somewhere in the middle of the period knob: slow enough to be a
-      -- change rather than a wobble, fast enough to happen while you listen.
-      state.character[c] = 0.25 + math.random() * 0.45
-      local gg = gain(0.3, 0.8)
-      if math.random() < 0.4 then gg = -gg end
-      patch.add(c, target, gg, false)
+      if h2 and v then patch.add(h2, v, gain(0.2, 0.6), false) end
     end
   end
 
@@ -370,10 +368,10 @@ function enc(n, d)
   if gridui.on_norns_enc(n, d, keystate) then return end
 
   if state.voice_edit then
-    -- §2.7b/§2.3b: a G cell's or a TM cell's sound page is the same shape,
-    -- just a different PARAMS list.
+    -- §2.7b/§2.3b: a GVOICE cell's or a TM cell's sound page is the same
+    -- shape, just a different PARAMS list.
     local cell = topology.get(state.voice_edit)
-    local pm = (cell and cell.type == "G") and gvoice
+    local pm = (cell and cell.type == "GVOICE") and gvoice
                or (cell and cell.type == "TM") and tm
                or voice
     if n == 1 then

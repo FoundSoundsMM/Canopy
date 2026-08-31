@@ -3,37 +3,31 @@
 -- ids are stable strings (never coordinates) so layout can change without
 -- breaking saved patches. see docs/canopy-spec.md §2, §7.5.
 --
--- build phase 6 re-cuts the whole map. the panel is now four voice clusters
--- in the four corners, a sealed box of pulse-makers dead centre, and four
--- banks between them. a large number of coordinates are deliberately *not*
--- registered: an unregistered coordinate is dark and inert, and the shape of
--- what is left is what makes the panel readable at a glance.
+-- the grid overhaul re-cuts the whole panel again. an explicit Output row
+-- replaces the old per-voice fixed panning; each voice's four sockets
+-- collapse into one cable endpoint; Climate is gone and its letter is
+-- reused for a small Clock family; the six percussion cells become two
+-- three-cell groups (the ping ones read "F", the noise ones read "N");
+-- Turing Machines are unchanged; the weave/heartwood/exciter families keep
+-- their mechanics with a smaller, curated set of default seats; and two new
+-- step-sequencer lanes (Q4, Q6) join the panel. `cell.letter` is a *display*
+-- override only -- code that needs the mechanic still reads `cell.type`.
 --
 --       1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
---  1    .   T   .   S   S   S   S   S   S   S   S   S   S   .   T   .
---  2    P   V   M   R   R   R   R   R   R   R   R   R   R   P   V   M
---  3    .   O   .   F   H   .   .  TM  TM   .   .   H   F   .   O   .
---  4    C   .   C   F   H   .   D   D   D   D   .   H   F   C   .   C
---  5    C   .   C   F   H   .   D   D   D   D   .   H   F   C   .   C
---  6    .   T   .   F   H   .   .  TM  TM   .   .   H   F   .   T   .
---  7    P   V   M   R   R   G   G   G   G   G   G   R   R   P   V   M
---  8    .   O   .   S   S   S   S   S   S   S   S   S   S   .   O   .
+--  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
+--  2    .   M   .   .   .   F   F   F   N   N   N   .   .   .   M   .
+--  3    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
+--  4    F   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   H
+--  5    .   F   .   .   .   C   T   T   T   T   C   .   .   .   H   .
+--  6    E   E   F   .   .   .   .   .   .   .   .   .   .   H   .   R
+--  7    E   M   .   F   .   Q4  Q4  Q4  Q4   .   .   .   H   R   M   R
+--  8    E   E   E   .   .   Q6  Q6  Q6  Q6  Q6  Q6   .   .   R   R   R
 --
---   V  the voice itself -- not a socket. tap it to edit its sound (§5.5).
---   T  trigger in       a pulse strikes the resonator
---   P  pitch in         a field cabled here tunes it
---   M  mod in           a stream bends it; a pulse chokes it
---   O  out              its audio tap, and a pulse every time it is struck
---   D  pulse-makers (8) free-running gaits (§2.3)
---   TM Turing Machines (4) 8-bit shift-register sequencers, triggered only --
---                        no gait of their own (§2.3b)
---   R  the weave (14)   pulse transforms -- what happens *between* cells
---   G  percussion (6)   small drum voices, in the middle of the bottom weave
---                        row -- a cell in its own right, not a socket (§2.7b)
---   S  exciters (20)    the noise sources (§2.4)
---   F  fields (8)       wandering pitch (§2.6, was "P" before the re-cut)
---   H  heartwood (8)    the diffusion lattice (§2.5)
---   C  climate (8)      slow modulators -- the long game
+--   O  output (16)     M  voice (4)        F  grove field / percussion-ping
+--   N  percussion-noise TM Turing Machine  C  clock (4)
+--   T  trigger source (8, was D)          H  heartwood (4)
+--   E  exciter (6, was S)                  R  weave (6)
+--   Q4/Q6 step sequencers                  .  unregistered, dark and inert
 
 local topology = {}
 
@@ -55,20 +49,26 @@ local function reg(kind, id, name, coords, extra)
   return rec
 end
 
--- 2.1 voices ------------------------------------------------------------
+-- 2.1 the output row -- O (16) ---------------------------------------------
+-- nothing reaches a speaker by default. position along the row sets pan,
+-- hard left at column 1 to hard right at column 16 -- cabling a voice or any
+-- other source cell to one of these is the only way it is ever heard.
 
--- `root` is the voice's fundamental in Hz and `decay` its default ring time
--- in seconds -- columns 2 and 6 of Engine_Canopy.sc's `voiceDefs` table,
--- duplicated here because both are needed on the Lua side: grove.lua computes
--- an absolute Hz from a semitone offset, and voice.lua maps the sound
--- editor's 0..1 knobs to real units around each voice's own defaults. the two
--- lists must stay in step, exactly like the S index list below.
---
--- four voices, one per corner, chosen to cover a kit: a trunk you can tune
--- down to a kick, a dry clack, a wet mid tom and a bright bell.
--- `struct` and `damp` are the same voice's structureBase and dampBase in the
--- SC table; the sound editor's Body and Damp knobs sweep around them rather
--- than replacing them, so a voice keeps its own character at any setting.
+for x = 1, 16 do
+  local id = "o." .. x
+  reg("O", id, "Out " .. x, {{x, 1}}, {
+    index = x - 1,
+    pan = -1 + 2 * (x - 1) / 15,
+  })
+end
+
+-- 2.2 voices (4) -------------------------------------------------------------
+-- the socket cluster is gone. one cell per voice is now the whole thing: the
+-- tap-to-open-sound-page target *and* the sole cable endpoint. what a cable
+-- means is decided by the type at its other end (dispatch.lua's `voice<-*`
+-- handlers), the same "every socket is androgynous" principle the panel
+-- already ran on -- just with one socket per voice instead of four.
+
 local VOICES = {
   {id = "oak",   name = "Oak",   index = 1, root = 55,  decay = 1.2,  struct = 0.55, damp = 1.1, x = 2,  y = 2},
   {id = "hazel", name = "Hazel", index = 2, root = 220, decay = 0.28, struct = 0.95, damp = 1.3, x = 15, y = 2},
@@ -76,70 +76,52 @@ local VOICES = {
   {id = "rowan", name = "Rowan", index = 4, root = 330, decay = 1.8,  struct = 0.75, damp = 0.6, x = 15, y = 7},
 }
 
--- 2.2 voice sockets (16) --------------------------------------------------
--- role in {"trig","pitch","mod","out"}, laid out around the voice cell:
--- trigger above, pitch left, mod right, out below. the four diagonals of the
--- 3x3 cluster are left unregistered, so a cluster reads as a plus sign.
-
-local ROLE_NAME = {trig = "Trig", pitch = "Pitch", mod = "Mod", out = "Out"}
-local ROLE_ORDER = {"trig", "pitch", "mod", "out"}
-local ROLE_OFFSET = {trig = {0, -1}, pitch = {-1, 0}, mod = {1, 0}, out = {0, 1}}
-
 for _, v in ipairs(VOICES) do
   reg("voice", v.id, v.name, {{v.x, v.y}},
       {index = v.index, root = v.root, decay = v.decay,
        struct = v.struct, damp = v.damp})
-  for _, role in ipairs(ROLE_ORDER) do
-    local off = ROLE_OFFSET[role]
-    local id = v.id .. "." .. role
-    -- middle dot, e.g. Oak·Trig
-    local name = v.name .. "\xC2\xB7" .. ROLE_NAME[role]
-    reg("node", id, name, {{v.x + off[1], v.y + off[2]}}, {voice = v.id, role = role})
-  end
 end
 
--- 2.3 pulse cells -- D (8) -------------------------------------------------
--- gait keys match rambler.lua. every gait in here free-runs on a phase of its
--- own; the ones that only react to an incoming pulse moved out to the weave
--- (§2.7) when the panel was re-cut, which is where they always belonged.
--- counterparts are the 180-degree rotation of the panel (x -> 17-x, y -> 9-y).
+-- 2.3 trigger sources -- T (8, internally type "D") --------------------------
+-- unchanged mechanic (free-running gaits, Kuramoto-coupled) -- just a new
+-- display letter, since the clock-locking job the "metric" gait/Knocker used
+-- to do now belongs to the Clock cells below. Skriker's "swarm" gait is
+-- Knocker's replacement: brief, unpredictable clusters of 2-4 micro-pulses,
+-- filling the gait bank back out to eight without duplicating Boggart's fixed
+-- ratchet or Spriggan's single Bernoulli gate. see rambler.lua for the gait
+-- table itself.
 
 local D_CELLS = {
-  {id = "knocker",  x = 7,  y = 4, gait = "metric",      counterpart = "hunt"},
-  {id = "hob",      x = 8,  y = 4, gait = "euclidean",   counterpart = "gabriel"},
-  {id = "grim",     x = 9,  y = 4, gait = "figure",      counterpart = "spriggan"},
-  {id = "shuck",    x = 10, y = 4, gait = "slow",        counterpart = "boggart"},
-  {id = "boggart",  x = 7,  y = 5, gait = "burst",       counterpart = "shuck"},
-  {id = "spriggan", x = 8,  y = 5, gait = "stochastic",  counterpart = "grim"},
-  {id = "gabriel",  x = 9,  y = 5, gait = "drifter",     counterpart = "hob"},
-  {id = "hunt",     x = 10, y = 5, gait = "accelerando", counterpart = "knocker"},
+  {id = "hob",      x = 7,  y = 4, gait = "euclidean",   counterpart = "gabriel"},
+  {id = "grim",     x = 8,  y = 4, gait = "figure",      counterpart = "spriggan"},
+  {id = "shuck",    x = 9,  y = 4, gait = "slow",        counterpart = "boggart"},
+  {id = "boggart",  x = 10, y = 4, gait = "burst",       counterpart = "shuck"},
+  {id = "spriggan", x = 7,  y = 5, gait = "stochastic",  counterpart = "grim"},
+  {id = "gabriel",  x = 8,  y = 5, gait = "drifter",     counterpart = "hob"},
+  {id = "hunt",     x = 9,  y = 5, gait = "accelerando", counterpart = "skriker"},
+  {id = "skriker",  x = 10, y = 5, gait = "swarm",       counterpart = "hunt"},
 }
 
 for _, d in ipairs(D_CELLS) do
   local id = "d." .. d.id
   local name = d.id:sub(1, 1):upper() .. d.id:sub(2)
   reg("D", id, name, {{d.x, d.y}}, {
+    letter = "T",
     gait = d.gait,
     counterpart = "d." .. d.counterpart,
-    rooted = (d.gait == "metric" or d.gait == "euclidean" or d.gait == "figure"),
+    rooted = false,
   })
 end
 
 -- 2.3b Turing Machine cells -- TM (4) ---------------------------------------
--- four independent 8-bit shift-register sequencers, akin to the Music Thing
--- Modular Turing Machine with its Pulses/Voltages expanders each collapsed
--- onto one cell (lib/tm.lua). they occupy the four coordinates the original
--- map left dark directly above Hob and Grim and directly below Spriggan and
--- Gabriel -- still inside the sealed D-core box, but not pulse-makers
--- themselves: a TM cell has no phase and no gait of its own, and does
--- nothing at all until a pulse is cabled into it. counterparts are the
--- 180-degree rotation, same as everywhere else on the panel.
+-- unchanged: independent 8-bit shift-register sequencers, no phase of their
+-- own, moved only by an incoming pulse. see lib/tm.lua.
 
 local TM_CELLS = {
-  {id = "padfoot",    x = 8, y = 3, counterpart = "tatterfoal"},
-  {id = "barghest",   x = 9, y = 3, counterpart = "puck"},
-  {id = "puck",       x = 8, y = 6, counterpart = "barghest"},
-  {id = "tatterfoal", x = 9, y = 6, counterpart = "padfoot"},
+  {id = "padfoot",    x = 4,  y = 4, counterpart = "tatterfoal"},
+  {id = "barghest",   x = 5,  y = 4, counterpart = "puck"},
+  {id = "puck",       x = 12, y = 4, counterpart = "barghest"},
+  {id = "tatterfoal", x = 13, y = 4, counterpart = "padfoot"},
 }
 
 for _, t in ipairs(TM_CELLS) do
@@ -148,218 +130,164 @@ for _, t in ipairs(TM_CELLS) do
   reg("TM", id, name, {{t.x, t.y}}, {counterpart = "tm." .. t.counterpart})
 end
 
--- 2.7 the weave -- R (14) --------------------------------------------------
--- rule keys match weave.lua. a D cell decides *when* something happens; an R
--- cell decides what happens to a pulse on its way somewhere -- divided,
--- delayed, doubled, accented, dropped, swung, thinned. two rows either side
--- of the core -- ten across the top, four plus the six G cells across the
--- bottom (§2.7b) -- so nothing is more than a couple of cables from a
--- transform.
+-- 2.9 clock cells -- C (4, new) ----------------------------------------------
+-- Climate is gone; the letter is reused for something unrelated. a clock
+-- cell has no shape bank and no free phase of its own -- it just flashes on
+-- a multiple or division of the master (norns) clock, feeding the trigger
+-- block next to it. see the new lib/clockcell.lua.
 
--- the re-cut's re-cut: Spinney, Bramble, Withy (bottom) and Trod, Ginnel,
--- Bostal (top) gave up their coordinates to the six new G cells and to
--- Thicket/Briar/Tangle moving up to join Hocket and Lych on the top row --
--- see docs/canopy-spec.md §2.7. every one of those six rules is still
--- reachable by K1+E2 rule-cycling on any R cell; only the *default* seat
--- changed. ids are unchanged throughout, so a saved patch referencing
--- "r.thicket" still resolves -- it just lights up somewhere else now.
+local CLOCK_CELLS = {
+  {id = "toll",  x = 6,  y = 4, counterpart = "peal"},
+  {id = "knell", x = 11, y = 4, counterpart = "chime"},
+  {id = "chime", x = 6,  y = 5, counterpart = "knell"},
+  {id = "peal",  x = 11, y = 5, counterpart = "toll"},
+}
+
+for _, c in ipairs(CLOCK_CELLS) do
+  local id = "clk." .. c.id
+  local name = c.id:sub(1, 1):upper() .. c.id:sub(2)
+  reg("C", id, name, {{c.x, c.y}}, {counterpart = "clk." .. c.counterpart})
+end
+
+-- 2.5 heartwood -- H (4) -----------------------------------------------------
+-- trimmed from a ring of 8 to a simple chain of 4 (fewer cells, "choose the
+-- best ones") -- each node still only neighbours the next/previous one, so
+-- energy still visibly travels, just along a line rather than a ring.
+
+local H_CELLS = {
+  {id = "taproot", x = 16, y = 4},
+  {id = "mycel",   x = 15, y = 5},
+  {id = "wyrd",    x = 14, y = 6},
+  {id = "ley",     x = 13, y = 7},
+}
+
+for i, h in ipairs(H_CELLS) do
+  reg("H", "h." .. h.id, h.id:sub(1, 1):upper() .. h.id:sub(2), {{h.x, h.y}},
+      {index = i - 1})
+end
+
+for i, h in ipairs(H_CELLS) do
+  local id = "h." .. h.id
+  local nxt = H_CELLS[i + 1] and ("h." .. H_CELLS[i + 1].id) or nil
+  local prv = H_CELLS[i - 1] and ("h." .. H_CELLS[i - 1].id) or nil
+  local nbrs = {}
+  if nxt then table.insert(nbrs, nxt) end
+  if prv then table.insert(nbrs, prv) end
+  topology.cells[id].neighbors = nbrs
+end
+
+-- 2.6 the grove -- F (4) -----------------------------------------------------
+-- the pitch fields, mechanic unchanged (mode keys match grove.lua). trimmed
+-- from 8 to 4 -- one representative of each of the most distinct shapes
+-- (call/drone/cascade/octave) rather than paired seams; every mode not given
+-- a seat here is still reachable by K1+E2 cycling on any F cell.
+
+local F_CELLS = {
+  {id = "cuckoo",   x = 1, y = 4, mode = "call"},
+  {id = "nightjar", x = 2, y = 5, mode = "drone"},
+  {id = "curlew",   x = 3, y = 6, mode = "cascade"},
+  {id = "bittern",  x = 4, y = 7, mode = "octave"},
+}
+
+for _, f in ipairs(F_CELLS) do
+  local id = "f." .. f.id
+  local name = f.id:sub(1, 1):upper() .. f.id:sub(2)
+  reg("F", id, name, {{f.x, f.y}}, {
+    mode = f.mode,
+    snap = true,
+  })
+end
+
+-- 2.7 the weave -- R (6) -----------------------------------------------------
+-- trimmed from 14 to 6: the rules the panel's own history and prose already
+-- single out as the most useful on a kit -- a rest, a ghost, an accent, a
+-- sift, a meet and a hocket. every rule not given a seat is still reachable
+-- by K1+E2 cycling on any R cell.
+
 local R_CELLS = {
-  {id = "thicket", x = 4,  y = 2, rule = "rest"},
-  {id = "briar",   x = 5,  y = 2, rule = "roll"},
-  {id = "snicket", x = 6,  y = 2, rule = "delay"},
-  {id = "twitten", x = 7,  y = 2, rule = "echo"},
-  {id = "tangle",  x = 8,  y = 2, rule = "ghost"},
-  {id = "drove",   x = 9,  y = 2, rule = "accent"},
-  {id = "sneck",   x = 10, y = 2, rule = "sift"},
-  {id = "lych",    x = 11, y = 2, rule = "meet"},
-  {id = "stile",   x = 12, y = 2, rule = "hocket"},
-  {id = "weir",    x = 13, y = 2, rule = "swing"},
-  {id = "holt",    x = 4,  y = 7, rule = "blur"},
-  {id = "coppice", x = 5,  y = 7, rule = "latch"},
-  {id = "osier",   x = 12, y = 7, rule = "mask"},
-  {id = "sedge",   x = 13, y = 7, rule = "shift"},
+  {id = "thicket", x = 16, y = 6, rule = "rest"},
+  {id = "tangle",  x = 14, y = 7, rule = "ghost"},
+  {id = "stile",   x = 16, y = 7, rule = "hocket"},
+  {id = "sneck",   x = 14, y = 8, rule = "sift"},
+  {id = "lych",    x = 15, y = 8, rule = "meet"},
+  {id = "drove",   x = 16, y = 8, rule = "accent"},
 }
 
 for _, r in ipairs(R_CELLS) do
   local id = "r." .. r.id
   local name = r.id:sub(1, 1):upper() .. r.id:sub(2)
-  reg("R", id, name, {{r.x, r.y}}, {
-    rule = r.rule,
-    counterpart = "r." .. (function()
-      for _, o in ipairs(R_CELLS) do
-        if o.x == 17 - r.x and o.y == 9 - r.y then return o.id end
-      end
-      return r.id
-    end)(),
-  })
+  reg("R", id, name, {{r.x, r.y}}, {rule = r.rule})
 end
 
--- 2.7b percussion cells -- G (6) --------------------------------------------
--- the six cells the re-cut's re-cut freed up in the middle of the bottom
--- weave row. not a transform like the other twenty -- a small drum voice in
--- its own right, in the shape of the four corner voices (tap opens/closes a
--- parameter page, §5.5) but with no room on a single grid row for a separate
--- T/P/M/O cluster: the cell itself is the trigger, and -- mirroring the
--- corner voices' O socket -- it answers with its own outgoing pulse a tick
--- after being struck, so it still sits in a chain the way the R cell it
--- replaced did. `kind` picks the SC recipe (gvoice.lua and Engine_Canopy.sc's
--- `gDefs` both switch on it); `root`/`decay` are its Hz-ish base and its
--- default ring/envelope time, the same two numbers voice.lua's VOICES table
--- carries for the four corner voices, and for the same reason -- the sound
--- page's Pitch/Decay knobs sweep around them.
-local G_CELLS = {
-  {id = "yaffle",  x = 6,  y = 7, kind = "ping",  root = 180,  decay = 0.28},
-  {id = "knap",    x = 7,  y = 7, kind = "ping",  root = 620,  decay = 0.09},
-  {id = "clapper", x = 8,  y = 7, kind = "ping",  root = 95,   decay = 0.40},
-  {id = "scree",   x = 9,  y = 7, kind = "noise", root = 4200, decay = 0.06},
-  {id = "chaff",   x = 10, y = 7, kind = "noise", root = 1500, decay = 0.16},
-  {id = "rattle",  x = 11, y = 7, kind = "noise", root = 750,  decay = 0.22},
+-- 2.7b percussion cells -- F/N (6, internally type "GVOICE") ----------------
+-- unchanged mechanic (§2.7b's small drum voice, struck directly, answers
+-- with its own pulse a tick later) -- renamed and repositioned into row 2.
+-- the three ping cells read "F" on the panel, the three noise cells read
+-- "N"; a `letter` field carries the display override since the true grove
+-- pitch fields already own the bare type string "F".
+
+local GVOICE_CELLS = {
+  {id = "yaffle",  x = 6,  y = 2, kind = "ping",  letter = "F", root = 180,  decay = 0.28},
+  {id = "knap",    x = 7,  y = 2, kind = "ping",  letter = "F", root = 620,  decay = 0.09},
+  {id = "clapper", x = 8,  y = 2, kind = "ping",  letter = "F", root = 95,   decay = 0.40},
+  {id = "scree",   x = 9,  y = 2, kind = "noise", letter = "N", root = 4200, decay = 0.06},
+  {id = "chaff",   x = 10, y = 2, kind = "noise", letter = "N", root = 1500, decay = 0.16},
+  {id = "rattle",  x = 11, y = 2, kind = "noise", letter = "N", root = 750,  decay = 0.22},
 }
 
-for i, gc in ipairs(G_CELLS) do
-  local id = "g." .. gc.id
+for i, gc in ipairs(GVOICE_CELLS) do
+  local id = "gv." .. gc.id
   local name = gc.id:sub(1, 1):upper() .. gc.id:sub(2)
-  reg("G", id, name, {{gc.x, gc.y}},
-      {kind = gc.kind, index = i, root = gc.root, decay = gc.decay})
+  reg("GVOICE", id, name, {{gc.x, gc.y}}, {
+    letter = gc.letter, kind = gc.kind, index = i, root = gc.root, decay = gc.decay,
+  })
 end
 
--- 2.4 exciter cells -- S (20) ----------------------------------------------
--- source keys match Engine_Canopy.sc's `excDefs` array, in this order.
--- the top row is the original ten; the bottom row is the ten that came with
--- the re-cut, aimed squarely at a kit -- clicks, metals, scrapes, impacts.
+-- 2.4 exciter cells -- E (6, internally type "E", was "S") ------------------
+-- trimmed from 20 to 6 -- a spread of textures (rustle, spiky resonance,
+-- crackle, grain bursts, pitched chirp, slow walk).
 
-local S_CELLS = {
-  {id = "bracken",  x = 4,  y = 1, source = "rustle"},
-  {id = "gorse",    x = 5,  y = 1, source = "spiky"},
-  {id = "ember",    x = 6,  y = 1, source = "crackle"},
-  {id = "windfall", x = 7,  y = 1, source = "grain"},
-  {id = "mistle",   x = 8,  y = 1, source = "chirp"},
-  {id = "wisp",     x = 9,  y = 1, source = "walk"},
-  {id = "hollow",   x = 10, y = 1, source = "comb"},
-  {id = "drizzle",  x = 11, y = 1, source = "droplet"},
-  {id = "loam",     x = 12, y = 1, source = "brown"},
-  {id = "beck",     x = 13, y = 1, source = "burble"},
-  {id = "skein",    x = 4,  y = 8, source = "shimmer"},
-  {id = "flint",    x = 5,  y = 8, source = "click"},
-  {id = "husk",     x = 6,  y = 8, source = "scrape"},
-  {id = "tinder",   x = 7,  y = 8, source = "fizz"},
-  {id = "mire",     x = 8,  y = 8, source = "sub"},
-  {id = "glim",     x = 9,  y = 8, source = "ping"},
-  {id = "rasp",     x = 10, y = 8, source = "buzz"},
-  {id = "cicada",   x = 11, y = 8, source = "chirr"},
-  {id = "hail",     x = 12, y = 8, source = "impacts"},
-  {id = "reed",     x = 13, y = 8, source = "breath"},
+local E_CELLS = {
+  {id = "bracken",  x = 1, y = 6, source = "rustle"},
+  {id = "ember",    x = 2, y = 6, source = "crackle"},
+  {id = "gorse",    x = 1, y = 7, source = "spiky"},
+  {id = "windfall", x = 1, y = 8, source = "grain"},
+  {id = "mistle",   x = 2, y = 8, source = "chirp"},
+  {id = "wisp",     x = 3, y = 8, source = "walk"},
 }
 
-for i, s in ipairs(S_CELLS) do
-  local id = "s." .. s.id
-  local name = s.id:sub(1, 1):upper() .. s.id:sub(2)
-  -- index is this cell's channel in the engine's exciter bus block AND its
-  -- position in Engine_Canopy.sc's `excDefs` array -- the two lists must
-  -- stay in the same order (they do: both follow this table).
-  local cp
-  for _, o in ipairs(S_CELLS) do
-    if o.x == 17 - s.x and o.y == 9 - s.y then cp = o.id end
+for i, e in ipairs(E_CELLS) do
+  local id = "e." .. e.id
+  local name = e.id:sub(1, 1):upper() .. e.id:sub(2)
+  reg("E", id, name, {{e.x, e.y}}, {source = e.source, index = i - 1})
+end
+
+-- 2.10 step sequencers -- Q4 / Q6 (10, internally type "SEQ") ---------------
+-- no phase of their own, like a TM cell -- only a pulse cabled in moves them.
+-- one lane is four physical cells, the other six; each is its own cable
+-- endpoint and its own tap-toggle step, and the *last* cell of a lane is the
+-- "driver": a pulse there advances the shared playhead, a pulse on any other
+-- cell in the lane fires that one step directly, independent of the
+-- playhead. see the new lib/sequencer.lua.
+
+local SEQ_LANES = {
+  {group = "q4", coords = {{6, 7}, {7, 7}, {8, 7}, {9, 7}}},
+  {group = "q6", coords = {{6, 8}, {7, 8}, {8, 8}, {9, 8}, {10, 8}, {11, 8}}},
+}
+
+for _, lane in ipairs(SEQ_LANES) do
+  local len = #lane.coords
+  for step, xy in ipairs(lane.coords) do
+    local id = lane.group .. "." .. step
+    local name = lane.group:upper() .. " " .. step
+    reg("SEQ", id, name, {xy}, {
+      letter = "Q" .. len,
+      group = lane.group,
+      len = len,
+      step = step,
+      driver = (step == len),
+    })
   end
-  reg("S", id, name, {{s.x, s.y}}, {
-    source = s.source,
-    counterpart = "s." .. (cp or s.id),
-    index = i - 1,
-  })
-end
-
--- 2.5 heartwood -- H (8) ---------------------------------------------------
--- ring of 8 (down the left seam, across the bottom, up the right seam, across
--- the top) plus two interior chord rungs that cross the panel horizontally
--- (mycel<->warren, wyrd<->holloway). the two seams flank the D core, so a
--- pulse entering the lattice visibly walks around the pulse-makers.
-
-local H_CELLS = {
-  {id = "taproot",  x = 5,  y = 3},
-  {id = "mycel",    x = 5,  y = 4},
-  {id = "wyrd",     x = 5,  y = 5},
-  {id = "ley",      x = 5,  y = 6},
-  {id = "hearth",   x = 12, y = 6},
-  {id = "holloway", x = 12, y = 5},
-  {id = "warren",   x = 12, y = 4},
-  {id = "barrow",   x = 12, y = 3},
-}
-
-for i, h in ipairs(H_CELLS) do
-  -- index is this node's slot in the engine's heartwood buses AND its row in
-  -- Engine_Canopy.sc's `hNbr` adjacency table -- the two lists must stay in
-  -- the same order (they do: both follow the ring order below).
-  reg("H", "h." .. h.id, h.id:sub(1, 1):upper() .. h.id:sub(2), {{h.x, h.y}},
-      {index = i - 1})
-end
-
-local RING = {"taproot", "mycel", "wyrd", "ley", "hearth", "holloway", "warren", "barrow"}
-local CHORDS = {{"mycel", "warren"}, {"wyrd", "holloway"}}
-
-for i, name in ipairs(RING) do
-  local id = "h." .. name
-  local nxt = "h." .. RING[(i % #RING) + 1]
-  local prv = "h." .. RING[((i - 2) % #RING) + 1]
-  topology.cells[id].neighbors = {nxt, prv}
-end
-for _, pair in ipairs(CHORDS) do
-  local a, b = "h." .. pair[1], "h." .. pair[2]
-  table.insert(topology.cells[a].neighbors, b)
-  table.insert(topology.cells[b].neighbors, a)
-end
-
--- 2.6 the grove -- F (8) ---------------------------------------------------
--- the pitch fields. mode keys match grove.lua. two vertical seams at x=4 and
--- x=13, just outside the heartwood seams, paired across the same 180-degree
--- symmetry everything else uses. (these were the "P" cells before the re-cut;
--- P is a voice's pitch socket now, and the type letter moved to F.)
-
-local F_CELLS = {
-  {id = "cuckoo",   x = 4,  y = 3, mode = "call",    counterpart = "raven"},
-  {id = "nightjar", x = 4,  y = 4, mode = "drone",   counterpart = "plover"},
-  {id = "curlew",   x = 4,  y = 5, mode = "cascade", counterpart = "merlin"},
-  {id = "bittern",  x = 4,  y = 6, mode = "octave",  counterpart = "wren"},
-  {id = "wren",     x = 13, y = 3, mode = "flutter", counterpart = "bittern"},
-  {id = "merlin",   x = 13, y = 4, mode = "scatter", counterpart = "curlew"},
-  {id = "plover",   x = 13, y = 5, mode = "wander",  counterpart = "nightjar"},
-  {id = "raven",    x = 13, y = 6, mode = "gravity", counterpart = "cuckoo"},
-}
-
-for _, p in ipairs(F_CELLS) do
-  local id = "f." .. p.id
-  local name = p.id:sub(1, 1):upper() .. p.id:sub(2)
-  reg("F", id, name, {{p.x, p.y}}, {
-    mode = p.mode,
-    counterpart = "f." .. p.counterpart,
-    -- snapped to the scale by default; K1 + tap sets a field free (§2.6).
-    snap = true,
-  })
-end
-
--- 2.8 climate -- C (8) -----------------------------------------------------
--- shape keys match climate.lua. eight very slow modulators tucked into the
--- outer corners, where nothing else reaches. cable one to any cell and that
--- cell's own knob is walked around over tens of seconds to minutes: this is
--- the difference between a patch that loops and a patch that goes somewhere.
-
-local C_CELLS = {
-  {id = "moon",  x = 1,  y = 4, shape = "tide",     counterpart = "dusk"},
-  {id = "hoar",  x = 1,  y = 5, shape = "creep",    counterpart = "bloom"},
-  {id = "thaw",  x = 3,  y = 4, shape = "season",   counterpart = "ebb"},
-  {id = "gale",  x = 3,  y = 5, shape = "gust",     counterpart = "hush"},
-  {id = "hush",  x = 14, y = 4, shape = "breath",   counterpart = "gale"},
-  {id = "ebb",   x = 14, y = 5, shape = "wane",     counterpart = "thaw"},
-  {id = "bloom", x = 16, y = 4, shape = "flourish", counterpart = "hoar"},
-  {id = "dusk",  x = 16, y = 5, shape = "shiver",   counterpart = "moon"},
-}
-
-for _, c in ipairs(C_CELLS) do
-  local id = "c." .. c.id
-  local name = c.id:sub(1, 1):upper() .. c.id:sub(2)
-  reg("C", id, name, {{c.x, c.y}}, {
-    shape = c.shape,
-    counterpart = "c." .. c.counterpart,
-  })
 end
 
 -- lookups -------------------------------------------------------------
@@ -384,26 +312,18 @@ function topology.each()
   end
 end
 
-function topology.node_ids_for_voice(voice_id)
-  local out = {}
-  for _, role in ipairs(ROLE_ORDER) do
-    table.insert(out, voice_id .. "." .. role)
-  end
-  return out
-end
-
--- the types that carry a pulse of their own -- a phase (D) or a rule (R).
--- traffic between two of them is deferred a scheduler tick so a cycle in the
--- patch cannot recurse, which rambler.lua and heartwood.lua both need to know
--- about. it lives here because it is a fact about the map, and putting it in
--- rambler would mean heartwood reaching into the scheduler mid-load.
-topology.PULSE_TYPES = {D = true, R = true, TM = true}
+-- the types that carry a pulse of their own -- a phase (D), a rule (R), a
+-- register (TM) or a sequencer step (SEQ). traffic between two of them is
+-- deferred a scheduler tick so a cycle in the patch cannot recurse, which
+-- rambler.lua and heartwood.lua both need to know about. a CLOCK cell is
+-- deliberately not a member: it is a pure source, never a pulse target, the
+-- same shape climate used to be.
+topology.PULSE_TYPES = {D = true, R = true, TM = true, SEQ = true}
 
 function topology.is_pulse_cell(cell)
   return (cell and topology.PULSE_TYPES[cell.type]) and true or false
 end
 
-topology.ROLE_ORDER = ROLE_ORDER
 topology.GRID_W = 16
 topology.GRID_H = 8
 

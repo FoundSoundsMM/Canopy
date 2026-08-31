@@ -54,7 +54,7 @@ end
 -- graph. cheap (20 cells, <=64 edges) and only runs when the graph changes.
 function exciter.resync()
   for id, cell in topology.each() do
-    if cell.type == "S" then
+    if cell.type == "E" then
       local live = patch.degree(id) > 0
       if live and not on_state[id] then
         on_state[id] = true
@@ -88,21 +88,21 @@ function exciter.set_colour_offset(id, off)
   if colour_offset[id] == off then return end
   colour_offset[id] = off
   local cell = topology.get(id)
-  if cell and cell.type == "S" and on_state[id] then
+  if cell and cell.type == "E" and on_state[id] then
     bridge.exciter_colour(cell.index, colour_of(id, cell))
   end
 end
 
 state.on_character_change(function(id)
   local cell = topology.get(id)
-  if cell and cell.type == "S" and on_state[id] then
+  if cell and cell.type == "E" and on_state[id] then
     bridge.exciter_colour(cell.index, colour_of(id, cell))
   end
 end)
 
 state.on_decay_change(function(id)
   local cell = topology.get(id)
-  if cell and cell.type == "S" and on_state[id] then
+  if cell and cell.type == "E" and on_state[id] then
     bridge.exciter_decay(cell.index, exciter.decay_scale(id))
   end
 end)
@@ -125,7 +125,7 @@ local METER_GAIN = 5
 
 function exciter.start_meters()
   for id, cell in topology.each() do
-    if cell.type == "S" then
+    if cell.type == "E" then
       local p = poll.set("exc_lvl_" .. cell.index, function(v)
         state.flash(id, util.clamp(v * METER_GAIN, 0, 1))
       end)

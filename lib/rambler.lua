@@ -38,8 +38,9 @@ local heartwood = wl("heartwood")
 local grove     = wl("grove")
 local quantise  = wl("quantise")
 local weave     = wl("weave")
-local climate   = wl("climate")
+local clockcell = wl("clockcell")
 local tm        = wl("tm")
+local sequencer = wl("sequencer")
 
 local rambler = {}
 
@@ -96,7 +97,7 @@ local GAITS = {}
 
 rambler.GAIT_ORDER = {
   "metric", "euclidean", "figure", "slow",
-  "burst", "stochastic", "drifter", "accelerando",
+  "burst", "stochastic", "drifter", "accelerando", "swarm",
 }
 
 -- metric: locks to the norns clock, integer division.
@@ -253,6 +254,31 @@ GAITS.accelerando = {
   end,
   -- loudest at the start of each ramp, thinning as it speeds up
   wrap = function(r) return 1.0 - ((r.cycle % ACCEL_CYCLE) / ACCEL_CYCLE) * 0.5 end,
+}
+
+-- swarm: Skriker's gait, and Knocker's replacement. rooted metric locking
+-- moved to the new Clock cells (topology.lua §2.9), which freed this slot up
+-- for something no other gait does: a short, unpredictable cluster of 2-4
+-- hits with irregular gaps, rather than Boggart's fixed 2-7 ratchet on a
+-- quantised grid or Spriggan's single Bernoulli gate.
+GAITS.swarm = {
+  rooted_ok = false, coupling = 1.2, drift = 1.5,
+  read = function(r)
+    local hz = 0.4 + char(r) * 3.6
+    return hz, string.format("%.2f Hz", hz)
+  end,
+  rate = function(r) return (GAITS.swarm.read(r)) end,
+  ratchet = function(r, t0, weight)
+    local n = math.random(1, 3) -- extra hits, on top of the wrap's own
+    local base_gap = (1 / math.max(GAITS.swarm.read(r), 0.01)) * 0.12
+    local w, t = weight, 0
+    for _ = 1, n do
+      w = w * (0.55 + math.random() * 0.25)
+      t = t + base_gap * (0.4 + math.random() * 1.2)
+      rambler.push(t0 + t, r, w, true)
+    end
+  end,
+  wrap = function(r) return 1.0 end,
 }
 
 rambler.GAITS = GAITS
@@ -497,6 +523,11 @@ local function deliver(msg, now)
     return
   end
 
+  if cell.type == "SEQ" then
+    sequencer.pulse_in(msg.id, msg.w, msg.src, now)
+    return
+  end
+
   local r = ramblers[msg.id]
   if not r then return end
   local gait = GAITS[r.gait]
@@ -599,7 +630,7 @@ function rambler.tick()
   --     both sit inside the Still check for the same reason the lattice does,
   --     so a frozen patch is frozen in pitch and in weather too.
   grove.tick(now)
-  climate.tick(now)
+  clockcell.tick(now)
 
   -- 1. the weave's own scheduled taps (echoes, flams, delays, rolls).
   weave.tick(now)

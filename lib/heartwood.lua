@@ -270,8 +270,9 @@ end
 state.on_character_change(function(id)
   local n = nodes[id]
   if n then
-    -- through heartwood.conductance, not state.character, so a climate cell
-    -- cabled to this node moves the lattice as well as the readout (§2.8).
+    -- through heartwood.conductance, not state.character directly, so any
+    -- future indirection on top of the player's own setting stays in step
+    -- between the readout and the engine automatically.
     bridge.heart_conductance(n.cell.index, heartwood.conductance(id))
   end
 end)

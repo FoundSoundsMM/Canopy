@@ -8,8 +8,13 @@ local ROOT = os.getenv("ROOT")
 arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
+-- the grove trimmed from 8 F cells to 4: f.cuckoo (call), f.nightjar (drone),
+-- f.curlew (cascade), f.bittern (octave). f.merlin/plover/raven no longer
+-- exist -- every test below that used to reach for one of them now uses one
+-- of the four survivors instead, with its mode set explicitly wherever the
+-- test relied on a particular mode's shape rather than just "a field moves".
 local OAK_ROOT = 55
-local CUCKOO, MERLIN, PLOVER, RAVEN = "f.cuckoo", "f.merlin", "f.plover", "f.raven"
+local CUCKOO, CURLEW = "f.cuckoo", "f.curlew"
 local BITTERN, NIGHTJAR = "f.bittern", "f.nightjar"
 
 -- semitones between an emitted Hz and a voice's own fundamental
@@ -26,18 +31,20 @@ local function pitches_for(voice)
 end
 
 -- one D cell striking Oak, as fast as the metric gait will go, so a test can
--- get plenty of strikes out of a short virtual run.
+-- get plenty of strikes out of a short virtual run. d.hob's own default gait
+-- is euclidean now (Knocker/metric is gone), so the gait is set explicitly.
 local function knock_oak(M)
-  M.patch.add("d.knocker", "oak.trig", 1.0)
-  M.state.character["d.knocker"] = 1.0  -- 4 x beat
+  M.rambler.set_gait("d.hob", "metric")
+  M.patch.add("d.hob", "oak", 1.0)
+  M.state.character["d.hob"] = 1.0  -- 4 x beat
 end
 
 print("\n-- a cabled field retunes the voice, and does it before the strike --")
 do
   local M = fresh(1)
   knock_oak(M)
-  M.patch.add(MERLIN, "oak.pitch", 1.0)   -- scatter: a new degree every step
-  M.state.character[MERLIN] = 1.0        -- widest range
+  M.patch.add(CUCKOO, "oak", 1.0)   -- scatter: a new degree every step
+  M.state.character[CUCKOO] = 1.0        -- widest range
   run(M, 4)
 
   local p = pitches_for(0)
@@ -54,10 +61,16 @@ do
     if not last then ok = false break end
   end
   check("every strike has a pitch sent ahead of it", ok)
-  -- one per strike, not one per field plus one for the strike. the +1 is the
-  -- push that goes out when the cable itself is made, before any of this ran.
-  check("and exactly one per strike, not one per field as well",
-        #p <= #CALLS.strike + 1,
+  -- the socket collapse means Oak now has two cables into its one point (the
+  -- driver and the field), so patch.degree(oak) > 1 and every strike also
+  -- makes Oak answer into its only other neighbour -- the field -- a tick
+  -- later (dispatch.lua's strike_voice/post_source, unconditional now that
+  -- there is no separate O socket to gate it on). that self-answer steps the
+  -- field again and pushes a second pitch, so the budget is two pushes per
+  -- strike rather than one: the direct pre-strike retune plus the delayed
+  -- self-answer's. the +1 is the push sent when the cable itself is made.
+  check("two pushes per strike -- the retune and the voice's own self-answer",
+        #p <= 2 * #CALLS.strike + 1,
         #p .. " pitches for " .. #CALLS.strike .. " strikes")
 
   local lo, hi = math.huge, -math.huge
@@ -74,9 +87,9 @@ do
   local function spread(range)
     local M = fresh(3)
     knock_oak(M)
-    M.patch.add(MERLIN, "oak.pitch", 1.0)
-    M.state.character[MERLIN] = range
-    M.state.notify_character_change(MERLIN)
+    M.patch.add(CUCKOO, "oak", 1.0)
+    M.state.character[CUCKOO] = range
+    M.state.notify_character_change(CUCKOO)
     run(M, 6)
     local lo, hi = math.huge, -math.huge
     for _, c in ipairs(pitches_for(0)) do
@@ -108,12 +121,12 @@ do
   end
 
   local M = fresh(5)
-  M.patch.add(MERLIN, "oak.pitch", 1.0)
-  M.state.character[MERLIN] = 1.0
-  M.state.notify_character_change(MERLIN)
+  M.patch.add(CUCKOO, "oak", 1.0)
+  M.state.character[CUCKOO] = 1.0
+  M.state.notify_character_change(CUCKOO)
   -- step the field directly: a strike would add its own few cents of detune,
   -- which is exactly the thing that would blur a snap test.
-  for _ = 1, 40 do M.grove.step(MERLIN, 1) end
+  for _ = 1, 40 do M.grove.step(CUCKOO, 1) end
   local snapped, total = 0, 0
   for _, c in ipairs(pitches_for(0)) do
     total = total + 1
@@ -122,10 +135,10 @@ do
   check("every degree lands on a scale tone", total > 10 and snapped == total,
         snapped .. "/" .. total)
 
-  M.grove.toggle_snap(MERLIN)
+  M.grove.toggle_snap(CUCKOO)
   CALLS.voice_pitch = {}
   for _, id in ipairs({}) do end
-  for _ = 1, 40 do M.grove.step(MERLIN, 1) end
+  for _ = 1, 40 do M.grove.step(CUCKOO, 1) end
   local off = 0
   for _, c in ipairs(pitches_for(0)) do
     if not on_scale(c.hz) then off = off + 1 end
@@ -136,28 +149,32 @@ end
 print("\n-- a narrow field ignores snap, because a scale needs room --")
 do
   local M = fresh(41)
-  M.patch.add(MERLIN, "oak.pitch", 1.0)
-  M.state.character[MERLIN] = 0.2       -- well under the smallest interval
-  M.state.notify_character_change(MERLIN)
-  check("it reads as free even with snap set", M.grove.info(MERLIN).snap == false)
+  M.patch.add(CUCKOO, "oak", 1.0)
+  M.state.character[CUCKOO] = 0.2       -- well under the smallest interval
+  M.state.notify_character_change(CUCKOO)
+  check("it reads as free even with snap set", M.grove.info(CUCKOO).snap == false)
   local moved = false
   for _ = 1, 30 do
-    M.grove.step(MERLIN, 1)
+    M.grove.step(CUCKOO, 1)
     if math.abs(M.grove.offset("oak")) > 1e-6 then moved = true end
   end
   check("and it still detunes rather than collapsing onto the root", moved)
 end
 
-print("\n-- an F->S cable makes the exciter's colour ride the line --")
+print("\n-- an F->E cable makes the exciter's colour ride the line --")
 do
   local M = fresh(43)
-  M.patch.add("s.mistle", "oak.mod", 0.8)  -- cable it so the exciter is live
-  M.patch.add(MERLIN, "s.mistle", 1.0)
-  M.state.character[MERLIN] = 1.0
-  M.state.notify_character_change(MERLIN)
+  M.patch.add("e.mistle", "oak", 0.8)  -- cable it so the exciter is live
+  M.patch.add(CUCKOO, "e.mistle", 1.0)
+  -- Cuckoo's own default mode (call) only ever visits three positions, which
+  -- caps this at three distinct colours -- scatter is the mode that actually
+  -- wants to be seen moving continuously, so it is set explicitly.
+  M.grove.set_mode(CUCKOO, "scatter")
+  M.state.character[CUCKOO] = 1.0
+  M.state.notify_character_change(CUCKOO)
   local before = #CALLS.exciter_colour
   local seen, in_range = {}, true
-  for _ = 1, 30 do M.grove.step(MERLIN, 1) end
+  for _ = 1, 30 do M.grove.step(CUCKOO, 1) end
   for i = before + 1, #CALLS.exciter_colour do
     local c = CALLS.exciter_colour[i]
     seen[c.v] = true
@@ -169,8 +186,8 @@ do
   check("and stays inside 0..1", in_range)
 
   -- and the offset must not survive the cable that created it
-  local base = M.state.get_character("s.mistle", M.topology.get("s.mistle"), 0, 1)
-  M.patch.remove(MERLIN, "s.mistle")
+  local base = M.state.get_character("e.mistle", M.topology.get("e.mistle"), 0, 1)
+  M.patch.remove(CUCKOO, "e.mistle")
   local last = CALLS.exciter_colour[#CALLS.exciter_colour]
   check("pulling the cable hands the exciter its own colour back",
         last and math.abs(last.v - base) < 1e-9,
@@ -180,7 +197,7 @@ end
 print("\n-- octave mode transposes; it never plays a line --")
 do
   local M = fresh(7)
-  M.patch.add(BITTERN, "oak.pitch", 1.0)
+  M.patch.add(BITTERN, "oak", 1.0)
   M.state.character[BITTERN] = 1.0
   M.state.notify_character_change(BITTERN)
   for _ = 1, 60 do M.grove.step(BITTERN, 1) end
@@ -200,7 +217,7 @@ print("\n-- a pulse steps the field on its own clock --")
 do
   local M = fresh(11)
   -- no strike path at all: Shuck only feeds the field, nothing knocks Oak.
-  M.patch.add(CUCKOO, "oak.pitch", 1.0)
+  M.patch.add(CUCKOO, "oak", 1.0)
   M.patch.add("d.shuck", CUCKOO, 1.0)
   M.state.character["d.shuck"] = 1.0   -- 0.5 Hz
   M.state.character[CUCKOO] = 0.8
@@ -216,8 +233,8 @@ print("\n-- an F<->F cable pulls two fields together --")
 do
   local function converge(gain)
     local M = fresh(13)
-    M.patch.add(PLOVER, RAVEN, gain)
-    local a, b = M.grove.get(PLOVER), M.grove.get(RAVEN)
+    M.patch.add(NIGHTJAR, CURLEW, gain)
+    local a, b = M.grove.get(NIGHTJAR), M.grove.get(CURLEW)
     a.pos, b.pos = -0.9, 0.9
     local before = math.abs(a.pos - b.pos)
     run(M, 6)
@@ -273,7 +290,7 @@ do
 
   local base = depth[0]
   M.state.character[NIGHTJAR] = 1.0    -- a two-octave field
-  M.patch.add(NIGHTJAR, "oak.pitch", 1.0)
+  M.patch.add(NIGHTJAR, "oak", 1.0)
   local now = base
   for _, c in ipairs(CALLS.voice_drift) do if c.voice == 0 then now = c.depth end end
   check("cabling a wide field in makes the voice breathe harder", now > base,
@@ -290,9 +307,13 @@ do
   -- so this test (about Still, not about Scatter) keeps the same headroom it
   -- always had.
   M.state.global.scatter = 0.4
-  M.patch.add(PLOVER, "oak.pitch", 1.0)  -- wander: moves on the tick, unprompted
-  M.state.character[PLOVER] = 1.0
-  M.state.notify_character_change(PLOVER)
+  -- none of the four surviving F cells defaults to wander any more, so it is
+  -- set explicitly -- the whole point of this test is a mode that moves on
+  -- the tick, unprompted.
+  M.grove.set_mode(CURLEW, "wander")
+  M.patch.add(CURLEW, "oak", 1.0)  -- wander: moves on the tick, unprompted
+  M.state.character[CURLEW] = 1.0
+  M.state.notify_character_change(CURLEW)
   -- 4s, not 2: a wander field emits a retune each time its glide crosses a
   -- step, which at the low end of its rate is only ~2.5 a second. a 2s window
   -- sat one retune above the threshold and turned any change in how the RNG
@@ -318,10 +339,10 @@ end
 print("\n-- pulling the cable hands the voice back its own root --")
 do
   local M = fresh(29)
-  local edge = M.patch.add(MERLIN, "oak.pitch", 1.0)
-  M.state.character[MERLIN] = 1.0
-  M.state.notify_character_change(MERLIN)
-  for _ = 1, 20 do M.grove.step(MERLIN, 1) end
+  local edge = M.patch.add(CUCKOO, "oak", 1.0)
+  M.state.character[CUCKOO] = 1.0
+  M.state.notify_character_change(CUCKOO)
+  for _ = 1, 20 do M.grove.step(CUCKOO, 1) end
   check("the field has the voice somewhere else", math.abs(M.grove.offset("oak")) > 0,
         string.format("%.2f st", M.grove.offset("oak")))
 

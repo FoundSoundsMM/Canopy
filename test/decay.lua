@@ -8,7 +8,7 @@ arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
 local OAK, ROWAN, HAZEL = "oak", "rowan", "hazel"
-local BECK = "s.beck"
+local BRACKEN = "e.bracken"
 
 local function last_decay_for(v)
   local out
@@ -108,55 +108,60 @@ do
         string.format("%.3f .. %.3f s", floor_s, ceil_s))
 end
 
-print("\n-- a socket hands the gesture to the voice it belongs to --")
+print("\n-- the socket collapse: a voice IS its own decay target, directly --")
 do
+  -- the four sockets are gone; a voice is one cable endpoint and its own
+  -- sound page target both, so E3 on the voice cell itself is now the only
+  -- gesture there is (already covered above). what is still worth checking
+  -- is that decay_target's DECAY_TYPES set -- voice, GVOICE, E -- covers
+  -- every kind of cell that actually has a sound to decay, each against its
+  -- own id, with no forwarding indirection left to test.
   local M = fresh(7)
   M.voice.init()
+  check("a voice decays against its own id",
+        M.state.decay_target(M.topology.get(OAK)) == OAK)
+  check("a GVOICE cell decays against its own id, same shape as a voice",
+        M.state.decay_target(M.topology.get("gv.yaffle")) == "gv.yaffle")
+  check("an E cell decays against its own id too",
+        M.state.decay_target(M.topology.get(BRACKEN)) == BRACKEN)
+
+  -- and a different voice must not have moved with Oak's own knob.
   local base = last_decay_for(0)
-  turn_e3(M, "oak.mod", 25)
-  check("holding a socket moves the voice's decay", last_decay_for(0) > base,
-        string.format("%.3f -> %.3f s", base, last_decay_for(0)))
-  check("and it is stored against the voice, not the socket",
-        M.state.decay[OAK] ~= nil and M.state.decay["oak.mod"] == nil)
-  check("so all four sockets and the voice read the same number",
-        M.state.decay_target(M.topology.get("oak.mod")) == OAK
-        and M.state.decay_target(M.topology.get("oak.trig")) == OAK
-        and M.state.decay_target(M.topology.get(OAK)) == OAK)
-  -- a socket of another voice must not have moved with it
-  -- engine index 1 is Hazel (topology's second voice), and it must still be
-  -- sitting on its own default.
-  check("a different voice is untouched", last_decay_for(1) == nil
+  turn_e3(M, OAK, 25)
+  check("turning Oak's decay leaves Hazel untouched",
+        last_decay_for(1) == nil
         or math.abs(last_decay_for(1) - M.topology.get(HAZEL).decay) < 1e-9)
+  check("but did move Oak's own", last_decay_for(0) ~= base)
 end
 
-print("\n-- an S cell gets the same knob, as a ratio --")
+print("\n-- an E cell gets the same knob, as a ratio --")
 do
   local M = fresh(11)
   check("0.5 leaves the recipe's own envelopes alone",
-        math.abs(M.exciter.decay_scale(BECK) - 1.0) < 1e-9)
-  M.state.decay[BECK] = 1.0
+        math.abs(M.exciter.decay_scale(BRACKEN) - 1.0) < 1e-9)
+  M.state.decay[BRACKEN] = 1.0
   check("up is nearly three times as long",
-        math.abs(M.exciter.decay_scale(BECK) - 2 ^ 1.5) < 1e-9,
-        string.format("x%.3f", M.exciter.decay_scale(BECK)))
-  M.state.decay[BECK] = 0.0
+        math.abs(M.exciter.decay_scale(BRACKEN) - 2 ^ 1.5) < 1e-9,
+        string.format("x%.3f", M.exciter.decay_scale(BRACKEN)))
+  M.state.decay[BRACKEN] = 0.0
   check("down is a third of it",
-        math.abs(M.exciter.decay_scale(BECK) - 2 ^ -1.5) < 1e-9,
-        string.format("x%.3f", M.exciter.decay_scale(BECK)))
+        math.abs(M.exciter.decay_scale(BRACKEN) - 2 ^ -1.5) < 1e-9,
+        string.format("x%.3f", M.exciter.decay_scale(BRACKEN)))
 
   -- nothing is sent while the exciter is unpatched (§2.4 lazy alloc)
-  M.state.decay[BECK] = 0.7
-  M.state.notify_decay_change(BECK)
+  M.state.decay[BRACKEN] = 0.7
+  M.state.notify_decay_change(BRACKEN)
   check("an unpatched exciter is not talked to", #CALLS.exciter_decay == 0,
         "#" .. #CALLS.exciter_decay)
 
-  local index = M.topology.get(BECK).index
-  M.patch.add(BECK, "oak.mod", 0.8)
+  local index = M.topology.get(BRACKEN).index
+  M.patch.add(BRACKEN, OAK, 0.8)
   check("cabling it pushes whatever decay it was already set to",
         last_exciter_decay(index)
-        and math.abs(last_exciter_decay(index) - M.exciter.decay_scale(BECK)) < 1e-9,
+        and math.abs(last_exciter_decay(index) - M.exciter.decay_scale(BRACKEN)) < 1e-9,
         tostring(last_exciter_decay(index)))
 
-  turn_e3(M, BECK, -30)
+  turn_e3(M, BRACKEN, -30)
   check("and E3 forwards it live", last_exciter_decay(index) < 1.0,
         string.format("x%.3f", last_exciter_decay(index)))
 end
@@ -164,7 +169,7 @@ end
 print("\n-- cells with no sound of their own have no decay --")
 do
   local M = fresh(17)
-  for _, id in ipairs({"d.knocker", "h.wyrd", "f.cuckoo"}) do
+  for _, id in ipairs({"d.skriker", "h.wyrd", "f.cuckoo"}) do
     local cell = M.topology.get(id)
     check(cell.name .. " has no decay target",
           M.state.decay_target(cell) == nil, tostring(M.state.decay_target(cell)))
@@ -181,28 +186,28 @@ do
   local M = fresh(13)
   M.voice.init()
   local gridui = wl("gridui")
-  M.patch.add(BECK, "oak.mod", 0.5)
-  local edge_id = M.patch.has(BECK, "oak.mod")
+  M.patch.add(BRACKEN, OAK, 0.5)
+  local edge_id = M.patch.has(BRACKEN, OAK)
 
   -- focus 0 (ALL): E3 is decay, and the cable's gain must not move
-  M.state.held = {BECK}
-  M.state.focus[BECK] = 0
-  local decay_before = M.state.get_decay(BECK)
+  M.state.held = {BRACKEN}
+  M.state.focus[BRACKEN] = 0
+  local decay_before = M.state.get_decay(BRACKEN)
   gridui.on_norns_enc(3, 10, {})
   check("with nothing focused it is the decay",
-        M.state.get_decay(BECK) > decay_before)
+        M.state.get_decay(BRACKEN) > decay_before)
   check("and the cable is left alone",
         math.abs(M.patch.get(edge_id).gain - 0.5) < 1e-9)
 
   -- focus 1: E3 is that cable's gain, and the decay must not move
-  M.state.focus[BECK] = 1
-  local decay_now = M.state.get_decay(BECK)
+  M.state.focus[BRACKEN] = 1
+  local decay_now = M.state.get_decay(BRACKEN)
   gridui.on_norns_enc(3, 10, {})
   check("with a cable focused it is the gain",
         M.patch.get(edge_id).gain > 0.5,
         string.format("%.3f", M.patch.get(edge_id).gain))
   check("and the decay is left alone",
-        math.abs(M.state.get_decay(BECK) - decay_now) < 1e-9)
+        math.abs(M.state.get_decay(BRACKEN) - decay_now) < 1e-9)
   M.state.held = {}
 end
 

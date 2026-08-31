@@ -6,12 +6,13 @@ local ROOT = os.getenv("ROOT")
 arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
-local KNOCKER, HOB = "d.knocker", "d.hob"
+local KNOCKER, HOB = "d.boggart", "d.hob"
 -- any two distinct R cells work here -- every test below sets its rule
--- explicitly rather than relying on a default, and Trod/Ginnel gave up their
--- coordinates to the re-cut's re-cut (docs/canopy-spec.md §2.7).
-local TROD, GINNEL, SNICKET = "r.holt", "r.coppice", "r.snicket"
-local BECK, LOAM = "s.beck", "s.loam"
+-- explicitly rather than relying on a default. weave trimmed from 14 R cells
+-- to 6 (r.thicket, r.tangle, r.stile, r.sneck, r.lych, r.drove); Trod/
+-- Ginnel/Snicket are gone along with the rest.
+local TROD, GINNEL = "r.thicket", "r.tangle"
+local BRACKEN, WISP = "e.bracken", "e.wisp"
 
 -- an S cell, not a voice, is what the tests count. a voice has a refractory
 -- period (dispatch.lua) precisely so that a fast rule cannot machine-gun it,
@@ -41,7 +42,7 @@ local function rig(seed, rule, char, gain)
   M.weave.set_rule(TROD, rule)
   if char then M.state.character[TROD] = char end
   M.patch.add(KNOCKER, TROD, gain or 1.0)
-  M.patch.add(TROD, BECK, 1.0)
+  M.patch.add(TROD, BRACKEN, 1.0)
   return M
 end
 
@@ -109,11 +110,11 @@ do
   M.weave.set_rule(TROD, "hocket")
   M.state.character[TROD] = 0            -- stride 1: straight round-robin
   M.patch.add(KNOCKER, TROD, 1.0)
-  M.patch.add(TROD, BECK, 1.0)
-  M.patch.add(TROD, LOAM, 1.0)
+  M.patch.add(TROD, BRACKEN, 1.0)
+  M.patch.add(TROD, WISP, 1.0)
   run(M, 20)
-  local b = M.topology.get(BECK).index
-  local l = M.topology.get(LOAM).index
+  local b = M.topology.get(BRACKEN).index
+  local l = M.topology.get(WISP).index
   check("both destinations are played", gates(b) > 0 and gates(l) > 0,
         gates(b) .. "/" .. gates(l))
   check("and neither gets two in a row", math.abs(gates(b) - gates(l)) <= 1,
@@ -151,16 +152,19 @@ do
   driver(M, KNOCKER)
   local rs = {}
   for id, c in M.topology.each() do if c.type == "R" then table.insert(rs, id) end end
-  -- every multiplying rule there is, in series, ending on a voice, plus a
-  -- loop back into the chain from the voice's own out socket.
-  local rules = {"mult", "echo", "roll", "flam", "ghost", "fill", "accent"}
+  -- weave trimmed from 14 R cells to 6, so this is every multiplying rule
+  -- that fits across all six survivors, in series, ending on a voice, plus a
+  -- loop back into the chain from the voice's own single point -- the
+  -- socket collapse means that is the same cable endpoint the trigger used.
+  local rules = {"mult", "echo", "roll", "flam", "ghost", "fill"}
+  check("uses every surviving R cell", #rs == #rules, "#" .. #rs)
   M.patch.add(KNOCKER, rs[1], 1.0)
   for i, rule in ipairs(rules) do
     M.weave.set_rule(rs[i], rule)
     if i < #rules then M.patch.add(rs[i], rs[i + 1], 0.9) end
   end
-  M.patch.add(rs[#rules], "oak.trig", 0.9)
-  M.patch.add("oak.out", rs[1], 0.8)
+  M.patch.add(rs[#rules], "oak", 0.9)
+  M.patch.add("oak", rs[1], 0.8)
   local t0 = os.clock()
   run(M, 30)
   local wall = os.clock() - t0

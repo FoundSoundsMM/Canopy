@@ -3,137 +3,75 @@
 A monome norns script for grid (128). Full design in
 [`docs/canopy-spec.md`](docs/canopy-spec.md).
 
-## Status: build phase 7 — "the re-name"
+## Status: the grid overhaul
 
-Phases 1–5c built the instrument the spec describes: the patch graph and
-grid/screen UI, the SC engine's modal voices, all the D-cell gaits with
-D↔D Kuramoto coupling on a 2 ms scheduler, the exciters and the audio-rate
-patch matrix, the heartwood diffusion lattice on both its discrete and
-continuous sides, the grove's wandering pitch fields, and Weather as a
-groove knob sweeping quantise → swing → chaos.
-
-Phase 6 re-cuts the panel around what it turned out to be for: a
-generative, organic drum machine.
+A second re-cut of the panel, on top of everything build phases 1–7 (and 6b,
+6c, 6d) already built: an explicit Output row, one cable point per voice
+instead of four sockets, Climate replaced by a small Clock family, and two
+new step-sequencer lanes. Full detail and rationale in
+[`docs/canopy-spec.md`](docs/canopy-spec.md) §2/§9; this is the short version.
 
 ```
      1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
-1    ·   T   ·   S   S   S   S   S   S   S   S   S   S   ·   T   ·
-2    P   V   M   R   R   R   R   R   R   R   R   R   R   P   V   M
-3    ·   O   ·   F   H   ·   ·   ·   ·   ·   ·   H   F   ·   O   ·
-4    C   ·   C   F   H   ·   D   D   D   D   ·   H   F   C   ·   C
-5    C   ·   C   F   H   ·   D   D   D   D   ·   H   F   C   ·   C
-6    ·   T   ·   F   H   ·   ·   ·   ·   ·   ·   H   F   ·   T   ·
-7    P   V   M   R   R   R   R   R   R   R   R   R   R   P   V   M
-8    ·   O   ·   S   S   S   S   S   S   S   S   S   S   ·   O   ·
+1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
+2    ·   M   ·   ·   ·   F   F   F   N   N   N   ·   ·   ·   M   ·
+3    ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·
+4    F   ·   ·  TM  TM   C   T   T   T   T   C  TM  TM   ·   ·   H
+5    ·   F   ·   ·   ·   C   T   T   T   T   C   ·   ·   ·   H   ·
+6    E   E   F   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   H   ·   R
+7    E   M   ·   F   ·  Q4  Q4  Q4  Q4   ·   ·   ·   H   R   M   R
+8    E   E   E   ·   ·  Q6  Q6  Q6  Q6  Q6  Q6   ·   ·   R   R   R
 ```
 
 `·` is dark and inert — an unregistered coordinate, not a cell you can
 reach. The shape of what is left is what makes the panel readable.
 
-- **Four voices, in the corners, with named sockets.** Six anonymous nodes
-  per voice became four that each mean exactly one thing: **T** takes a
-  pulse and strikes; **P** takes a pitch field (and its own knob is a depth
-  multiplier on everything the fields do to that voice); **M** takes a
-  stream — one input, one balance knob deciding whether it is injected into
-  the resonator or bends the body — and a pulse there chokes; **O** is the
-  voice's output. The **V** cell in the middle is not a socket at all.
-- **The O socket closes the loop.** It is androgynous in the way the spec
-  always wanted: continuously it is the voice's audio on a bus, so O→M is
-  one voice ringing another and O→S is a voice colouring an exciter;
-  discretely it is a pulse the instant the voice is struck, so a drum can
-  trigger a drum. The pulse half costs nothing — Lua is the thing doing the
-  striking, so it already knows — which is why voice↔voice feedback landed
-  without ever needing the metering back-channel. A 28 ms per-voice
-  refractory is what keeps a loop ringing rather than screaming.
-- **The weave** (`weave.lua`) — twenty **R** cells, two rows of ten. A D
-  cell decides *when*; an R cell decides what happens to a pulse on its way
-  somewhere: divide, mult, delay, echo, chance, accent, sift, meet, hocket,
-  swing, blur, latch, fill, rest, flam, ghost, roll, swell, mask, shift.
-  `K1 + E2` swaps the rule exactly as it swaps a gait. Patch a straight
-  four to the bar through Sedge and Drove and Bramble and it stops being a
-  metronome and starts being a part, without a step ever being programmed.
-  The three reactive gaits (divider, echo, coincidence) moved out of
-  `rambler.lua` and into here, which is what they always were.
-- **The climate** (`climate.lua`) — eight **C** cells in the outer corners,
-  running on the scale of a piece rather than a bar: tide, creep, season,
-  gust, breath, wane, flourish, shiver, from six seconds to ten minutes a
-  turn. Cable one to any cell and that cell's own knob is walked around.
-  The knob is never overwritten — a climate writes a separate offset that
-  is summed on read, so the setting you left is the setting you left and
-  pulling the cable puts it back exactly. This is the difference between a
-  patch that loops and a patch that goes somewhere.
-- **Twenty exciters** instead of ten. The original ten were weather and
-  undergrowth; the second ten are aimed at a kit — skein (metal shimmer),
-  flint (click), husk (scrape), tinder (fizz), mire (sub), glim (ping),
-  rasp (buzz), cicada (chirr), hail (impacts), reed (breath).
-- **A sound page per voice** (§5.5). Tap a voice cell and the screen
-  becomes nine parameters — Tune, Bend, Decay, Body, Damp, Bright, Drive,
-  Strike, Level — with `E1` picking one and `E2`/`E3` moving it coarsely
-  and finely. Tap it again to go back. The old Grain macro is gone: it
-  morphed four of these together behind one knob because there was nowhere
-  to put four knobs, and a drum you can only shape through a macro is a
-  drum you cannot tune.
-- **Tune reaches lower, and Bend is new.** Tune's down side now spans three
-  octaves instead of two — Oak's root can fall well under 10 Hz — and Bend
-  is a strike-triggered pitch drop, decaying to Tune's pitch over ~60 ms.
-  Bend at 0 is a no-op; turned up on a voice tuned low, it's most of the way
-  to an 808 kick.
-- **Held cells now name themselves.** The cell view prints a one-line,
-  plain-English gloss of what the cell does, right under its name — pulled
-  from `lexicon.lua`'s `describe`, which existed but was never wired into a
-  screen. The numbers below it mean more once you know what they belong to.
-- **A new eighth gait, `figure`** — a bank of sixteen-step patterns on the
-  clock (four, backbeat, offbeat, tresillo, son, rumba, bossa, shiko).
-  Euclidean gives an even spread of k in n and nothing else; this is where
-  the crooked ones live.
-- **Regrow rebuilt.** `K1+K2` no longer draws random cables between random
-  cells — on a panel this size that was silence about half the time. It
-  builds a patch with a shape (pulse-makers through the weave onto
-  triggers, an exciter under each voice, sometimes a field, sometimes some
-  weather, sometimes one voice feeding another) and seeds the settings of
-  the cells it uses, so every Regrow plays.
-- **The lexicon pages are gone.** They were a manual you had to leave the
-  patch to read; what was worth reading off them is already printed on the
-  cell and edge views, at the moment you are holding the thing it is about.
-- **The network view's cables are dim and dotted.** At full brightness and
-  solid, twenty cables is a ball of wool. An inverting cable is drawn with
-  the dots further apart. The travelling pulse dots stay bright — they are
-  what the view is for. Everything on that view is bucketed by brightness and
-  painted once per level, so the whole frame is ~16 cairo paint calls at the
-  64-cable cap rather than ~250; the per-frame command count is asserted in
-  `test/soak.lua`, because overrunning it wedges matron's screen queue and
-  takes the front panel down with it.
+- **Nothing is heard by default.** The top row is sixteen Output cells;
+  position sets pan, hard left to hard right. Cabling a voice, a percussion
+  cell, an exciter or a heartwood node to one is the only way it's ever
+  audible — the fixed automatic panning every voice used to get for free is
+  gone, along with the always-on mix that used to carry it.
+- **One cable point per voice, not four.** The old T/P/M/O socket cluster is
+  gone; each voice (Oak, Hazel, Alder, Rowan) is now a single **M** cell that
+  is simultaneously the tap-to-open-sound-page target and the sole cable
+  endpoint. What a cable does when it lands there is decided by what's at
+  the other end: a pulse always strikes it now (discrete choke is gone —
+  there's no socket left to carry the difference); a stream (an exciter or
+  the heartwood) always drives its mod path, per the sound page's own new
+  **Balance** knob; a field or a Turing Machine cell tunes it, per the new
+  **Depth** knob; cabling to another voice is fully symmetric — each side's
+  audio feeds the other's mod path, and either can strike the other.
+  **Hardness**, **Depth** and **Balance** — the old sockets' own knobs — now
+  live as three extra rows on the voice's sound page.
+- **Climate is gone; Clock is new.** The eight slow C-cell modulators
+  (tide, creep, season, ...) are cut outright, not relocated. The letter is
+  reused for something unrelated: four small cells that flash on a
+  multiple/division of the master clock, feeding the trigger block next to
+  them — the job Knocker's old `metric` gait used to do by default. Knocker
+  itself is gone; **Skriker** takes its seat in the trigger block with a new
+  gait, `swarm` — a short, unpredictable cluster of 2-4 hits.
+- **The percussion cells are renamed and moved.** The six small drum voices
+  (three pinged filters, three noise bursts) are unchanged mechanically but
+  now sit in row 2 next to the voices, reading **F** (ping) and **N**
+  (noise) on the panel instead of **G**.
+- **Two new step-sequencer lanes, Q4 and Q6.** No phase of their own, like a
+  Turing Machine — only a pulse cabled in moves them. Every physical cell in
+  a lane is independently tap-toggleable (on/off) and independently
+  cable-able; the *last* cell in a lane is the "driver" — a pulse there
+  advances the lane's shared playhead and fires whichever step it lands on,
+  while a pulse on any other cell in the lane fires that step directly,
+  bypassing the playhead entirely.
+- **The weave, heartwood, grove and exciters are all trimmed**, not changed:
+  6 weave rules (was 14), a 4-node heartwood chain (was an 8-node ring), 4
+  pitch fields (was 8), 6 exciters (was 20). Every weave rule and grove mode
+  not given a dedicated seat is still reachable by `K1+E2` cycling, the same
+  pattern the panel has used since it was first trimmed at build phase 6c.
 
-### Build phase 6b — the global param page
-
-The network view described above, and the meters view cycled alongside it,
-are gone — replaced by a nine-parameter list (§5.2, `gparam.lua`): the same
-E1-select/E2-E3-nudge shape the voice sound page already had, for macros that
-reach every voice at once. Weather is gone with it, split into independent
-**Swing** and **Scatter**. New: **Scale** (quantises every voice's pitch to a
-scale, 0 = free), **Drops** (random pitch offset per strike), a global
-**Decay** multiplier, a global **Pitch** transpose, and an output
-**Compressor**. Canopy moved into the same list rather than keeping its own
-bare encoder.
-
-Not yet built: the metering back-channel (§7.4 — so continuous audio-rate
-cell response is not lit), and PARAMS/PSET persistence.
-
-### Build phase 7 — the re-name
-
-The script becomes **Canopy**. Two things go with the old name: the reverb
-that used to share it (Canopy's `FreeVerb`, and the output **Compressor**
-alongside it) is gone entirely — the mix is dry, four voices panned and
-summed, nothing else. The old **Rain** macro — trigger/field wildness, §4.1
-— is renamed **Scatter**, which frees "Rain" for something literal: `audio/
-Rain.wav`, a real rain recording, loops continuously from init. It says
-nothing until asked to: **Rain** is its own dry level in the mix (0 by
-default), and **Excite** is how much that same audio continuously drives
-every voice's resonator as excitation, whether or not anything is patched —
-the wood actually being rained on, rather than a reverb standing in for
-weather. Scale is pentatonic-only now — major, minor, and two 12-TET
-roundings of an equal-step (slendro-style) division — shorthand **Pent** so
-the value column stays readable.
+Everything from build phases 1–7 not mentioned above — the gait bank, the
+Kuramoto coupling, Swing/Scatter, Regrow (now also wiring an Output cable per
+voice, or a regrown patch would be silent), the sound page shape, the always-
+on rain ambience — is unchanged. See `docs/canopy-spec.md` for the full
+build-order history.
 
 ## Install
 
@@ -150,24 +88,27 @@ or copy this repo to `~/dust/code/Canopy` by hand. Then select
 
 ## Controls
 
-- Hold a cell, tap another: patch them together (tap again to unpatch).
+- Hold a cell, tap another: patch them together (tap again to unpatch). Every
+  cell on the panel is a legal endpoint now, including a voice.
 - Hold two cells together: `E3` sets that edge's gain.
 - Hold a cell + `K1`, tap another: one-way cable.
 - Hold a cell + `K2`+`K3`: sever every cable at that cell.
 - Hold a cell: `E1` selects the focused cable, `E2` is that cell's one
   character parameter, `E3` is the focused cable's gain — or, with no cable
   focused, that sound's decay: a voice's ring time in seconds, or an
-  exciter's envelopes as a ratio. Holding any of a voice's four sockets
-  moves that voice's decay, since a socket is part of the voice rather than
-  a sound of its own.
-- Tap a **voice** cell: open its sound page. `E1` picks one of nine
-  parameters, `E2`/`E3` move it coarsely and finely. Tap the cell again (or
-  press `K3`) to go back. Holding the cell shows the same page without
-  taking the encoders off the patch.
-- Hold a **D**/**R**/**F**/**C** cell + `K1`, turn `E2`: swap its gait /
-  rule / mode / shape.
-- `K1` + tap a D cell (nothing else held): root it to the norns clock, or
-  set it wild — metric, euclidean and figure are the ones with something to
+  exciter's envelopes as a ratio. A voice, a percussion cell and a Turing
+  Machine cell have no single character knob — they have the sound page
+  instead.
+- Tap a **voice**, **percussion** or **Turing Machine** cell: open its sound
+  page. `E1` picks a parameter, `E2`/`E3` move it coarsely and finely. Tap
+  the cell again (or press `K3`) to go back. Holding the cell shows the same
+  page without taking the encoders off the patch.
+- Tap a **Q4/Q6 sequencer** cell (nothing else held): toggle that step on or
+  off.
+- Hold a **T**/**R**/**F** cell + `K1`, turn `E2`: swap its gait / rule /
+  mode.
+- `K1` + tap a T cell (nothing else held): root it to the norns clock, or
+  set it wild — euclidean, figure and metric are the gaits with something to
   root to. Same gesture on an F cell snaps its field to the scale, or sets
   it free.
 - Nothing held: `E1` picks one of nine global params (BPM, Swing, Scatter,
@@ -206,21 +147,24 @@ lib/
   gridui.lua                grid render + hold/tap state machine
   screenui.lua              global param / cell / edge / voice views
   dispatch.lua              §6 type-interaction matrix: pulse events
-                             (-> T/P/M, S, F, H) and the continuous patch
-                             matrix (S<->S, S->M, S<->H, H<->H, H->M, O->*)
-  rambler.lua               the eight D-cell gaits, the coupling scheduler,
+                             (-> voice, GVOICE, E, F, H) and the continuous
+                             patch matrix (E<->E, E->voice, E<->H, H<->H,
+                             H->voice, voice<->voice, *->O)
+  rambler.lua               the eight T-cell gaits, the coupling scheduler,
                              and the shared pulse bus everything emits through
-  weave.lua                 the twenty R-cell pulse transforms
-  climate.lua               the eight C-cell slow modulators
-  voice.lua                 voice sockets + the nine-parameter sound page
+  weave.lua                 the six R-cell pulse transforms
+  clockcell.lua             the four C-cell clock flashers (§2.9)
+  sequencer.lua             the Q4/Q6 step-sequencer lanes (§2.10)
+  voice.lua                 the eleven-parameter voice sound page (§5.5)
   gparam.lua                the nine-parameter global page (§4.1, §5.2)
-  exciter.lua               S-cell control layer: lazy alloc, gating, Colour
+  exciter.lua               E-cell control layer: lazy alloc, gating, Colour
   heartwood.lua             the diffusion lattice's discrete-event side
   grove.lua                 the pitch fields: modes, coupling, voice retuning
+  gvoice.lua                the six GVOICE-cell drums + their sound page
   bridge.lua                Lua-side wrapper around the engine commands
-  Engine_Canopy.sc          SC: four modal voices with an output tap, twenty
-                             exciters, the patch matrix, the heartwood delay
-                             network, glide + pitch drift, the rain ambience
+  Engine_Canopy.sc          SC: four modal voices, six percussion cells, six
+                             exciters, the patch matrix, the four-node
+                             heartwood, the Output row's fixed-pan mix
 audio/
   Rain.wav                  the always-on rain ambience (Rain/Excite, §4.1)
 test/

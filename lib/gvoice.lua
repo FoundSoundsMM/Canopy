@@ -22,7 +22,7 @@ gvoice.DECAY_OCTAVES = 2
 
 function gvoice.decay_seconds(id)
   local cell = topology.get(id)
-  if not cell or cell.type ~= "G" then return nil end
+  if not cell or cell.type ~= "GVOICE" then return nil end
   local d = state.get_decay(id)
   return cell.decay * (2 ^ ((d - 0.5) * 2 * gvoice.DECAY_OCTAVES))
              * voice.decay_mult_ratio()
@@ -139,13 +139,13 @@ end
 
 function gvoice.init()
   for id, cell in topology.each() do
-    if cell.type == "G" then gvoice.push_all(id) end
+    if cell.type == "GVOICE" then gvoice.push_all(id) end
   end
 end
 
 state.on_decay_change(function(id)
   local cell = topology.get(id)
-  if cell and cell.type == "G" then
+  if cell and cell.type == "GVOICE" then
     bridge.g_decay(cell.index - 1, gvoice.decay_seconds(id))
   end
 end)

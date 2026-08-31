@@ -1,15 +1,16 @@
 -- gridui.lua
 -- grid render + hold/tap patching state machine. (§3, §4.2, §5.1)
 
-local topology  = wl("topology")
-local patch     = wl("patch")
-local lexicon   = wl("lexicon")
-local state     = wl("state")
-local rambler   = wl("rambler")
-local weave     = wl("weave")
-local heartwood = wl("heartwood")
-local grove     = wl("grove")
-local climate   = wl("climate")
+local topology   = wl("topology")
+local patch      = wl("patch")
+local lexicon    = wl("lexicon")
+local state      = wl("state")
+local rambler    = wl("rambler")
+local weave      = wl("weave")
+local heartwood  = wl("heartwood")
+local grove      = wl("grove")
+local clockcell  = wl("clockcell")
+local sequencer  = wl("sequencer")
 
 local gridui = {}
 
@@ -25,7 +26,6 @@ local CYCLERS = {
   D = function(id, step) return rambler.cycle_gait(id, step) end,
   R = function(id, step) return weave.cycle_rule(id, step) end,
   F = function(id, step) return grove.cycle_mode(id, step) end,
-  C = function(id, step) return climate.cycle_shape(id, step) end,
 }
 
 -- below this held-duration, releasing a cell counts as a "tap". with a first
@@ -69,17 +69,17 @@ function gridui.on_grid_key(x, y, z, keystate)
 
     local cell = topology.get(id)
 
-    -- a voice cell is not a socket (§2.2 -- only its four sockets are), so
-    -- it is not a cable endpoint. every other cell is.
+    -- the socket collapse made a voice cell a cable endpoint like every
+    -- other cell on the panel -- its own point carries the tap-to-open-page
+    -- gesture (§5.5) and the hold/tap cable gesture both, unambiguously,
+    -- the same way a GVOICE or TM cell already did.
     if anchor and held_dur < gridui.TAP_THRESHOLD then
       local anchor_cell = topology.get(anchor)
-      if anchor_cell.type ~= "voice" and cell.type ~= "voice" then
-        local oneway = keystate and keystate.k1
-        local result = patch.toggle(anchor, id, oneway, 0.6)
-        local verb = (result == "added") and "->" or (result == "removed") and "x" or nil
-        if verb then
-          state.set_event(anchor_cell.name .. " " .. verb .. " " .. cell.name, 1.5)
-        end
+      local oneway = keystate and keystate.k1
+      local result = patch.toggle(anchor, id, oneway, 0.6)
+      local verb = (result == "added") and "->" or (result == "removed") and "x" or nil
+      if verb then
+        state.set_event(anchor_cell.name .. " " .. verb .. " " .. cell.name, 1.5)
       end
     elseif not anchor and held_dur < gridui.TAP_THRESHOLD then
       gridui.on_tap(id, cell, keystate)
@@ -92,11 +92,11 @@ end
 -- a tap on one cell with nothing else held ---------------------------------
 
 function gridui.on_tap(id, cell, keystate)
-  if cell.type == "voice" or cell.type == "G" or cell.type == "TM" then
-    -- §5.5 (§2.7b for the six percussion cells, §2.3b for the four TM
-    -- cells): the screen becomes this cell's sound page, and tapping it
-    -- again puts the screen back where it was. K1 is ignored here -- there
-    -- is no second gesture on a voice, G or TM cell to be ambiguous against.
+  if cell.type == "voice" or cell.type == "GVOICE" or cell.type == "TM" then
+    -- §5.5 (§2.7b for the percussion cells, §2.3b for the TM cells): the
+    -- screen becomes this cell's sound page, and tapping it again puts the
+    -- screen back where it was. K1 is ignored here -- there is no second
+    -- gesture on a voice, GVOICE or TM cell to be ambiguous against.
     if state.voice_edit == id then
       state.voice_edit = nil
       state.set_event(cell.name .. ": closed", 1.2)
@@ -105,6 +105,15 @@ function gridui.on_tap(id, cell, keystate)
       state.vparam_focus = 1
       state.set_event(cell.name .. ": sound", 1.2)
     end
+    return
+  end
+
+  if cell.type == "SEQ" then
+    -- a plain tap, no modifier -- unambiguous against everything else here,
+    -- since the hold/tap cable gesture needs an anchor and every other tap
+    -- gesture on this list is gated on a cell type or K1 first.
+    local active = sequencer.toggle_step(id)
+    state.set_event(cell.name .. (active and " on" or " off"), 1.0)
     return
   end
 
@@ -236,28 +245,28 @@ end
 
 function gridui.brightness(id, cell)
   if cell.type == "voice" then
-    -- the one open sound page is worth seeing from across the room.
-    return state.voice_edit == id and 12 or 5
-  elseif cell.type == "node" then
-    local base = patch.degree(id) > 0 and 6 or 2
+    -- the one open sound page is worth seeing from across the room. now
+    -- also a cable endpoint, so it takes the same degree-of-connection bump
+    -- every other endpoint gets once it is patched.
+    local base = (state.voice_edit == id) and 12 or (patch.degree(id) > 0 and 6 or 3)
     return state.flash_level(id, base)
+  elseif cell.type == "O" then
+    return patch.degree(id) > 0 and 5 or 1
   elseif cell.type == "D" then
     return rambler.level(id, 3)
   elseif cell.type == "R" then
     return weave.level(id, 2)
-  elseif cell.type == "G" then
-    -- §2.7b: the sound-page indicator a voice cell gets (5 idle / 12 open),
-    -- plus a strike flash on top -- a G cell has no separate socket to carry
-    -- that the way a voice's T does, so it carries its own.
+  elseif cell.type == "GVOICE" then
+    -- §2.7b: the sound-page indicator a voice cell gets, plus a strike
+    -- flash on top -- a GVOICE cell has no separate socket to carry that,
+    -- so it carries its own.
     local base = (state.voice_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
     return state.flash_level(id, base)
   elseif cell.type == "TM" then
-    -- §2.3b: same idea as a G cell's indicator -- the sound page is worth
-    -- seeing from across the room, and a step flashes on top of it, since a
-    -- TM cell has no separate socket to carry that the way a voice's T does.
+    -- §2.3b: same idea as a GVOICE cell's indicator.
     local base = (state.voice_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
     return state.flash_level(id, base)
-  elseif cell.type == "S" then
+  elseif cell.type == "E" then
     local base = patch.degree(id) > 0 and 5 or 3
     return state.flash_level(id, base)
   elseif cell.type == "H" then
@@ -265,7 +274,9 @@ function gridui.brightness(id, cell)
   elseif cell.type == "F" then
     return grove.level(id, 2)
   elseif cell.type == "C" then
-    return climate.level(id, 1)
+    return clockcell.level(id, 2)
+  elseif cell.type == "SEQ" then
+    return sequencer.level(id, 2)
   end
   return 0
 end
@@ -289,19 +300,17 @@ function gridui.grid_redraw(g)
     -- visibility floor rather than a straight x0.4 (idle brightness is
     -- already low enough that x0.4 floors most of them to 0-1 and hides
     -- every cell you could tap next) -- and flat, not scaled up from
-    -- whatever they're doing live, because a D cell's pulse-flash or a
-    -- socket's own flash is noise while you're reading a patch: all you need
-    -- at that point is what's connected, not what's currently firing. voice
-    -- cells aren't cable endpoints (only their sockets are), so they still
-    -- fade toward black.
+    -- whatever they're doing live, because a D cell's pulse-flash is noise
+    -- while you're reading a patch: all you need at that point is what's
+    -- connected, not what's currently firing. a voice is a cable endpoint
+    -- like everything else now, so it gets the same floor rather than a
+    -- special dim-toward-black case.
     local TARGET_FLOOR = 3
     for id, cell in topology.each() do
       if state.is_held(id) then
         levels[id] = 15
       elseif revealed[id] then
         levels[id] = blink and 13 or 6
-      elseif cell.type == "voice" then
-        levels[id] = math.floor(levels[id] * 0.4)
       else
         levels[id] = TARGET_FLOOR
       end

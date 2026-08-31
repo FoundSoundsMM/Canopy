@@ -3,9 +3,9 @@ local ROOT = os.getenv("ROOT")
 arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
-local KNOCKER, HOB, GRIM = "d.knocker", "d.hob", "d.grim"
+local KNOCKER, HOB, GRIM = "d.boggart", "d.hob", "d.grim"
 local GABRIEL, HUNT = "d.gabriel", "d.hunt"
-local KNOCK = "oak.trig"
+local KNOCK = "oak"
 
 -- every gait in here free-runs now; the reactive ones moved to the weave
 -- when the panel was re-cut, and are covered by test/weave.lua instead.
@@ -145,26 +145,30 @@ do
   M.patch.add(ds[2], ds[7], 0.7)
   M.rambler.set_gait(ds[4], "burst")
   M.patch.add(ds[1], KNOCK, 0.9)
-  M.patch.add(ds[6], "rowan.trig", 0.9)
-  M.patch.add(ds[8], "hazel.mod", 0.9)
-  -- and the loop the O socket made possible: Oak strikes, answers out of its
-  -- own out socket, and that lands back on a pulse-maker in the ring.
-  M.patch.add("oak.out", ds[2], 0.9)
+  M.patch.add(ds[6], "rowan", 0.9)
+  M.patch.add(ds[8], "hazel", 0.9)
+  -- and the loop the socket collapse made possible: Oak already has more
+  -- than one cable (ds[1] plus this one), so every strike also answers into
+  -- everything else it's cabled to -- including a second pulse-maker in the
+  -- ring, same as a dedicated O socket used to.
+  M.patch.add(KNOCK, ds[2], 0.9)
   local t0 = os.clock()
   run(M, 30)
   local wall = os.clock() - t0
   local rate = #CALLS.strike / 30
   check("terminates", true)
   check("strike rate bounded", rate < 400, string.format("%.1f/s", rate))
-  check("chokes fired", #CALLS.choke > 0, "got " .. #CALLS.choke)
   check("30s of ticks in reasonable time", wall < 20, string.format("%.2fs", wall))
-  print(string.format("        (%d strikes, %d chokes, %.1f/s, %.2fs wall for 15000 ticks)",
-        #CALLS.strike, #CALLS.choke, rate, wall))
+  print(string.format("        (%d strikes, %.1f/s, %.2fs wall for 15000 ticks)",
+        #CALLS.strike, rate, wall))
 end
 
 print("\n-- gait swap and rooted toggle --")
 do
   local M = fresh(4)
+  -- no D cell defaults to metric any more (that locking role moved to the
+  -- new Clock cells), so it's set explicitly here rather than relied on.
+  M.rambler.set_gait(KNOCKER, "metric")
   local k = M.rambler.cycle_gait(KNOCKER, 1)
   check("cycle_gait advances", k == "euclidean", tostring(k))
   check("rooted toggles on a metric gait", M.rambler.toggle_rooted(KNOCKER) ~= nil)

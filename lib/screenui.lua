@@ -13,20 +13,21 @@
 -- E2/E3-nudge shape as the sound page, for the nine macros that reach every
 -- voice at once (lib/gparam.lua) rather than one.
 
-local topology  = wl("topology")
-local patch     = wl("patch")
-local lexicon   = wl("lexicon")
-local state     = wl("state")
-local rambler   = wl("rambler")
-local weave     = wl("weave")
-local heartwood = wl("heartwood")
-local grove     = wl("grove")
-local climate   = wl("climate")
-local voice     = wl("voice")
-local gvoice    = wl("gvoice")
-local tm        = wl("tm")
-local gparam    = wl("gparam")
-local exciter   = wl("exciter")
+local topology   = wl("topology")
+local patch      = wl("patch")
+local lexicon    = wl("lexicon")
+local state      = wl("state")
+local rambler    = wl("rambler")
+local weave      = wl("weave")
+local heartwood  = wl("heartwood")
+local grove      = wl("grove")
+local clockcell  = wl("clockcell")
+local sequencer  = wl("sequencer")
+local voice      = wl("voice")
+local gvoice     = wl("gvoice")
+local tm         = wl("tm")
+local gparam     = wl("gparam")
+local exciter    = wl("exciter")
 
 local screenui = {}
 
@@ -99,9 +100,10 @@ end
 
 function screenui.draw_voice(id, live)
   local cell = topology.get(id)
-  -- §2.7b/§2.3b: a G cell's or a TM cell's sound page is the same shape as a
-  -- voice's (draw_cell routes all three here), just a different PARAMS list.
-  local pm = (cell.type == "G") and gvoice or (cell.type == "TM") and tm or voice
+  -- §2.7b/§2.3b: a GVOICE cell's or a TM cell's sound page is the same shape
+  -- as a voice's (draw_cell routes all three here), just a different PARAMS
+  -- list.
+  local pm = (cell.type == "GVOICE") and gvoice or (cell.type == "TM") and tm or voice
   screen.level(15)
   screen.move(2, 8)
   screen.text(cell.name)
@@ -148,7 +150,7 @@ end
 
 function screenui.draw_cell(id)
   local cell = topology.get(id)
-  if cell.type == "voice" or cell.type == "G" or cell.type == "TM" then
+  if cell.type == "voice" or cell.type == "GVOICE" or cell.type == "TM" then
     screenui.draw_voice(id, state.voice_edit == id)
     return
   end
@@ -157,7 +159,7 @@ function screenui.draw_cell(id)
   screen.move(2, 8)
   screen.text(cell.name)
   screen.move(126, 8)
-  screen.text_right(cell.type)
+  screen.text_right(cell.letter or cell.type)
 
   screen.level(4)
   screen.move(2, 12)
@@ -177,34 +179,38 @@ function screenui.draw_cell(id)
 
   -- for a D cell the E2 knob means whatever its current gait says it means,
   -- so the gait names the row and supplies its own units (§4.2) -- and the
-  -- same is true one type over for R's rule, F's mode and C's shape.
+  -- same is true one type over for R's rule and F's mode.
   local info  = (cell.type == "D") and rambler.info(id) or nil
   local winfo = (cell.type == "R") and weave.info(id) or nil
   local hinfo = (cell.type == "H") and heartwood.info(id) or nil
   local finfo = (cell.type == "F") and grove.info(id) or nil
-  local cinfo = (cell.type == "C") and climate.info(id) or nil
+  local cinfo = (cell.type == "C") and clockcell.info(id) or nil
+  local sinfo = (cell.type == "SEQ") and sequencer.info(id) or nil
 
   local ch = lexicon.character(id)
   local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
-  -- the bar draws the player's own setting; the number to its right is what
-  -- the cell is actually running on, so a climate cable is visible as the
-  -- two of them disagreeing (§2.8).
   local base = state.base_character(id, lo, hi)
-  local eff = state.get_character(id, cell, lo, hi)
   screen.level(12)
   screen.move(2, 27)
   screen.text(info and info.gait or winfo and winfo.rule or finfo and finfo.mode
-              or cinfo and cinfo.shape or (ch and ch.label or "character"))
+              or (ch and ch.label or "character"))
   screen.move(126, 27)
   screen.text_right(info and info.param or winfo and winfo.param
                     or finfo and finfo.param or cinfo and cinfo.param
-                    or string.format("%.2f", eff))
-  bar(2, 30, 124, 3, (base - lo) / (hi - lo))
-  if math.abs(eff - base) > 1e-4 then
-    -- a single bright pixel where the weather currently has it.
-    screen.level(15)
-    screen.pixel(2 + math.floor(124 * util.clamp((eff - lo) / (hi - lo), 0, 1)), 29)
-    screen.fill()
+                    or string.format("%.2f", base))
+  if not sinfo then
+    bar(2, 30, 124, 3, (base - lo) / (hi - lo))
+  end
+
+  if sinfo then
+    -- a SEQ cell has no character knob of its own -- the row under the title
+    -- reads out its place in the lane instead: which step it is, whether
+    -- it's on, and whether it's the one currently driving the playhead.
+    screen.level(12)
+    screen.move(2, 27)
+    screen.text(string.format("step %d of %d", sinfo.step, sinfo.len))
+    screen.move(126, 27)
+    screen.text_right(sinfo.driver and "drives" or (sinfo.active and "on" or "off"))
   end
 
   if info then
@@ -251,19 +257,23 @@ function screenui.draw_cell(id)
     screen.text_right(finfo.snap and "snapped" or "free")
     bar(2, 44, 124, 3, util.clamp((finfo.pos + 1) / 2, 0, 1), 6)
   elseif cinfo then
-    -- a climate cell's value is the whole of what it is, so it gets the bar,
-    -- centred: half-full is "doing nothing right now".
+    -- a clock cell is a pure flasher -- nothing here to read out but how
+    -- many cables it's feeding.
     screen.level(12)
     screen.move(2, 41)
-    screen.text(string.format("reaches %d", cinfo.reaches))
+    screen.text(string.format("reaches %d", patch.degree(id)))
+  elseif sinfo then
+    -- where the lane's shared playhead currently sits, and whether this
+    -- step is the one it's on right now.
+    screen.level(12)
+    screen.move(2, 41)
+    screen.text(string.format("playhead %d", sinfo.playhead))
     screen.move(126, 41)
-    screen.text_right(string.format("%+.2f", cinfo.value))
-    bar(2, 44, 124, 3, (cinfo.value + 1) / 2, 6)
+    screen.text_right(sinfo.playhead == sinfo.step and "here" or "")
   else
-    -- §4.2 E3 with no cable focused. a socket hands the gesture to its voice,
-    -- so the row names whose decay is actually moving. a voice can be read
-    -- out in seconds of ring time; an exciter has twenty different envelopes
-    -- and no single one to name, so it reads as a ratio (see exciter.lua).
+    -- §4.2 E3 with no cable focused. a voice can be read out in seconds of
+    -- ring time; an exciter has several different envelopes and no single
+    -- one to name, so it reads as a ratio (see exciter.lua).
     local target = state.decay_target(cell)
     local tcell = target and topology.get(target)
     local d = target and state.get_decay(target) or 0
@@ -272,8 +282,7 @@ function screenui.draw_cell(id)
       label, readout = "", ""
     elseif tcell.type == "voice" then
       readout = string.format("%.2f s", voice.decay_seconds(target))
-      if cell.type == "node" then label = "decay \xC2\xB7 " .. tcell.name end
-    elseif tcell.type == "S" then
+    elseif tcell.type == "E" then
       readout = string.format("x%.2f", exciter.decay_scale(target))
     end
     screen.level(12)
@@ -318,7 +327,7 @@ function screenui.draw_cell(id)
   end
 
   local swap = (cell.type == "D" and "gait") or (cell.type == "R" and "rule")
-            or (cell.type == "F" and "mode") or (cell.type == "C" and "shape")
+            or (cell.type == "F" and "mode")
   screen.level(2)
   screen.move(2, 63)
   screen.text(swap and ("K2+K3 sever   K1+E2 " .. swap) or "K2+K3 sever")
@@ -326,65 +335,92 @@ end
 
 -- edge view (two cells held) -------------------------------------------------
 
+-- the socket collapse means a voice is one point that reacts to whatever's
+-- at the other end of the cable: a pulse always strikes it; a stream (E/H)
+-- always drives its mod path; a field or TM tunes it; another voice does
+-- both a pulse-answer and a continuous mod-feed on the same cable, in both
+-- directions. an Output cell is a pure destination -- only voice/GVOICE/E/H
+-- reach it, and it never talks back.
 local INTERACTION_DESC = {
-  ["node|node"] = "an out socket rings the other voice; T/P/M are inputs",
-  ["D|node"] = "pulse strikes / chokes / re-rolls, by socket",
-  ["R|node"] = "the transformed pulse strikes / chokes / re-rolls",
-  ["S|node"] = "stream drives the M socket; T and P take pulses only",
-  ["H|node"] = "the lattice returns into the M socket",
-  ["node|F"] = "no meaning: a field belongs on the P socket, not from it",
-  ["node|C"] = "the weather walks that socket's own knob",
+  ["voice|voice"] = "each voice's own audio feeds the other's mod path; either answers a strike",
+  ["voice|O"] = "the voice's audio reaches the speakers at this cell's pan position",
+  ["D|voice"] = "the pulse strikes the voice, which answers out of its own point",
+  ["R|voice"] = "the transformed pulse strikes the voice, which answers in turn",
+  ["TM|voice"] = "the pulse clocks the register and strikes the voice; also feeds its pitch",
+  ["SEQ|voice"] = "an active step's pulse strikes the voice",
+  ["C|voice"] = "the clock's pulse strikes the voice",
+  ["E|voice"] = "the stream drives the voice's mod path (Balance decides how)",
+  ["H|voice"] = "the lattice returns into the voice's mod path",
+  ["F|voice"] = "the field tunes the voice, scaled by its own Depth knob",
   ["D|D"] = "mutual phase coupling (Kuramoto) + mutual triggering",
   ["D|R"] = "the pulse goes through the transform on its way out",
   ["R|R"] = "transforms in series -- the chain is the pattern",
-  ["D|S"] = "pulse envelopes S into a grain; free-running otherwise",
-  ["R|S"] = "the transformed pulse fires the grain",
+  ["D|E"] = "pulse envelopes the stream into a grain; free-running otherwise",
+  ["R|E"] = "the transformed pulse fires the grain",
   ["D|H"] = "pulse enters the lattice and diffuses",
   ["R|H"] = "the transformed pulse enters the lattice",
-  ["S|S"] = "cross-modulation: each modulates the other's colour",
-  ["H|S"] = "stream diffuses through the lattice",
+  ["E|E"] = "cross-modulation: each modulates the other's colour",
+  ["E|H"] = "stream diffuses through the lattice",
+  ["E|O"] = "the stream reaches the speakers at this cell's pan position",
+  ["H|O"] = "the lattice's emergence reaches the speakers at this cell's pan position",
   ["H|H"] = "direct link -- short-circuits two lattice points",
   ["D|F"] = "each pulse steps the field to a new degree",
   ["R|F"] = "the transformed pulse steps the field",
-  ["S|F"] = "the exciter's colour rides the field's line",
+  ["E|F"] = "the exciter's colour rides the field's line",
   ["H|F"] = "a pulse out of the lattice steps the field",
   ["F|F"] = "the two fields pull together (or apart, at negative gain)",
-  ["D|C"] = "the weather walks this cell's rate",
-  ["R|C"] = "the weather walks this transform's own knob",
-  ["S|C"] = "the weather walks this exciter's Colour",
-  ["H|C"] = "the weather walks this node's conductance",
-  ["F|C"] = "the weather walks this field's Range",
-  ["C|C"] = "one weather sets how fast the other turns",
-  -- §2.7b: a G cell has no sockets, so it is struck directly and answers
-  -- with its own pulse out, the same shape as an R cell's transform.
-  ["node|G"] = "an out socket strikes the drum; T/P/M send it nothing",
-  ["D|G"] = "the pulse strikes the drum, which answers with a pulse of its own",
-  ["R|G"] = "the transformed pulse strikes the drum, which answers in turn",
-  ["S|G"] = "the drum's answering pulse fires the grain",
-  ["H|G"] = "a pulse out of the lattice strikes the drum, which answers into the lattice",
-  ["F|G"] = "the drum's answering pulse steps the field",
-  ["C|G"] = "no meaning: a G cell has no single knob for the weather to walk",
-  ["G|G"] = "one drum's answering pulse strikes the next",
-  -- §2.3b: a TM cell is a pulse cell like D and R, but has no gait of its own
-  -- -- every pulse that reaches it is one clock edge for its shift register,
-  -- and its own answering pulse is gated by whichever bit its Tap knob picks.
-  -- on a P socket it is also a pitch source in its own right, summed
-  -- alongside whatever fields are cabled there (§2.6).
-  ["node|TM"] = "pulse strikes / chokes / re-rolls, by socket; on P it also feeds the register's own pitch",
+  ["D|C"] = "no meaning: a clock cell is a pure source",
+  -- §2.7b: a GVOICE cell has no sockets, so it is struck directly and
+  -- answers with its own pulse out, the same shape as an R cell's transform.
+  ["D|GVOICE"] = "the pulse strikes it, which answers with a pulse of its own",
+  ["R|GVOICE"] = "the transformed pulse strikes it, which answers in turn",
+  ["E|GVOICE"] = "the drum's answering pulse fires the grain",
+  ["H|GVOICE"] = "a pulse out of the lattice strikes it, which answers into the lattice",
+  ["F|GVOICE"] = "the drum's answering pulse steps the field",
+  ["GVOICE|GVOICE"] = "one drum's answering pulse strikes the next",
+  ["GVOICE|O"] = "the drum's audio reaches the speakers at this cell's pan position",
+  -- §2.3b: a TM cell is a pulse cell like D and R, but has no gait of its
+  -- own -- every pulse that reaches it is one clock edge for its shift
+  -- register, and its own answering pulse is gated by whichever bit its Tap
+  -- knob picks. it is also a pitch source in its own right when cabled to a
+  -- voice, summed alongside whatever fields are cabled there (§2.6).
   ["D|TM"] = "the pulse clocks the register, which answers with a pulse of its own",
   ["R|TM"] = "the transformed pulse clocks the register, which answers in turn",
-  ["S|TM"] = "the register's answering pulse fires the grain",
+  ["E|TM"] = "the register's answering pulse fires the grain",
   ["H|TM"] = "a pulse out of the lattice clocks the register",
-  ["F|TM"] = "no meaning: TM takes a trigger, not a field -- cable it to a P socket for pitch instead",
-  ["C|TM"] = "no meaning: a TM cell has no single knob for the weather to walk",
-  ["TM|G"] = "the register's answering pulse strikes the drum, which answers in turn",
+  ["F|TM"] = "no meaning: TM takes a trigger, not a field",
+  ["TM|GVOICE"] = "the register's answering pulse strikes it, which answers in turn",
   ["TM|TM"] = "each register's answering pulse clocks the other -- a mutual, evolving loop",
+  -- Clock cells: pure sources, flash on a multiple/division of the master
+  -- clock, feed anything pulse-shaped.
+  ["C|C"] = "no meaning: a clock cell has nothing to gate",
+  ["C|R"] = "the clock's pulse goes through the transform on its way out",
+  ["C|GVOICE"] = "the clock's pulse strikes it, which answers with a pulse of its own",
+  ["C|E"] = "the clock's pulse envelopes the stream into a grain",
+  ["C|H"] = "the clock's pulse enters the lattice",
+  ["C|F"] = "each clock pulse steps the field to a new degree",
+  ["C|TM"] = "the clock's pulse clocks the register",
+  ["C|SEQ"] = "the clock drives the lane, or fires one step directly",
+  -- Q4/Q6 lanes: a pulse on the last cell of a lane advances the shared
+  -- playhead; a pulse on any other cell fires that step directly.
+  ["D|SEQ"] = "the pulse drives the lane, or fires one step directly",
+  ["R|SEQ"] = "the transformed pulse drives the lane, or fires one step",
+  ["TM|SEQ"] = "the register's answering pulse drives the lane, or fires one step",
+  ["GVOICE|SEQ"] = "the drum's answering pulse drives the lane, or fires one step",
+  ["H|SEQ"] = "a pulse out of the lattice drives the lane, or fires one step",
+  ["SEQ|SEQ"] = "one lane's firing step can drive or fire a step in the other",
+  ["E|SEQ"] = "no meaning: an exciter has no pulse of its own to send",
+  ["F|SEQ"] = "no meaning: a field never emits a pulse",
+}
+
+local TYPE_ORDER = {
+  voice = 1, D = 2, R = 3, E = 4, H = 5, F = 6, C = 7, TM = 8, GVOICE = 9,
+  SEQ = 10, O = 11,
 }
 
 local function interaction_text(ta, tb)
-  local order = {node = 1, D = 2, R = 3, S = 4, H = 5, F = 6, C = 7, TM = 8}
   local a, b = ta, tb
-  if (order[a] or 9) > (order[b] or 9) then a, b = b, a end
+  if (TYPE_ORDER[a] or 99) > (TYPE_ORDER[b] or 99) then a, b = b, a end
   return INTERACTION_DESC[a .. "|" .. b] or "no direct interaction defined"
 end
 

@@ -1,5 +1,8 @@
 arg = {os.getenv("ROOT")}
 dofile(os.getenv("SP") .. "/harness.lua")
+-- the re-cut's population: 16 O + 4 voice + 8 D + 4 TM + 4 C(clock) + 4 H +
+-- 4 F(grove) + 6 R + 6 GVOICE + 6 E + 10 SEQ = 72 live cells (Climate, and
+-- its 8 cells, are gone entirely).
 local function bench(label, setup, scatter)
   local M = fresh(2)
   if scatter then M.state.global.scatter = scatter end
@@ -12,16 +15,17 @@ local function bench(label, setup, scatter)
 end
 bench("idle, no cables", function() end)
 bench("modest patch (6 cables)", function(M)
-  M.patch.add("d.knocker", "oak.trig", 0.8)
-  M.patch.add("d.hob", "rowan.trig", 0.8)
-  M.patch.add("d.knocker", "d.hob", 0.5)
+  M.patch.add("d.hob", "oak", 0.8)
+  M.patch.add("d.grim", "rowan", 0.8)
+  M.patch.add("d.hob", "d.grim", 0.5)
   M.patch.add("d.gabriel", "d.hunt", -0.7)
-  M.patch.add("d.gabriel", "hazel.trig", 0.6)
-  M.patch.add("d.shuck", "alder.trig", 0.9)
+  M.patch.add("d.gabriel", "hazel", 0.6)
+  M.patch.add("d.shuck", "alder", 0.9)
 end)
 -- the lattice is the one thing that adds work to the tick without a D cell
--- doing anything, so it gets its own row: eight nodes at full conductance,
--- every one of them cabled, fed continuously.
+-- doing anything, so it gets its own row. Heartwood trimmed from a ring of 8
+-- to a chain of 4 -- still every node cabled, fed continuously, at full
+-- conductance.
 bench("heartwood, full conductance", function(M)
   local hs = {}
   for id, c in M.topology.each() do
@@ -31,28 +35,26 @@ bench("heartwood, full conductance", function(M)
     end
   end
   M.patch.add("d.gabriel", hs[1], 1.0)
-  M.patch.add("d.hunt", hs[5], 1.0)
-  M.patch.add(hs[2], "oak.trig", 0.8)
-  M.patch.add(hs[4], "rowan.trig", 0.8)
-  M.patch.add(hs[6], "alder.trig", 0.8)
-  M.patch.add(hs[8], "s.bracken", 0.8)
-  M.patch.add(hs[1], hs[5], 0.6) -- a shortcut across the ring
+  M.patch.add("d.hunt", hs[3], 1.0)
+  M.patch.add(hs[2], "oak", 0.8)
+  M.patch.add(hs[4], "rowan", 0.8)
+  M.patch.add(hs[1], hs[4], 0.6) -- a shortcut across the chain
 end)
 
 -- the grove's continuous half is the other thing that costs something with
--- no D cell involved: eight fields, all cabled to voices and to each other,
--- every one of them at full range.
-bench("grove, all 8 fields cabled", function(M)
+-- no D cell involved. trimmed from 8 fields to 4 -- still every one of them
+-- cabled to a voice and to each other, at full range.
+bench("grove, all 4 fields cabled", function(M)
   local ps, voices = {}, {}
   for id, c in M.topology.each() do
     if c.type == "F" then table.insert(ps, id); M.state.character[id] = 1.0 end
     if c.type == "voice" then table.insert(voices, id) end
   end
   for i, id in ipairs(ps) do
-    M.patch.add(id, voices[((i - 1) % #voices) + 1] .. ".pitch", 0.8)
+    M.patch.add(id, voices[((i - 1) % #voices) + 1], 0.8)
     M.patch.add(id, ps[(i % #ps) + 1], 0.6)
   end
-  M.patch.add("d.gabriel", "oak.trig", 0.9)
+  M.patch.add("d.gabriel", "oak", 0.9)
 end)
 
 bench("saturated (all 8 D ringed)", function(M)
@@ -60,7 +62,7 @@ bench("saturated (all 8 D ringed)", function(M)
   for id, c in M.topology.each() do if c.type == "D" then table.insert(ds, id) end end
   for i, id in ipairs(ds) do M.patch.add(id, ds[(i % #ds) + 1], 0.9) end
   for i = 1, 6 do M.patch.add(ds[i], ds[((i + 4) % #ds) + 1], 0.5) end
-  M.patch.add(ds[1], "oak.trig", 0.9)
+  M.patch.add(ds[1], "oak", 0.9)
 end)
 
 -- the quantised path is the one added in phase 5c: at Scatter=0 every emission
@@ -75,42 +77,55 @@ local function saturated(M)
     if cell.type == "D" then table.insert(ds, id) end
   end
   for i, id in ipairs(ds) do M.patch.add(id, ds[(i % #ds) + 1], 0.9) end
-  M.patch.add(ds[1], "oak.trig", 0.9)
-  M.patch.add(ds[6], "rowan.trig", 0.9)
-  M.patch.add(ds[8], "hazel.mod", 0.9)
+  M.patch.add(ds[1], "oak", 0.9)
+  M.patch.add(ds[6], "rowan", 0.9)
+  M.patch.add(ds[8], "hazel", 0.9)
 end
 bench("saturated, quantised (Scatter=0)", saturated, 0)
 bench("saturated, mid (Scatter=0.5)", saturated, 0.5)
 bench("saturated, loose (Scatter=1)", saturated, 1.0)
 
--- the weave is the other thing the re-cut added to the tick: twenty cells,
--- each of them capable of putting more taps in the queue than it took out.
--- this is the worst case on purpose -- one fast gait feeding a chain of the
--- multiplying rules, every one of them landing on a voice.
-bench("weave, a chain of ten", function(M)
+-- the weave is the other thing the re-cut added to the tick: each cell
+-- capable of putting more taps in the queue than it took out. trimmed from
+-- 14 to 6 -- this is still the worst case on purpose -- one fast gait
+-- feeding a chain of the multiplying rules across all six survivors, landing
+-- on a voice.
+bench("weave, a chain of six", function(M)
   local rs = {}
   for id, c in M.topology.each() do if c.type == "R" then table.insert(rs, id) end end
-  local rules = {"mult", "echo", "flam", "ghost", "roll",
-                 "delay", "swing", "blur", "accent", "fill"}
+  local rules = {"mult", "echo", "roll", "flam", "ghost"}
   M.patch.add("d.gabriel", rs[1], 0.9)
   for i, rule in ipairs(rules) do
     M.weave.set_rule(rs[i], rule)
     M.patch.add(rs[i], rs[i + 1], 0.8)
   end
-  M.patch.add(rs[#rules + 1], "oak.trig", 0.9)
+  M.weave.set_rule(rs[#rs], "accent")
+  M.patch.add(rs[#rs], "oak", 0.9)
 end)
 
--- and the climate, which costs nothing per pulse and a little per tick: all
--- eight of them at the fast end of the knob, reaching everything they can.
-bench("climate, all 8 at full rate", function(M)
+-- Climate is gone entirely; the letter is reused for the new Clock cells,
+-- which cost nothing per pulse and a little per tick, same shape Climate
+-- used to. all four of them at the fastest ratio, reaching every D and E
+-- cell they can.
+bench("clock, all 4 at full rate", function(M)
   local cs, targets = {}, {}
   for id, c in M.topology.each() do
-    if c.type == "C" then table.insert(cs, id); M.state.character[id] = 0 end
-    if c.type == "D" or c.type == "S" then table.insert(targets, id) end
+    if c.type == "C" then table.insert(cs, id); M.state.character[id] = 1.0 end
+    if c.type == "D" or c.type == "E" then table.insert(targets, id) end
   end
   for i, id in ipairs(cs) do
     M.patch.add(id, targets[i], 0.8)
-    M.patch.add(id, targets[i + 8], 0.6)
+    M.patch.add(id, targets[i + 4], 0.6)
   end
-  M.patch.add("d.gabriel", "oak.trig", 0.9)
+  M.patch.add("d.gabriel", "oak", 0.9)
+end)
+
+-- the step sequencers are the other new thing: two lanes, ten cells between
+-- them, a driver in each firing the shared playhead at the fastest rate a D
+-- cell can push it.
+bench("sequencer, both lanes driven", function(M)
+  M.patch.add("d.gabriel", "q4.4", 0.9)  -- q4's driver
+  M.patch.add("d.hunt", "q6.6", 0.9)     -- q6's driver
+  M.patch.add("q4.4", "oak", 0.8)
+  M.patch.add("q6.6", "rowan", 0.8)
 end)

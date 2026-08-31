@@ -44,10 +44,10 @@ grid = {connect = function() return {key = nil, led = function() end, all = func
 
 local function fresh_calls()
   return {
-    strike = {}, choke = {},
+    strike = {},
     exciter_on = {}, exciter_off = {}, exciter_colour = {}, exciter_gated = {}, exciter_gate = {},
     patch_add = {}, patch_gain = {}, patch_free = {},
-    voice_mod = {}, voice_tap = {}, voice_structure = {},
+    voice_mod = {}, voice_structure = {},
     heart_conductance = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
@@ -62,8 +62,6 @@ engine = setmetatable({}, {__index = function(_, k)
     local a = {...}
     if k == "strike" then
       table.insert(CALLS.strike, {t = T, voice = a[1], force = a[2]})
-    elseif k == "voice_choke" then
-      table.insert(CALLS.choke, {t = T, voice = a[1], depth = a[2]})
     elseif k == "exciter_on" then
       table.insert(CALLS.exciter_on, {t = T, index = a[1]})
     elseif k == "exciter_off" then
@@ -82,8 +80,6 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.patch_free, {t = T, id = a[1]})
     elseif k == "voice_mod" then
       table.insert(CALLS.voice_mod, {t = T, voice = a[1], v = a[2]})
-    elseif k == "voice_tap" then
-      table.insert(CALLS.voice_tap, {t = T, voice = a[1], v = a[2]})
     elseif k == "voice_structure" then
       table.insert(CALLS.voice_structure, {t = T, voice = a[1], v = a[2]})
     elseif k == "heart_conductance" then
@@ -142,9 +138,9 @@ function fresh(seed)
   _canopy_mods = {}
   local M = {}
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
-                      "lexicon", "heartwood", "grove", "climate", "weave",
+                      "lexicon", "heartwood", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
-                      "gparam", "tm"}) do
+                      "gparam", "tm", "sequencer"}) do
     M[n] = wl(n)
   end
   return M

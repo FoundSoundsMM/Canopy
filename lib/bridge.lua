@@ -8,23 +8,29 @@
 
 local bridge = {}
 
--- offsets into Engine_Canopy.sc's single 64-channel `patchBus` (see the
--- classvar block at the top of that file). dispatch.lua resolves a cabled
--- pair's endpoints to {bus name, per-cell index} and calls bridge.bus() to
--- get the absolute number patch_add/patch_gain/patch_free expect. keep the
--- base/n pairs here identical to the .sc file's excBase/modInBase/etc.
+-- offsets into Engine_Canopy.sc's single `patchBus` (see the classvar block
+-- at the top of that file). dispatch.lua resolves a cabled pair's endpoints
+-- to {bus name, per-cell index} and calls bridge.bus() to get the absolute
+-- number patch_add/patch_gain/patch_free expect. keep the base/n pairs here
+-- identical to the .sc file's excBase/modInBase/etc.
 --
--- the re-cut collapsed the three per-voice modulation buses (Sap/Sway/Moss)
--- into the single `mod_in` a voice's M socket owns, and added `voice_out` --
--- the O socket's audio tap, which is what makes voice<->voice feedback a
--- cable rather than a phase-7 promise.
+-- the grid overhaul's socket collapse means a voice's own audio tap
+-- (`voice_out`) is now its only cable endpoint's continuous half, reached
+-- from `mod_in` (another voice, unconditionally now) and from `out` (the
+-- Output row -- the only way any of this is ever heard, since nothing
+-- routes there automatically any more). `gvoice_out` is new for the same
+-- reason: the six percussion cells used to reach the speakers through a
+-- fixed always-on mix; now they need an addressable tap of their own, same
+-- shape as a voice's.
 bridge.BUS = {
-  exc        = {base = 0,  n = 20}, -- S cell raw outputs
-  colour_mod = {base = 20, n = 20}, -- per-S colour cross-mod sum
-  mod_in     = {base = 40, n = 4},  -- per-voice M socket input sum
-  voice_out  = {base = 44, n = 4},  -- per-voice O socket audio tap
-  heart_in   = {base = 48, n = 8},  -- per-H lattice injection sum
-  heart_out  = {base = 56, n = 8},  -- per-H lattice emergence tap
+  exc        = {base = 0,  n = 6},  -- E cell raw outputs
+  colour_mod = {base = 6,  n = 6},  -- per-E colour cross-mod sum
+  mod_in     = {base = 12, n = 4},  -- per-voice mod-path input sum
+  voice_out  = {base = 16, n = 4},  -- per-voice audio tap
+  gvoice_out = {base = 20, n = 6},  -- per-GVOICE (percussion) audio tap
+  heart_in   = {base = 26, n = 4},  -- per-H lattice injection sum
+  heart_out  = {base = 30, n = 4},  -- per-H lattice emergence tap
+  out        = {base = 34, n = 16}, -- the Output row's 16 fixed-pan buses
 }
 
 function bridge.bus(name, index)
@@ -96,26 +102,20 @@ function bridge.voice_modes(voice_index, n)
   engine.voice_modes(voice_index, n)
 end
 
--- §2.2 M socket: "a pulse chokes it". the duck envelope itself is in SC;
--- this only says when, how deep, and for how long.
-function bridge.voice_choke(voice_index, depth, time)
-  engine.voice_choke(voice_index, depth, time)
-end
-
--- §2.2 M socket, stream half: one balance knob deciding what a stream landing
--- on this voice does -- 0 injects it into the resonator as excitation, 1
--- lands it on the body as damping/brightness/structure bend, and everything
--- between is a mix of the two.
+-- the collapsed point's stream half: one balance knob (the sound page's
+-- Balance row) deciding what a stream landing on this voice does -- 0
+-- injects it into the resonator as excitation, 1 lands it on the body as
+-- damping/brightness/structure bend, and everything between is a mix of the
+-- two. discrete choke is gone with the socket that used to carry it -- every
+-- pulse strikes now (see dispatch.lua).
 function bridge.voice_mod(voice_index, balance)
   engine.voice_mod(voice_index, balance)
 end
 
--- §2.2 O socket, stream half: how loud this voice's audio tap is on the
--- patch bus. the pulse half of the same socket never reaches the engine at
--- all -- Lua knows when it struck the voice, so it emits that pulse itself.
-function bridge.voice_tap(voice_index, level)
-  engine.voice_tap(voice_index, level)
-end
+-- the voice's own audio tap onto its `voice_out` bus runs at a fixed level --
+-- there is no separate output-level knob any more, since the Output row's
+-- own cable gain is what decides how loud a voice is at each pan position it
+-- reaches (or whether it's heard at all).
 
 -- FM addendum: voice_fm's ratio/depth are engine-level knobs, not (yet) a
 -- patchable cable -- see docs/canopy-spec.md §8. depth=0 is a no-op.

@@ -49,14 +49,14 @@ local function voices()
   return ids
 end
 
--- the global Decay macro (below) reaches the six G cells too -- gvoice.lua's
+-- the global Decay macro (below) reaches the GVOICE cells too -- gvoice.lua's
 -- decay_seconds() already folds voice.decay_mult_ratio() in, same as
 -- voice.lua's own does, so this is the only other place that needs to know
 -- they exist as well as the four corner voices.
 local function sounding_cells()
   local ids = {}
   for id, cell in topology.each() do
-    if cell.type == "voice" or cell.type == "G" then table.insert(ids, id) end
+    if cell.type == "voice" or cell.type == "GVOICE" then table.insert(ids, id) end
   end
   return ids
 end

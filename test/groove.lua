@@ -9,9 +9,9 @@ local ROOT = os.getenv("ROOT")
 arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
-local KNOCKER, HOB, SHUCK = "d.knocker", "d.hob", "d.shuck"
+local KNOCKER, GRIM, SHUCK = "d.hob", "d.grim", "d.shuck"
 local BOGGART, GABRIEL = "d.boggart", "d.gabriel"
-local KNOCK = "oak.trig"
+local KNOCK = "oak"
 
 -- every division the quantiser can pick is a whole number of 64th notes, so
 -- "on the grid" is one test whatever grid a given cell ended up on.
@@ -102,13 +102,13 @@ do
   -- and a slow one, none of them rooted.
   M.rambler.set_gait(KNOCKER, "metric")
   M.state.character[KNOCKER] = 0.125       -- 1/3 x beat: deliberately off-grid
-  M.rambler.set_gait(HOB, "drifter")
-  M.state.character[HOB] = 0.63            -- 5.2 Hz
+  M.rambler.set_gait(GRIM, "drifter")
+  M.state.character[GRIM] = 0.63            -- 5.2 Hz
   M.rambler.set_gait(SHUCK, "slow")
   M.state.character[SHUCK] = 0.7           -- 0.36 Hz
   M.patch.add(KNOCKER, KNOCK, 1.0)
-  M.patch.add(HOB, "rowan.trig", 1.0)
-  M.patch.add(SHUCK, "hazel.trig", 1.0)
+  M.patch.add(GRIM, "rowan", 1.0)
+  M.patch.add(SHUCK, "hazel", 1.0)
   run(M, 20)
 
   local voices = {}
