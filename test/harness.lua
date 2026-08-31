@@ -21,6 +21,12 @@ function clock.sleep() end
 metro = {}
 function metro.init() return {start = function() end, stop = function() end} end
 
+poll = {}
+function poll.set(name, callback)
+  return {name = name, callback = callback, time = 0.1,
+          start = function() end, stop = function() end}
+end
+
 -- the clock_tempo param E3 writes through. the real one lives in norns'
 -- PARAMS menu; here it just moves the harness's own TEMPO.
 params = {

@@ -404,6 +404,7 @@ function init()
   heartwood.init()
   grove.init()
   gparam.init() -- adopts the clock's tempo, pushes the other eight (§5.2)
+  exciter.start_meters() -- §7.4: per-exciter activity polls
   bridge.master_level(state.global.level)
   rambler.start()
 end

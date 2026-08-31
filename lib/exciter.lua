@@ -109,4 +109,32 @@ end)
 
 patch.on_change(exciter.resync)
 
+-- §7.4 metering back-channel: one poll per exciter (Engine_Woodland.sc's
+-- \wl_exc_meter synth + its addPoll loop, named "exc_lvl_<index>" to match
+-- this cell's own `index`). folded straight into the same decaying flash a
+-- grain-fire already uses (state.flash, shared with rambler/weave/heartwood)
+-- rather than a parallel brightness path -- a free-running exciter's
+-- continuous level and a gated one's discrete hits both just light the cell,
+-- whichever last touched it.
+local METER_HZ = 20
+-- every recipe's Out.ar already ends with its own headroom multiplier, so a
+-- typically-active exciter's raw amplitude sits well under 1 -- this is a
+-- cosmetic gain to bring that back up into a brightness-worth range, tuned
+-- by eye like exciter.DECAY_OCTAVES above.
+local METER_GAIN = 5
+
+function exciter.start_meters()
+  for id, cell in topology.each() do
+    if cell.type == "S" then
+      local p = poll.set("exc_lvl_" .. cell.index, function(v)
+        state.flash(id, util.clamp(v * METER_GAIN, 0, 1))
+      end)
+      if p then
+        p.time = 1 / METER_HZ
+        p:start()
+      end
+    end
+  end
+end
+
 return exciter

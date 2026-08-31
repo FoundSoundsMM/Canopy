@@ -26,12 +26,13 @@
 
 Engine_Woodland : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
-	var voiceBus, patchBus;
+	var voiceBus, patchBus, excMeterBus;
 	var voiceSynths;
 	var excSynths;
 	var patchSynths;
 	var heartSynth;
 	var fxSynth;
+	var excMeterSynth;
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
 	// §8 "per-voice defaults" table. keep freq/structureBase/dampBase/decay in
@@ -93,6 +94,11 @@ Engine_Woodland : CroneEngine {
 		voiceBus = Bus.audio(server, nVoices);
 		// see the classvar block above for the six sub-ranges packed in here
 		patchBus = Bus.audio(server, patchTotal);
+		// §7.4 metering back-channel: one control-rate channel per exciter,
+		// read synchronously off the shared-memory server interface by the
+		// addPoll funcs below -- no OSC round trip, so twenty of them every
+		// poll tick is cheap.
+		excMeterBus = Bus.control(server, nExc);
 
 		SynthDef(\woodland_voice, {
 			arg out=0, tapOut=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
@@ -635,6 +641,16 @@ Engine_Woodland : CroneEngine {
 			Out.ar(dst, LPF.ar(Amplitude.ar(InFeedback.ar(src, 1), 0.01, 0.1), 20) * gain);
 		}).add;
 
+		// §7.4: an envelope follower per exciter, plain In.ar (not
+		// InFeedback) because this lives in gTap, which runs after gSrc --
+		// the twenty exciters have already written this block's audio by the
+		// time it reads them. one control-rate channel out per exciter, for
+		// the addPoll funcs below to read synchronously.
+		SynthDef(\wl_exc_meter, { arg in=0, out=0;
+			var sig = In.ar(in, nExc);
+			Out.kr(out, Amplitude.kr(sig, 0.005, 0.2));
+		}).add;
+
 		server.sync;
 
 		voiceSynths = Array.newClear(nVoices);
@@ -670,6 +686,26 @@ Engine_Woodland : CroneEngine {
 			\busIn, voiceBus.index,
 			\out, context.out_b.index
 		], gFx);
+
+		// gTap: after gVoice (so the exciter meters below share the group
+		// this file has kept reserved for taps), reading the exciters' own
+		// audio written earlier this block by gSrc.
+		excMeterSynth = Synth.new(\wl_exc_meter, [
+			\in, patchBus.index + excBase,
+			\out, excMeterBus.index
+		], gTap);
+
+		// §7.4: one scalar poll per exciter, named to match its S-cell
+		// index (bridge.lua / topology.lua's `cell.index`, 0-based) so
+		// exciter.lua can start them by number without a name table on
+		// either side. getControlBusValue reads the shared-memory control
+		// bus directly -- no OSC round trip -- so twenty of these on
+		// independent poll timers costs nothing worth measuring.
+		nExc.do({ |i|
+			this.addPoll(("exc_lvl_" ++ i).asSymbol, {
+				server.getControlBusValue(excMeterBus.index + i)
+			});
+		});
 
 		// strike(voice, force, hardness, position)
 		this.addCommand("strike", "ifff", { |msg|
@@ -945,8 +981,10 @@ Engine_Woodland : CroneEngine {
 		patchSynths.do({ |s| if (s.notNil) { s.free } });
 		if (heartSynth.notNil) { heartSynth.free };
 		if (fxSynth.notNil) { fxSynth.free };
+		if (excMeterSynth.notNil) { excMeterSynth.free };
 		voiceBus.free;
 		patchBus.free;
+		excMeterBus.free;
 		gFx.free;
 		gTap.free;
 		gVoice.free;
