@@ -235,9 +235,16 @@ Engine_Woodland : CroneEngine {
 
 		SynthDef(\woodland_fx, {
 			arg busIn=0, out=0, size=0.5, damp=0.5, mix=0.3, level=0.8, compAmt=0;
-			var dry = In.ar(busIn, 4).sum;
+			var voices = In.ar(busIn, 4);
+			// fixed stereo placement, oak/rowan (1, 4) slightly left, hazel/alder
+			// (2, 3) slightly right -- a small spread so the four voices aren't
+			// stacked in the centre. Pan2.ar keeps `dry` a 2-channel signal, so
+			// FreeVerb below runs one instance per side instead of one mono verb
+			// duplicated to both speakers.
+			var panPos = [-0.25, 0.25, 0.25, -0.25];
+			var dry = Mix.ar(Array.fill(4, { |i| Pan2.ar(voices[i], panPos[i]) }));
 			var wet = FreeVerb.ar(dry, mix, size, damp);
-			var sig = (wet * level) ! 2;
+			var sig = wet * level;
 			// §4.1 Output compressor: a bus glue stage on the final mix, not a
 			// per-voice one -- threshold and ratio both ride compAmt so 0 is a
 			// true bypass (threshold 1, ratio 1) and 1 is a hard, fast-ish
