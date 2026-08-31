@@ -29,14 +29,22 @@ do
   local names, n = {}, 0
   for k in pairs(M) do table.insert(names, k) n = n + 1 end
   table.sort(names)
-  -- climate.lua is gone; clockcell.lua, sequencer.lua and cellparam.lua are
-  -- new. the offline harness's own fresh() pulls in 19 core modules
-  -- (topology, patch, state, bridge, quantise, lexicon, heartwood, grove,
-  -- clockcell, weave, dispatch, voice, gvoice, rambler, exciter, gparam, tm,
-  -- sequencer, cellparam); this is a cold load of the real Canopy.lua, so it
-  -- also pulls in the two UI-layer modules those other tests never touch --
-  -- gridui and screenui -- for 21.
-  check("all 21 modules memoised, one copy each", n == 21, table.concat(names, ","))
+  -- what a cold load of the real Canopy.lua actually pulls in. an exact list
+  -- rather than a count, because a count hides exactly the mistake it is
+  -- there to catch: mixer.lua arriving and lexicon.lua dropping out of the
+  -- load (screenui stopped requiring it when the cell page lost its
+  -- description line -- cellparam still fetches it lazily, on the first cell
+  -- page drawn) both happened at once, and left the total unchanged at 21.
+  local WANT = {
+    "bridge", "cellparam", "clockcell", "dispatch", "exciter", "gparam",
+    "gridui", "grove", "gvoice", "heartwood", "mixer", "patch", "quantise",
+    "rambler", "screenui", "sequencer", "state", "tm", "topology", "voice",
+    "weave",
+  }
+  check("exactly the expected modules, one copy each",
+        table.concat(names, ",") == table.concat(WANT, ","),
+        table.concat(names, ","))
+  check("and no module was loaded twice", n == #WANT, tostring(n))
 end
 
 -- the whole point of the memo: one graph, seen by everyone
@@ -140,6 +148,15 @@ end
 -- §4.1/§5.2: the global param page has the encoders with nothing held.
 -- BPM is gparam.PARAMS[1], so it's already focused from a fresh load.
 do
+  -- the blind key sweep above pressed K3, which is the mixer now (§4.1b), so
+  -- this is on the mixer page rather than the global one. that is the new
+  -- behaviour working, not an accident -- assert it, then come back the way
+  -- a player would.
+  check("the key sweep left us on the mixer", M.state.view == "mixer",
+        tostring(M.state.view))
+  key(2, 1); key(2, 0)
+  check("and K2 came back", M.state.view == "global", tostring(M.state.view))
+
   check("BPM is focused by default", M.state.gparam_focus == 1,
         tostring(M.state.gparam_focus))
   local before = M.state.global.bpm
@@ -158,7 +175,7 @@ do
   enc(2, -6)
 
   enc(1, 1)
-  check("E1 walks the nine global params", M.state.gparam_focus == 2,
+  check("E1 walks the global params", M.state.gparam_focus == 2,
         tostring(M.state.gparam_focus))
   enc(1, -1)
 end

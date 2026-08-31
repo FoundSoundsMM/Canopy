@@ -15,6 +15,14 @@ local state = {}
 state.cell_edit = nil
 state.vparam_focus = 1
 
+-- §5.2b which of the two full-screen pages the encoders and the screen are
+-- on when no cell page is open: "global" (the seven macros) or "mixer" (the
+-- four soundscape loops, lib/mixer.lua). K3 goes to the mixer from anywhere,
+-- K2 comes back -- and K3 from an open cell page goes to the mixer *and*
+-- drops the cell's focus, so there is never a page hiding behind the mixer.
+state.view = "global"
+state.mparam_focus = 1
+
 -- §4.1/§5.2 the global param page (nothing held, no voice page open): E1
 -- walks gparam.PARAMS, E2/E3 nudge coarse/fine. replaced the network/wires
 -- map -- see lib/gparam.lua.
@@ -25,8 +33,8 @@ state.gparam_focus = 1
 -- them as independent params, so quantise.lua and every rhythm/field
 -- "wildness" read in rambler.lua/grove.lua that used to share the one
 -- weather value now reads `scatter` directly. (`scatter` was called `rain`
--- until the actual Rain.wav ambience below took that name for something
--- literal.)
+-- until the Rain.wav ambience -- now one of the mixer's four loops, see
+-- lib/mixer.lua -- took that name for something literal.)
 state.global = {
   swing = 0.8,       -- quantise.lua's swing() -- preserves the old default feel
   scatter = 0,       -- quantise.lua's chaos(), plus rhythm/field wildness
@@ -35,10 +43,18 @@ state.global = {
   drops = 0,         -- per-strike random pitch offset range
   decay_mult = 0.5,  -- global decay multiplier, 0.5 = x1 (voice.lua)
   pitch_offset = 0,  -- global transpose, semitones (grove.lua)
-  rain_volume = 0,   -- the always-on Rain.wav ambience, dry level. off by default.
-  rain_excite = 0,   -- how much that same audio excites the four resonators
-  level = 0.8,       -- K1+E3: master level
-  still = false,     -- K2: freeze all pulse gaits
+  level = 0.8,       -- K1+E3, and the mixer's fifth fader: master level
+  -- §4.3: the ONE flag a freeze lives in, whether it came from K2 or from an
+  -- external transport Stop. deliberately not two -- a separate record of
+  -- "the transport says stopped" alongside "the gaits are frozen" is two
+  -- things that can disagree, and the whole point is that they cannot.
+  still = false,     -- K2, or an external transport Stop: freeze all gaits
+  -- §4.1b the mixer's faders, keyed by mixer.LOOPS' `key`. the single
+  -- `rain_volume` these replaced lived here too (as did `rain_excite`,
+  -- which has no successor -- the loops are a dry mix only now).
+  -- lib/mixer.lua owns the defaulting, so this starts empty rather than
+  -- naming four loops this file has no other business knowing about.
+  amb_level = {},    -- loop key -> dry level in the mix. all off by default.
 }
 
 -- grid hold tracking

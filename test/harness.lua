@@ -17,6 +17,10 @@ function clock.get_beats() return T * TEMPO / 60 end
 function clock.run(f) return 1 end
 function clock.cancel() end
 function clock.sleep() end
+-- §4.3: norns' transport callbacks. the real ones are stubs a script
+-- overwrites; so are these, and test/transport.lua calls them by hand.
+clock.transport = {start = function() end, stop = function() end,
+                   reset = function() end}
 
 metro = {}
 function metro.init() return {start = function() end, stop = function() end} end
@@ -27,14 +31,23 @@ function poll.set(name, callback)
           start = function() end, stop = function() end}
 end
 
--- the clock_tempo param E3 writes through. the real one lives in norns'
--- PARAMS menu; here it just moves the harness's own TEMPO.
+-- the clock_tempo param E3 writes through, and the clock_source param
+-- gparam.external_clock reads. the real ones live in norns' PARAMS menu;
+-- here they are two numbers a test can move. CLOCK_SOURCE follows norns'
+-- own list: 1 internal, 2 midi, 3 link, 4 crow.
+CLOCK_SOURCE = 1
 params = {
-  set = function(_, k, v) if k == "clock_tempo" then TEMPO = v end end,
-  get = function(_, k) if k == "clock_tempo" then return TEMPO end end,
+  set = function(_, k, v)
+    if k == "clock_tempo" then TEMPO = v
+    elseif k == "clock_source" then CLOCK_SOURCE = v end
+  end,
+  get = function(_, k)
+    if k == "clock_tempo" then return TEMPO
+    elseif k == "clock_source" then return CLOCK_SOURCE end
+  end,
 }
 
--- norns' global paths table. only `.code` is used (Canopy.lua's rain_load
+-- norns' global paths table. only `.code` is used (Canopy.lua's mixer.init
 -- call) and only for string concatenation -- nothing here touches disk.
 _path = {code = "/home/we/dust/code/"}
 
@@ -56,7 +69,7 @@ local function fresh_calls()
     heart_conductance = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
-    rain_load = {}, rain_volume = {}, rain_excite = {},
+    amb_load = {}, amb_volume = {},
     g_strike = {}, g_pitch = {}, g_decay = {}, g_tone = {}, g_punch = {},
     g_drive = {}, g_amp = {},
   }
@@ -101,12 +114,10 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.exciter_decay, {t = T, index = a[1], scale = a[2]})
     elseif k == "voice_bend" then
       table.insert(CALLS.voice_bend, {t = T, voice = a[1], v = a[2]})
-    elseif k == "rain_load" then
-      table.insert(CALLS.rain_load, {t = T, path = a[1]})
-    elseif k == "rain_volume" then
-      table.insert(CALLS.rain_volume, {t = T, v = a[1]})
-    elseif k == "rain_excite" then
-      table.insert(CALLS.rain_excite, {t = T, v = a[1]})
+    elseif k == "amb_load" then
+      table.insert(CALLS.amb_load, {t = T, index = a[1], path = a[2]})
+    elseif k == "amb_volume" then
+      table.insert(CALLS.amb_volume, {t = T, index = a[1], v = a[2]})
     elseif k == "g_strike" then
       table.insert(CALLS.g_strike, {t = T, index = a[1], force = a[2]})
     elseif k == "g_pitch" then
@@ -139,13 +150,15 @@ end
 function fresh(seed)
   math.randomseed(seed or 1)
   T = 0
+  TEMPO = 120
+  CLOCK_SOURCE = 1
   CALLS = fresh_calls()
   _canopy_mods = {}
   local M = {}
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "heartwood", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
-                      "gparam", "tm", "sequencer", "cellparam"}) do
+                      "gparam", "mixer", "tm", "sequencer", "cellparam"}) do
     M[n] = wl(n)
   end
   return M

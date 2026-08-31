@@ -88,7 +88,13 @@ function gridui.on_grid_key(x, y, z, keystate)
       local anchor_cell = topology.get(anchor)
       local oneway = keystate and keystate.k1
       local result = patch.toggle(anchor, id, oneway, 0.6)
-      local verb = (result == "added") and "->" or (result == "removed") and "x" or nil
+      -- "moved" is patch.lua's Output-row exclusivity (§2.1): the source was
+      -- already on the row, so this tap slid it to a new pan position rather
+      -- than adding a second one. worth its own word -- the cable count did
+      -- not change and one of the lit cells just went dark.
+      local verb = (result == "added") and "->"
+                or (result == "moved") and "=>"
+                or (result == "removed") and "x" or nil
       if verb then
         state.set_event(anchor_cell.name .. " " .. verb .. " " .. cell.name, 1.5)
       end
@@ -296,6 +302,33 @@ function gridui.grid_redraw(g)
   local levels = {}
   for id, cell in topology.each() do
     levels[id] = gridui.brightness(id, cell)
+  end
+
+  -- §5.1b inspecting one cell: with a settings page open and nothing held,
+  -- the panel dims to that cell and what it is cabled to. the page you are
+  -- reading is about ONE cell, and ninety cells all doing their own thing
+  -- behind it is ninety things competing with the four numbers you came to
+  -- look at -- so everything else drops to a floor that says "still there,
+  -- not what this is about". the cell itself stays at full, its cables stay
+  -- readable, and the moment you let go of the page the panel comes back.
+  if #state.held == 0 and state.cell_edit and topology.get(state.cell_edit) then
+    local focus = state.cell_edit
+    local cabled = {}
+    for _, edge in ipairs(patch.edges_at(focus)) do
+      cabled[patch.other(edge, focus)] = true
+    end
+    local INSPECT_FLOOR = 1
+    for id, cell in topology.each() do
+      if id == focus then
+        levels[id] = 15
+      elseif cabled[id] then
+        -- dimmer than the held-glance reveal and not blinking: this is a
+        -- page you can sit on for a minute, so it has to be restful.
+        levels[id] = 7
+      else
+        levels[id] = INSPECT_FLOOR
+      end
+    end
   end
 
   if #state.held >= 1 then

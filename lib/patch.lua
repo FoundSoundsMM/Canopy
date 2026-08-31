@@ -4,6 +4,13 @@
 -- cables are undirected by default (oneway=false); a oneway cable still
 -- occupies a single undirected slot between a and b (no duplicate/reverse
 -- edges), it's just interpreted/drawn differently downstream.
+--
+-- one exception to "a cell can be cabled to anything, any number of times":
+-- the Output row. a source reaches the speakers at exactly one pan position,
+-- so cabling it to a second Out cell MOVES it rather than adding a second
+-- cable -- see `displace_output` below.
+
+local topology = wl("topology")
 
 local patch = {}
 
@@ -43,10 +50,57 @@ function patch.get(edge_id)
   return patch.edges[edge_id]
 end
 
+local function is_output(id)
+  local cell = topology.get(id)
+  return (cell and cell.type == "O") and true or false
+end
+
+-- §2.1: position along the Output row IS pan, so one source in two slots is
+-- one source at two pan positions at once -- which reads on the panel as a
+-- patching mistake and sounds like a widened, phase-smeared copy of itself
+-- nobody asked for. tapping a second Out cell is therefore a *move*: the
+-- cable that was there is pulled first, at the same gain, so the gesture
+-- reads as dragging the source along the row rather than as adding to it.
+--
+-- returns the Out cell the source just left, or nil if it was not already
+-- on the row. only fires when exactly one end is an Out cell: an Out<->Out
+-- cable has no source to move and is left alone.
+local function displace_output(a, b)
+  local src, out
+  if is_output(b) and not is_output(a) then
+    src, out = a, b
+  elseif is_output(a) and not is_output(b) then
+    src, out = b, a
+  else
+    return nil
+  end
+
+  local set = patch.by_cell[src]
+  if not set then return nil end
+  for edge_id in pairs(set) do
+    local edge = patch.edges[edge_id]
+    local other = patch.other(edge, src)
+    if other ~= out and is_output(other) then
+      local gain = edge.gain
+      patch.remove_edge(edge_id)
+      return other, gain
+    end
+  end
+  return nil
+end
+
+-- returns edge, err, moved_from -- `moved_from` being the Out cell this
+-- source was pulled off to make the new cable (nil in every other case).
 function patch.add(a, b, gain, oneway)
   gain = gain or 0.6
   if a == b then return nil, "self" end
   if patch.has(a, b) then return nil, "duplicate" end
+
+  -- before the cap check, not after: a move must never fail for want of a
+  -- cable slot, since it is about to free the one it is using.
+  local moved_from, old_gain = displace_output(a, b)
+  if moved_from then gain = old_gain end
+
   if patch.count() >= patch.MAX_CABLES then return nil, "cap" end
 
   local id = patch.next_id
@@ -60,7 +114,7 @@ function patch.add(a, b, gain, oneway)
   patch.by_cell[b][id] = true
 
   patch._notify()
-  return edge
+  return edge, nil, moved_from
 end
 
 function patch.remove_edge(edge_id)
@@ -81,14 +135,17 @@ function patch.remove(a, b)
 end
 
 -- hold A, tap B: toggle the cable between them.
--- returns "added"|"removed"|"error", edge_or_err
+-- returns "added"|"moved"|"removed"|"error", edge_or_err. "moved" is an
+-- "added" that pulled the source off another Output cell on its way in
+-- (see displace_output) -- the caller reports it differently, but the
+-- resulting cable is an ordinary one.
 function patch.toggle(a, b, oneway, default_gain)
   if patch.has(a, b) then
     patch.remove(a, b)
     return "removed"
   end
-  local edge, err = patch.add(a, b, default_gain, oneway)
-  if edge then return "added", edge end
+  local edge, err, moved_from = patch.add(a, b, default_gain, oneway)
+  if edge then return moved_from and "moved" or "added", edge end
   return "error", err
 end
 

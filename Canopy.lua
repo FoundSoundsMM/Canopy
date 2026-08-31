@@ -14,13 +14,20 @@
 -- hold a cell, tap another: patch them together.
 -- hold a cell, tap a connected one: unpatch them.
 -- hold two cells together: read/set that edge's gain on E3.
--- E1/E2/E3 with nothing held: the global param page -- E1 picks one of nine
--- (BPM, Swing, Scatter, Scale, Drops, Decay, Pitch, Rain, Excite), E2/E3
--- nudge it coarse/fine. K1+E3: master level.
--- K3: close the settings page.
--- K2: freeze the pulse gaits (Still).
+-- E1/E2/E3 with nothing held: the global param page -- E1 picks one of seven
+-- (BPM, Swing, Scatter, Scale, Drops, Decay, Pitch), E2/E3 nudge it
+-- coarse/fine. K1+E3: master level.
+-- K3: the mixer -- faders for the four soundscape loops and the master. from
+-- an open cell page it goes there too, dropping that cell's focus.
+-- K2: back. off the mixer, or out of an open cell page, to the main screen;
+-- with nothing to come back from, it freezes the pulse gaits (Still).
 -- K1+K2 (hold): Regrow -- a seeded patch that already plays.
 -- K1+K3 (hold): Clearing -- cut every cable.
+--
+-- externally clocked: set the system clock source to MIDI (or Link) in
+-- PARAMS and the whole patch runs off it -- tempo, rooted gaits, and
+-- Start/Stop, which freeze and unfreeze the gaits exactly as K2's Still
+-- does. see clock.transport below.
 --
 -- build phase 5: the heartwood diffusion lattice, discrete and continuous.
 -- build phase 5b: the grove -- wandering pitch fields (now F cells), plus an
@@ -44,8 +51,8 @@
 -- old Canopy knob and its FreeVerb are gone entirely) and no more output
 -- Compressor. the old Rain macro -- trigger/field wildness -- is renamed
 -- Scatter, freeing "Rain" for something literal: an always-on loop of a real
--- rain recording, with its own dry level (Rain) and how much it excites the
--- four resonators (Excite). Scale is pentatonic-only now, shorthand "Pent".
+-- rain recording, with its own dry level. Scale is pentatonic-only now,
+-- shorthand "Pent".
 -- the re-cut's re-cut: six of the bottom weave row's R cells become G cells
 -- (lib/gvoice.lua) -- small, plain drum voices (three pinged resonant
 -- filters, three noise-with-decay) with a six-parameter sound page of their
@@ -82,6 +89,7 @@ local voice    = wl("voice")
 local gvoice   = wl("gvoice")
 local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
 local gparam   = wl("gparam")
+local mixer    = wl("mixer")
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
 local heartwood = wl("heartwood")
@@ -243,15 +251,13 @@ local function do_regrow()
       end
     end
 
-    -- and always an Output cable, or nothing regrown is ever heard: one or
-    -- two cells, so a couple of voices don't land on exactly the same pan
-    -- position by chance as often as not.
+    -- and always an Output cable, or nothing regrown is ever heard. exactly
+    -- one: the Output row is exclusive now (patch.lua's displace_output), so
+    -- the second cable this used to draw about half the time would only have
+    -- moved the first. `ocells` is shuffled and taken from, so no two voices
+    -- land on the same pan position anyway.
     local o = take(ocells)
     if o then patch.add(v, o, gain(0.6, 1.0), false) end
-    if math.random() < 0.4 then
-      local o2 = take(ocells)
-      if o2 then patch.add(v, o2, gain(0.3, 0.7), false) end
-    end
   end
 
   -- a second transform hung off an existing pulse-maker: two parts out of one
@@ -316,6 +322,20 @@ end
 -- press-context flags: was this key pressed alone, with the other two up?
 local k2_solo_press, k3_solo_press = false, false
 
+-- K2 is "back" and K3 is "the mixer", on every screen, in that order of
+-- precedence -- so the two keys are one shallow stack rather than a different
+-- pair of jobs per page:
+--
+--   K2   on the mixer          -> the main screen
+--        with a cell page open -> the main screen (drops that cell's focus)
+--        on the main screen    -> Still, which is what it always was
+--   K3   anywhere              -> the mixer, dropping any cell focus with it
+--
+-- Still keeps K2 because the main screen is the one place with nothing to
+-- come back from, and freezing the patch is a fair reading of "there is
+-- nothing above this". K3's old job -- closing a cell page -- is now K2's,
+-- along with everything else that means "up one".
+
 function key(n, z)
   if n == 1 then
     keystate.k1 = (z == 1)
@@ -325,8 +345,17 @@ function key(n, z)
     end
     keystate.k2 = (z == 1)
     if z == 0 and #state.held == 0 and k2_solo_press then
-      state.global.still = not state.global.still
-      state.set_event(state.global.still and "Still" or "resumed", 1.5)
+      if state.view == "mixer" then
+        state.view = "global"
+        state.set_event("mixer: closed", 1.2)
+      elseif state.cell_edit then
+        local cell = topology.get(state.cell_edit)
+        state.cell_edit = nil
+        state.set_event((cell and cell.name or "cell") .. ": closed", 1.2)
+      else
+        state.global.still = not state.global.still
+        state.set_event(state.global.still and "Still" or "resumed", 1.5)
+      end
     end
   elseif n == 3 then
     if z == 1 then
@@ -334,12 +363,14 @@ function key(n, z)
     end
     keystate.k3 = (z == 1)
     if z == 0 and #state.held == 0 and k3_solo_press then
-      -- the sound page is a mode, so K3 is its way out as well as the grid's:
-      -- you should never have to remember which voice cell you tapped. with
-      -- no page open, K3 has nothing left to do -- the global param page is
-      -- always the screen underneath everything else now.
-      if state.cell_edit then
+      -- the mixer is one press away from anywhere, an open cell page
+      -- included -- which it closes on the way, so the encoders are never
+      -- pointed at a page the screen is not showing.
+      if state.view ~= "mixer" then
         state.cell_edit = nil
+        state.view = "mixer"
+        state.mparam_focus = state.mparam_focus or 1
+        state.set_event("mixer", 1.2)
       end
     end
   end
@@ -375,14 +406,32 @@ function enc(n, d)
     if gridui.page_enc(state.cell_edit, n, d) then return end
   end
 
-  -- §5.2 the global param page: E1 walks gparam.PARAMS, E2/E3 nudge the one
-  -- under the cursor coarse/fine -- same shape as the voice page above, for
-  -- the nine macros that reach every voice at once (lib/gparam.lua). K1+E3
-  -- stays master level, unrelated to the nine and untouched by this.
+  -- K1+E3 is master level from every screen, unrelated to whatever list is
+  -- under the cursor. it is also the mixer's fifth fader -- the same number,
+  -- reachable both ways.
   if n == 3 and keystate.k1 then
     state.global.level = util.clamp(state.global.level + d / 500, 0, 1)
     bridge.master_level(state.global.level)
-  elseif n == 1 then
+    return
+  end
+
+  -- §4.1b the mixer page (K3): the same E1-select/E2-E3-nudge shape as the
+  -- global page, for the four soundscape loops and the master.
+  if state.view == "mixer" then
+    if n == 1 then
+      state.mparam_focus = util.clamp((state.mparam_focus or 1) + d,
+                                      1, mixer.PARAM_COUNT)
+    else
+      local p = mixer.nudge(state.mparam_focus or 1, d, n == 2)
+      state.set_event(p.label .. " " .. p.text(), 0.5)
+    end
+    return
+  end
+
+  -- §5.2 the global param page: E1 walks gparam.PARAMS, E2/E3 nudge the one
+  -- under the cursor coarse/fine -- same shape as the voice page above, for
+  -- the macros that reach every voice at once (lib/gparam.lua).
+  if n == 1 then
     state.gparam_focus = util.clamp((state.gparam_focus or 1) + d,
                                     1, gparam.PARAM_COUNT)
   else
@@ -393,6 +442,51 @@ end
 
 function redraw()
   screenui.redraw()
+end
+
+-- §4.3 the external transport --------------------------------------------
+-- norns' own clock owns the tempo source (PARAMS > CLOCK > source: internal,
+-- MIDI, Link, crow) and calls these three back whichever source is running.
+-- so there is no MIDI parsing here and no second clock: pick MIDI as the
+-- source and the whole patch is externally clocked -- rooted gaits already
+-- read clock.get_beats() rather than integrating a rate of their own
+-- (rambler.advance_rooted), and gparam's BPM row becomes a readout of
+-- whatever is arriving (gparam.external_clock).
+--
+-- what is left for the script to decide is what Start and Stop *mean* here,
+-- and the answer is the one the panel already has a word for: Stop is Still
+-- -- gaits freeze, resonators ring out, scheduled taps and queued traffic
+-- freeze with them rather than flushing on resume (rambler.tick). that
+-- makes an external stop and a K2 press exactly the same state, which is
+-- the only way the two can never disagree.
+
+local function transport_reset()
+  -- both sequencer lanes go back to before their first step, so a Start
+  -- lands on step 1 rather than wherever the last run left the playhead; and
+  -- every queue that froze mid-flight is dropped rather than flushed
+  -- (rambler.resync, which also resyncs the weave, the lattice and the
+  -- clock cells).
+  wl("sequencer").reset()
+  rambler.resync()
+end
+
+function clock.transport.start()
+  gparam.adopt_tempo()
+  state.global.still = false
+  transport_reset()
+  state.set_event("start", 1.5)
+end
+
+function clock.transport.stop()
+  state.global.still = true
+  state.set_event("stop", 1.5)
+end
+
+-- sent on its own by a source that has jumped its song position without
+-- stopping (MIDI Song Position Pointer, Link's beat origin moving). the
+-- patch is still running; only the lanes need to be put back.
+function clock.transport.reset()
+  transport_reset()
 end
 
 function init()
@@ -413,13 +507,14 @@ function init()
   gvoice.init()
   heartwood.init()
   grove.init()
-  gparam.init() -- adopts the clock's tempo, pushes the other eight (§5.2)
+  gparam.init() -- adopts the clock's tempo, pushes the rest (§5.2)
   exciter.start_meters() -- §7.4: per-exciter activity polls
   bridge.master_level(state.global.level)
-  -- §4.1 the always-on rain ambience: the engine loads it async and starts
-  -- \wl_rain once it's ready, so this can fire before anything downstream of
-  -- it (rain_volume/rain_excite) is pushed without losing either.
-  bridge.rain_load(_path.code .. "Canopy/audio/Rain.wav")
+  -- §4.1b the four always-on soundscape loops: the engine loads each async
+  -- and starts its \wl_amb once that buffer is ready, holding the fader in
+  -- the meantime, so pushing all four levels straight afterwards loses
+  -- nothing (lib/mixer.lua).
+  mixer.init(_path.code .. "Canopy/audio/")
   rambler.start()
 end
 

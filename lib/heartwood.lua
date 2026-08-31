@@ -197,6 +197,14 @@ function heartwood.inject(h_id, w, src_id)
   arrive(n, util.clamp(w or 1, 0, 1), 0, nil, util.time(), src_id)
 end
 
+-- §4.3 an external transport Start: drop every hop still in flight, for the
+-- reason weave.resync spells out. the nodes' own charge is deliberately left
+-- alone -- a lattice ringing out through a Stop and picking up where it left
+-- off is exactly what Still promises.
+function heartwood.resync()
+  pending = {}
+end
+
 -- called from rambler.tick, on the far side of the Still check -- signals in
 -- flight freeze with the gaits rather than flushing all at once on resume.
 function heartwood.tick(now)

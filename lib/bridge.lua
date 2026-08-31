@@ -224,22 +224,23 @@ function bridge.master_level(v)
   engine.master_level(v)
 end
 
--- the always-on Rain.wav ambience (§4.1). rain_load fires once at init with
--- the sample's absolute path; the engine loads it async and only starts
--- \wl_rain once it's ready. rain_volume/rain_excite are ordinary always-on
--- synth sets (the fx stage and every voice exist from alloc), so they work
--- immediately either way -- the bus they read from is just silent until
--- \wl_rain exists to write to it.
-function bridge.rain_load(path)
-  engine.rain_load(path)
+-- §4.1b the ambience bank (lib/mixer.lua): four always-on field-recording
+-- loops, `index` 0-based and matching mixer.LOOPS' order. amb_load fires
+-- once per loop at init with that sample's absolute path; the engine loads
+-- each async and only starts that loop's \wl_amb once it's ready.
+-- amb_volume is held engine-side whether or not the synth exists yet, so
+-- pushing it before the buffer lands (which mixer.init always does) is safe
+-- -- the value is applied when the synth starts.
+--
+-- these are a dry mix and nothing more. there is deliberately no excite
+-- command: the old rain_excite, which fed the same audio continuously into
+-- every voice's resonator, is gone.
+function bridge.amb_load(index, path)
+  engine.amb_load(index, path)
 end
 
-function bridge.rain_volume(v)
-  engine.rain_volume(v)
-end
-
-function bridge.rain_excite(v)
-  engine.rain_excite(v)
+function bridge.amb_volume(index, v)
+  engine.amb_volume(index, v)
 end
 
 return bridge

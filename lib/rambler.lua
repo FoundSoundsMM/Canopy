@@ -774,6 +774,30 @@ function rambler.toggle_rooted(id)
   return r.rooted
 end
 
+-- §4.3 an external transport Start (or a song-position jump) -- put every
+-- pulse-maker back at the top rather than resuming mid-stride.
+--
+-- the queues have to go with the phases. `still` returns out of tick()
+-- *before* the scheduled/inbox/sources drains, so a stop leaves whatever was
+-- in flight sitting there with a timestamp already in the past; without this
+-- the first tick after a Start would fire the lot in one block. that is
+-- exactly the "flushing on resume" §4.1's Still promises not to do, and a
+-- transport Start is the one moment it would otherwise happen.
+function rambler.resync()
+  scheduled, inbox, sources = {}, {}, {}
+  for _, id in ipairs(order) do
+    local r = ramblers[id]
+    r.phase = 0
+    r.cycle = 0
+    r.abs = nil   -- advance_rooted re-seeds this from the clock, silently
+  end
+  -- and the three other files that keep a queue or a beat position of their
+  -- own behind this same tick, for exactly the same reason.
+  weave.resync()
+  heartwood.resync()
+  clockcell.resync()
+end
+
 function rambler.start()
   rambler.metro = metro.init(function() rambler.tick() end, TICK, -1)
   rambler.metro:start()

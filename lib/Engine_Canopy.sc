@@ -26,12 +26,20 @@
 //
 // build phase 7, the re-name: Canopy -- the shared plate/hall reverb -- and
 // the output Compressor are both gone. what replaces Canopy on the global
-// page is literal rather than an effect: an always-on loop of a real rain
-// recording (\wl_rain, loaded async by rain_load once Lua knows its path),
-// mixed dry into the output at whatever level `rain_volume` asks for, and
-// fed continuously into every voice's resonator as excitation at whatever
-// depth `rain_excite` asks for -- the wood actually being rained on, rather
-// than a reverb pretending to be weather.
+// page is literal rather than an effect: an always-on loop of a real field
+// recording, mixed dry into the output and fed continuously into every
+// voice's resonator as excitation -- the wood actually being rained on,
+// rather than a reverb pretending to be weather.
+//
+// the mixer: that one rain loop is now FOUR of them (\wl_amb x nAmb --
+// rain, cicada, thunder, sea), each with its own fader, which is what
+// lib/mixer.lua's page drives. rather than four buses, each loop scales
+// itself by its own fader and sums into ONE shared stereo bus, ambBus,
+// which \woodland_fx reads. the loops are a dry mix and nothing else:
+// the old rain_excite path -- the same audio fed continuously into every
+// voice's resonator -- is gone, and \woodland_voice is back to being
+// excited only by its own strike burst and by whatever is cabled into
+// its mod path.
 //
 // the grid overhaul changes \woodland_fx more than anything since build
 // phase 6: there is no automatic mix left at all. a voice's or percussion
@@ -48,7 +56,7 @@
 
 Engine_Canopy : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
-	var patchBus, excMeterBus, rainBus;
+	var patchBus, excMeterBus, ambBus;
 	var voiceSynths;
 	var gSynths;
 	var excSynths;
@@ -56,8 +64,9 @@ Engine_Canopy : CroneEngine {
 	var heartSynth;
 	var fxSynth;
 	var excMeterSynth;
-	var rainBuf;
-	var rainSynth;
+	var ambBufs;
+	var ambSynths;
+	var ambVol;
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
 	// §8 "per-voice defaults" table. keep freq/structureBase/dampBase/decay in
@@ -95,7 +104,7 @@ Engine_Canopy : CroneEngine {
 		\wl_g_noise, \wl_g_noise, \wl_g_noise
 	];
 
-	classvar nVoices = 4, nExc = 6, nG = 6, nH = 4, nOut = 16;
+	classvar nVoices = 4, nExc = 6, nG = 6, nH = 4, nOut = 16, nAmb = 4;
 
 	// offsets into the single `patchBus` block (§7.3's separate bus families
 	// collapsed into one allocation so the Lua side only needs to add an
@@ -140,12 +149,14 @@ Engine_Canopy : CroneEngine {
 		// addPoll funcs below -- no OSC round trip, so this is cheap even at
 		// full count.
 		excMeterBus = Bus.control(server, nExc);
-		// the always-on rain ambience (§4.1 Rain/Excite): a stereo bus, always
-		// allocated, silent until rain_load's buffer finishes loading and
-		// \wl_rain starts writing to it. every voice and the fx stage read it
-		// with plain In.ar -- both live in groups after gSrc, so a block with
-		// nothing writing here is just a block of zeros, not stale data.
-		rainBus = Bus.audio(server, 2);
+		// the always-on ambience loops (§4.1b the mixer): one stereo bus,
+		// always allocated, silent until amb_load's buffers finish loading
+		// and the \wl_amb synths start writing to it. every \wl_amb sums
+		// into it, already scaled by its own fader, and \woodland_fx reads
+		// it with a plain In.ar -- both live in groups after gSrc, so a
+		// block with nothing writing here is just a block of zeros, not
+		// stale data.
+		ambBus = Bus.audio(server, 2);
 
 		SynthDef(\woodland_voice, {
 			arg tapOut=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
@@ -154,7 +165,7 @@ Engine_Canopy : CroneEngine {
 				modIn=0, modBalance=0.5,
 				fmRatio=2.0, fmDepth=0, noiseTune=0, exciteQ=0.35,
 				glide=0.02, driftDepth=0.06, driftRate=0.07, driftSeed=0,
-				bendAmt=0, rainIn=0, rainExcite=0;
+				bendAmt=0;
 
 			var harmonicRatio = [1, 2, 3, 4, 5, 6];
 			var barRatio = [1, 2.756, 5.404, 8.933, 13.34, 18.64];
@@ -187,23 +198,12 @@ Engine_Canopy : CroneEngine {
 			// to one or two steps and `hardness` stops shortening it at all.
 			var env = EnvGen.ar(Env.perc(0.0003, burstDur), t_trig);
 			var exc = BPF.ar(PinkNoise.ar(1), bpFreq, exciteQ) * env * force;
-			// §4.1 rain_excite: the same always-on rain ambience every voice
-			// can be cabled to nothing and still hear -- a mono sum of the
-			// stereo loop, scaled down for headroom (the wav is a full-level
-			// recording, not a designed exciter burst) and by the knob
-			// itself. 0 (the default) is a no-op.
-			// squared, not linear: unlike the burst exciter, this is a
-			// *continuous* signal into the mode bank's Ringz below, so it
-			// sits there and rings up to Ringz's steady-state resonant gain
-			// (which grows with each mode's decay time) instead of just
-			// decaying after one brief hit like the burst exciter does. that
-			// makes this knob's low end far more sensitive than a linear
-			// multiply looks like it should be -- 0.03 already reads as a
-			// sustained, well-fed resonance, not a token amount. squaring
-			// buys back a usable quiet range without changing full-up.
-			var rainSig = (Mix.ar(In.ar(rainIn, 2)) * 0.5)
-				* rainExcite.clip(0, 1).squared * 0.7;
-			var totalExc = exc + (inject * 0.8) + rainSig;
+			// a voice is excited by its own strike burst and by whatever a
+			// cable puts on its mod path, and by nothing else. the mixer's
+			// ambience loops are a dry mix only -- the old rain_excite path
+			// that fed the same audio continuously into every resonator is
+			// gone.
+			var totalExc = exc + (inject * 0.8);
 
 			// §8.5: amplitude-dependent pitch drop -- the "thunk" of a hard hit.
 			var pitchDrop = 1 - (force.clip(0, 1) * 0.02);
@@ -343,7 +343,7 @@ Engine_Canopy : CroneEngine {
 
 		// the grid overhaul's Output row (§2's `O` cells): the only place
 		// audio reaches the speakers, and the only thing left in this synth
-		// that reads anything other than the rain bus. by default nothing is
+		// that reads anything other than the ambience bus. by default nothing is
 		// patched into any of the sixteen `outBus` channels, so a fresh
 		// patch is silent until the player cables a voice, a GVOICE cell, an
 		// exciter or a heartwood node to one -- there is no automatic mix
@@ -358,17 +358,18 @@ Engine_Canopy : CroneEngine {
 		// cable's own gain (patch.lua's ordinary bipolar gain), the same way
 		// several cables landing on one mod-path bus already sum.
 		SynthDef(\woodland_fx, {
-			arg outBus=0, out=0, level=0.8, rainIn=0, rainVol=0;
+			arg outBus=0, out=0, level=0.8, ambIn=0;
 			var chans = In.ar(outBus, nOut);
 			var panPos = Array.fill(nOut, { |i| -1 + (2 * i / (nOut - 1)) });
 			var dry = Mix.ar(Array.fill(nOut, { |i| Pan2.ar(chans[i], panPos[i]) }));
-			// rainVol gets the same correction as rain_excite above: squared
-			// for a usable low end, and the 0.35 headroom factor every
-			// voice's own output already carries (Limiter... * amp * 0.35)
-			// so the full-level Rain.wav doesn't sit hotter in the mix than
-			// a voice at the same knob position.
-			var rainDry = In.ar(rainIn, 2) * rainVol.clip(0, 1).squared * 0.35;
-			var sig = (dry + rainDry) * level;
+			// the ambience loops' shared dry bus: each \wl_amb has already
+			// applied its own Level knob, so all that is left here is the
+			// 0.35 headroom factor every voice's own output already carries
+			// (Limiter... * amp * 0.35), so a full-level field recording
+			// doesn't sit hotter in the mix than a voice at the same knob
+			// position.
+			var ambDry = In.ar(ambIn, 2) * 0.35;
+			var sig = (dry + ambDry) * level;
 			Out.ar(out, sig);
 		}).add;
 
@@ -559,13 +560,20 @@ Engine_Canopy : CroneEngine {
 			Out.kr(out, Amplitude.kr(sig, 0.005, 0.2));
 		}).add;
 
-		// the always-on rain ambience (§4.1). a plain looping stereo playback
-		// of whatever rain_load hands it -- no envelope, no gate, because the
-		// whole point is that it is always running and rain_volume/rain_excite
-		// are the only things that ever make it audible or felt.
-		SynthDef(\wl_rain, { arg out=0, bufnum=0;
+		// one always-on ambience loop (§4.1b). a plain looping stereo
+		// playback of whatever amb_load hands it -- no envelope, no gate,
+		// because the whole point is that it is always running and the
+		// mixer's fader is the only thing that ever makes it audible. that
+		// fader lives HERE rather than at the reader so that four loops
+		// need only one shared bus.
+		//
+		// squared, not linear, so the fader's low end is usable rather than
+		// jumping straight to "loud" in the first tenth of its travel.
+		// lagged, because a fader move on a continuously sounding source is
+		// a fade, not a step.
+		SynthDef(\wl_amb, { arg out=0, bufnum=0, vol=0;
 			var sig = PlayBuf.ar(2, bufnum, BufRateScale.kr(bufnum), loop: 1);
-			Out.ar(out, sig);
+			Out.ar(out, sig * Lag.kr(vol.clip(0, 1).squared, 0.1));
 		}).add;
 
 		server.sync;
@@ -579,8 +587,7 @@ Engine_Canopy : CroneEngine {
 				\oddOnly, def[3],
 				\damp, def[4],
 				\decayBase, def[5],
-				\modIn, patchBus.index + modInBase + i,
-				\rainIn, rainBus.index
+				\modIn, patchBus.index + modInBase + i
 			], gVoice);
 		});
 
@@ -618,7 +625,7 @@ Engine_Canopy : CroneEngine {
 		fxSynth = Synth.new(\woodland_fx, [
 			\outBus, patchBus.index + outBase,
 			\out, context.out_b.index,
-			\rainIn, rainBus.index
+			\ambIn, ambBus.index
 		], gFx);
 
 		// gTap: after gVoice (so the exciter meters below share the group
@@ -921,33 +928,41 @@ Engine_Canopy : CroneEngine {
 			fxSynth.set(\level, msg[1]);
 		});
 
-		// rain_load(path) -- §4.1: the always-on Rain.wav ambience. Lua sends
-		// its absolute path once, at init; Buffer.read is async, so \wl_rain
-		// is only started once the read's completion action fires. before
-		// that (and if the read never arrives -- the offline sc_check has no
-		// Lua side to call this at all) rainBus just stays silent, which is
-		// indistinguishable from rain_volume/rain_excite both being 0.
-		this.addCommand("rain_load", "s", { |msg|
-			var path = msg[1].asString;
-			if (rainBuf.notNil) { rainBuf.free };
-			rainBuf = Buffer.read(server, path, action: { |buf|
-				if (rainSynth.notNil) { rainSynth.free };
-				rainSynth = Synth.new(\wl_rain, [
-					\out, rainBus.index, \bufnum, buf.bufnum
-				], gSrc);
-			});
+		// amb_load(index, path) -- §4.1b: one of the ambience loops. Lua
+		// sends each absolute path once, at init; Buffer.read is async, so
+		// that loop's \wl_amb is only started once the read's completion
+		// action fires, and it starts with whatever Level/Excite the mixer
+		// has set in the meantime. before that (and if the read never
+		// arrives -- a missing file, or the offline sc_check with no Lua
+		// side to call this at all) that loop simply contributes nothing,
+		// which is indistinguishable from both its knobs being 0. the other
+		// three are unaffected either way.
+		this.addCommand("amb_load", "is", { |msg|
+			var i = msg[1].asInteger;
+			var path = msg[2].asString;
+			if (i >= 0 and: { i < nAmb }) {
+				if (ambBufs[i].notNil) { ambBufs[i].free; ambBufs[i] = nil };
+				if (ambSynths[i].notNil) { ambSynths[i].free; ambSynths[i] = nil };
+				ambBufs[i] = Buffer.read(server, path, action: { |buf|
+					if (ambSynths[i].notNil) { ambSynths[i].free };
+					ambSynths[i] = Synth.new(\wl_amb, [
+						\out, ambBus.index,
+						\bufnum, buf.bufnum,
+						\vol, ambVol[i]
+					], gSrc);
+				});
+			};
 		});
 
-		// rain_volume(v) -- the rain ambience's own dry level in the mix.
-		this.addCommand("rain_volume", "f", { |msg|
-			fxSynth.set(\rainVol, msg[1]);
+		// amb_volume(index, v) -- that loop's own dry level in the mix.
+		this.addCommand("amb_volume", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nAmb }) {
+				ambVol[i] = msg[2];
+				if (ambSynths[i].notNil) { ambSynths[i].set(\vol, msg[2]) };
+			};
 		});
 
-		// rain_excite(v) -- how much the same rain audio excites every
-		// voice's resonator, continuously, whether or not anything is patched.
-		this.addCommand("rain_excite", "f", { |msg|
-			voiceSynths.do({ |s| if (s.notNil) { s.set(\rainExcite, msg[1]) } });
-		});
 	}
 
 	free {
@@ -958,11 +973,11 @@ Engine_Canopy : CroneEngine {
 		if (heartSynth.notNil) { heartSynth.free };
 		if (fxSynth.notNil) { fxSynth.free };
 		if (excMeterSynth.notNil) { excMeterSynth.free };
-		if (rainSynth.notNil) { rainSynth.free };
-		if (rainBuf.notNil) { rainBuf.free };
+		ambSynths.do({ |s| if (s.notNil) { s.free } });
+		ambBufs.do({ |b| if (b.notNil) { b.free } });
 		patchBus.free;
 		excMeterBus.free;
-		rainBus.free;
+		ambBus.free;
 		gFx.free;
 		gTap.free;
 		gVoice.free;

@@ -27,6 +27,13 @@ local gridui = wl("gridui")
 -- text metrics match the harness's own text_extents stub (5px per character).
 -- the font puts 5px above the baseline and 1 below it, so a run drawn at
 -- (x, y) covers y-5 .. y+1.
+--
+-- §5.2b the Digitakt layout added two things this recorder has to understand.
+-- first, DELIBERATE backgrounds: the header bar is a filled rectangle with
+-- its text knocked out of it, and so is every chip and every focused widget
+-- box. second, SHAPES: knob gauges are circles, arcs and pointer lines rather
+-- than text and bars. so the overlap rule below is no longer "no two
+-- non-line boxes may touch" -- see `collisions`.
 
 local CHAR_W, ASCENT, DESCENT = 5, 5, 1
 
@@ -42,7 +49,6 @@ local rec = {}
 rec.clear = function() boxes = {} end
 rec.update = function() end
 rec.level = function() end
-rec.stroke = function() end
 rec.aa = function() end
 rec.font_size = function() end
 rec.font_face = function() end
@@ -70,12 +76,25 @@ rec.text_right = function(s)
   end
 end
 rec.rect = function(x, y, w, h) cur.rect = {x, y, w, h} end
-rec.fill = function()
+rec.circle = function(x, y, r) cur.shape = {x - r, y - r, 2 * r, 2 * r} end
+rec.arc = function(x, y, r) cur.shape = {x - r, y - r, 2 * r, 2 * r} end
+rec.close = function() end
+-- a rectangle is a box: filled it is a background, stroked it is a frame,
+-- and either way text may legally sit inside it. a circle or an arc is a
+-- knob gauge -- it has no inside to put words in, so text drawn through one
+-- is a collision whichever way round they are.
+local function flush(rect_kind)
   if cur.rect then
-    record("fill", cur.rect[1], cur.rect[2], cur.rect[3], cur.rect[4])
+    record(rect_kind, cur.rect[1], cur.rect[2], cur.rect[3], cur.rect[4])
     cur.rect = nil
   end
+  if cur.shape then
+    record("shape", cur.shape[1], cur.shape[2], cur.shape[3], cur.shape[4])
+    cur.shape = nil
+  end
 end
+rec.fill = function() flush("fill") end
+rec.stroke = function() flush("frame") end
 screen = setmetatable(rec, {__index = function() return function() end end})
 
 -- checks --------------------------------------------------------------------
@@ -84,11 +103,43 @@ local function overlaps(a, b)
   return a.x0 < b.x1 and b.x0 < a.x1 and a.y0 < b.y1 and b.y0 < a.y1
 end
 
--- everything that carries meaning: text, and the value bars under it. lines
--- are excluded (see rec.line), and so is a `fill` that is exactly a bar's
--- own background track sitting under its own filled portion.
-local function content(b)
-  return b.kind == "text" or b.kind == "fill"
+local function contains(outer, inner)
+  return outer.x0 <= inner.x0 and outer.x1 >= inner.x1
+     and outer.y0 <= inner.y0 and outer.y1 >= inner.y1
+end
+
+-- the rule, in three parts:
+--
+--   text  x text   never. two words in the same pixels is illegible, full
+--                  stop, and it is the bug that started this file (a label
+--                  and its value meeting in the middle of a 60px column).
+--   text  x box    (a filled background or a stroked frame) only when the box
+--                  CONTAINS the text -- the inverted header bar, a chip, a
+--                  widget's readout box. a box that merely CLIPS a word is
+--                  the other bug that started this file (an 8px row's bar
+--                  landing in the next row's ascenders), and is still caught.
+--   text  x shape  never: a knob gauge has no inside to put words in, so a
+--                  word drawn through one is unreadable. this is what pins
+--                  the widget grid's geometry -- gauge, label, and the row
+--                  underneath.
+--   non-text x non-text        always fine. graphics compose: an arc over a
+--                  circle over a filled bar is one knob, and a chip sitting
+--                  inside the header bar is the point of the header bar.
+--
+-- lines are excluded entirely (see rec.line) -- rules and dividers are
+-- structure, and they deliberately run edge to edge.
+local BOXES = {fill = true, frame = true}
+
+local function drawn(b)
+  return b.kind == "text" or BOXES[b.kind] or b.kind == "shape"
+end
+
+local function legal_pair(a, b)
+  if a.kind ~= "text" and b.kind ~= "text" then return true end
+  if a.kind == "text" and b.kind == "text" then return false end
+  local text, other = a, b
+  if b.kind == "text" then text, other = b, a end
+  return BOXES[other.kind] and contains(other, text)
 end
 
 local function collisions(label)
@@ -96,16 +147,10 @@ local function collisions(label)
   for i = 1, #boxes do
     for j = i + 1, #boxes do
       local a, b = boxes[i], boxes[j]
-      if content(a) and content(b) and overlaps(a, b) then
-        -- a bar draws its track and then its filled portion in the same
-        -- rectangle; that pair is one widget, not a collision.
-        local same_bar = (a.kind == "fill" and b.kind == "fill"
-                          and a.x0 == b.x0 and a.y0 == b.y0 and a.y1 == b.y1)
-        if not same_bar then
-          table.insert(bad, string.format("%s[%s] x %s[%s] at (%d,%d)",
-                                          a.kind, a.text or "", b.kind,
-                                          b.text or "", a.x0, a.y0))
-        end
+      if drawn(a) and drawn(b) and overlaps(a, b) and not legal_pair(a, b) then
+        table.insert(bad, string.format("%s[%s] x %s[%s] at (%d,%d)",
+                                        a.kind, a.text or "", b.kind,
+                                        b.text or "", a.x0, a.y0))
       end
     end
   end
@@ -137,6 +182,48 @@ for i = 1, M.gparam.PARAM_COUNT do
   M.state.gparam_focus = i
   screenui.redraw()
   draws_clean("global, row " .. i)
+end
+
+-- 1b: the mixer page ---------------------------------------------------------
+
+print("\n-- the mixer page --")
+do
+  M.state.view = "mixer"
+  for i = 1, M.mixer.PARAM_COUNT do
+    M.state.mparam_focus = i
+    screenui.redraw()
+    draws_clean("mixer, fader " .. i)
+  end
+  -- and with every fader up, since a full knob draws the longest arc and the
+  -- widest reading
+  for _, p in ipairs(M.mixer.PARAMS) do p.set(1) end
+  screenui.redraw()
+  draws_clean("mixer, everything up")
+  for _, p in ipairs(M.mixer.PARAMS) do p.set(0) end
+  M.state.view = "global"
+end
+
+-- 1c: the header carries the transport, the tempo and the last event --------
+-- all three share the top eleven pixels with the page name and the focused
+-- value, and the two that vary in width (a message, an "ext" tempo) are the
+-- ones that could push something off the panel.
+
+print("\n-- the header, under pressure --")
+do
+  M.state.set_event("severed Tatterfoal (7) and then some", 5)
+  screenui.redraw()
+  draws_clean("header with a long message")
+
+  M.state.global.still = true
+  params:set("clock_source", 2)
+  params:set("clock_tempo", 300)
+  screenui.redraw()
+  draws_clean("header, stopped and externally clocked")
+
+  M.state.global.still = false
+  params:set("clock_source", 1)
+  params:set("clock_tempo", 120)
+  M.state.last_event = ""
 end
 
 -- 2: every cell's page, held and open ----------------------------------------
@@ -236,13 +323,36 @@ end
 print("\n-- the page arithmetic --")
 do
   local per = screenui.PARAMS_PER_PAGE
-  check("a page holds ten rows", per == 10, tostring(per))
+  check("a page holds eight widgets", per == 8, tostring(per))
   check("row 1 is on page 1", screenui.page_of(1) == 1)
-  check("row 10 is still on page 1", screenui.page_of(10) == 1)
-  check("row 11 starts page 2", screenui.page_of(11) == 2)
+  check("row 8 is still on page 1", screenui.page_of(8) == 1)
+  check("row 9 starts page 2", screenui.page_of(9) == 2)
   check("voice.PARAMS needs two pages",
         screenui.page_of(M.voice.PARAM_COUNT) == 2,
         tostring(M.voice.PARAM_COUNT))
+
+  -- and everything else lands on one, which is the point of eight rather
+  -- than the Digitakt's ten: the only list on the panel long enough to
+  -- paginate is a voice's twelve.
+  local paginated = {}
+  for id, cell in M.topology.each() do
+    local page = cellparam.page(id)
+    if page and screenui.page_of(page.PARAM_COUNT) > 1 then
+      paginated[cell.type] = page.PARAM_COUNT
+    end
+  end
+  local extra = {}
+  for t, n in pairs(paginated) do
+    if t ~= "voice" then table.insert(extra, t .. "(" .. n .. ")") end
+  end
+  check("and it is the only one that does", #extra == 0,
+        table.concat(extra, ","))
+  check("the global page fits on one",
+        screenui.page_of(M.gparam.PARAM_COUNT) == 1,
+        tostring(M.gparam.PARAM_COUNT))
+  check("and so does the mixer",
+        screenui.page_of(M.mixer.PARAM_COUNT) == 1,
+        tostring(M.mixer.PARAM_COUNT))
 
   -- every cell type has a page at all -- "some cells have settings and some
   -- don't" was half of the inconsistency this replaced.

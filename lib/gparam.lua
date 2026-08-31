@@ -1,8 +1,13 @@
 -- gparam.lua
--- the nine-parameter global page: what replaced the network view. E1 walks
--- the list, E2/E3 move the one under the cursor coarse/fine -- the same
--- shape voice.lua already gave the sound page (§5.5), just for macros that
--- reach every voice at once instead of one.
+-- the global page: what replaced the network view. E1 walks the list, E2/E3
+-- move the one under the cursor coarse/fine -- the same shape voice.lua
+-- already gave the sound page (§5.5), just for macros that reach every voice
+-- at once instead of one.
+--
+-- it was nine rows; it is seven. Rain and Excite left for the mixer page
+-- (§4.1b, lib/mixer.lua) when the one rain loop became four, and took their
+-- bridge pushes with them -- everything still here is a macro over the whole
+-- patch rather than one sound source's fader.
 --
 -- each entry stores in whatever unit is natural to it (0..1 for a plain
 -- knob, real semitones/bpm for the ones that are), rather than forcing
@@ -12,7 +17,6 @@
 
 local topology = wl("topology")
 local state    = wl("state")
-local bridge   = wl("bridge")
 
 local gparam = {}
 
@@ -23,12 +27,38 @@ local gparam = {}
 -- harness has no params menu.
 gparam.BPM_MIN, gparam.BPM_MAX = 20, 300
 
+-- §4.3: with an external clock source selected (MIDI, Link or crow), the
+-- tempo is not ours to set -- norns derives it from whatever is coming in,
+-- and writing clock_tempo would either be ignored or fight the source. so
+-- BPM becomes a readout: `set` refuses, and `text` says where the number is
+-- coming from. norns' own clock_source param is the authority; the guard is
+-- for the offline harness, which has no params menu.
+function gparam.external_clock()
+  if not (params and params.get) then return false end
+  local ok, src = pcall(function() return params:get("clock_source") end)
+  return ok and type(src) == "number" and src > 1
+end
+
 function gparam.set_bpm(v)
+  if gparam.external_clock() then
+    state.set_event("tempo is external", 0.8)
+    return
+  end
   state.global.bpm = util.clamp(v, gparam.BPM_MIN, gparam.BPM_MAX)
   if params and params.set then
     params:set("clock_tempo", state.global.bpm)
   end
   state.set_event(string.format("%.0f BPM", state.global.bpm), 0.8)
+end
+
+-- what the transport is actually running at, whoever is deciding it. an
+-- external source moves clock.get_tempo() without ever calling set_bpm, so
+-- the readout has to come from the clock rather than from our own copy.
+function gparam.tempo()
+  if gparam.external_clock() then
+    return clock.get_tempo() or state.global.bpm or 120
+  end
+  return state.global.bpm or 120
 end
 
 -- Drops: semitones of extra per-strike detune range at full knob, on top of
@@ -68,11 +98,16 @@ end
 gparam.PARAMS = {
   {
     key = "bpm", label = "BPM", coarse = 1, fine = 0.1,
-    get = function() return state.global.bpm or 120 end,
+    get = function() return gparam.tempo() end,
     set = function(v) gparam.set_bpm(v) end,
-    text = function() return string.format("%.0f", state.global.bpm or 120) end,
+    text = function()
+      if gparam.external_clock() then
+        return string.format("%.0f ext", gparam.tempo())
+      end
+      return string.format("%.0f", gparam.tempo())
+    end,
     frac = function()
-      return ((state.global.bpm or 120) - gparam.BPM_MIN)
+      return (gparam.tempo() - gparam.BPM_MIN)
              / (gparam.BPM_MAX - gparam.BPM_MIN)
     end,
     push = function() end, -- set_bpm already pushes on every change
@@ -163,32 +198,6 @@ gparam.PARAMS = {
       for _, id in ipairs(voices()) do grove.push_voice_now(id) end
     end,
   },
-  {
-    -- the always-on Rain.wav ambience (lib/Engine_Canopy.sc's \wl_rain):
-    -- it is looping and audible-ready from init, and this is just its dry
-    -- level in the mix. 0 by default -- it says nothing until asked to.
-    key = "rain_volume", label = "Rain", coarse = 1 / 80, fine = 1 / 500,
-    min = 0, max = 1,
-    get = function() return state.global.rain_volume or 0 end,
-    set = function(v) state.global.rain_volume = util.clamp(v, 0, 1) end,
-    text = function() return string.format("%.2f", state.global.rain_volume or 0) end,
-    frac = function() return state.global.rain_volume or 0 end,
-    push = function() bridge.rain_volume(state.global.rain_volume or 0) end,
-  },
-  {
-    -- the same rain audio, fed continuously into every voice's resonator as
-    -- excitation (like an M-socket "inject" stream, but global and always
-    -- running rather than patched). 0 is a no-op regardless of Rain volume,
-    -- so the two knobs are independent: you can hear the rain without it
-    -- touching the voices, or excite the voices with it below audibility.
-    key = "rain_excite", label = "Excite", coarse = 1 / 80, fine = 1 / 500,
-    min = 0, max = 1,
-    get = function() return state.global.rain_excite or 0 end,
-    set = function(v) state.global.rain_excite = util.clamp(v, 0, 1) end,
-    text = function() return string.format("%.2f", state.global.rain_excite or 0) end,
-    frac = function() return state.global.rain_excite or 0 end,
-    push = function() bridge.rain_excite(state.global.rain_excite or 0) end,
-  },
 }
 
 gparam.PARAM_COUNT = #gparam.PARAMS
@@ -239,6 +248,16 @@ end
 function gparam.init()
   state.global.bpm = util.clamp(clock.get_tempo() or 120, gparam.BPM_MIN, gparam.BPM_MAX)
   gparam.push_all()
+end
+
+-- §4.3: an external source has changed the tempo under us. keep our own copy
+-- in step so that switching the clock source back to internal carries on from
+-- what was last heard rather than snapping back to whatever was set before.
+function gparam.adopt_tempo()
+  local t = clock.get_tempo()
+  if t then
+    state.global.bpm = util.clamp(t, gparam.BPM_MIN, gparam.BPM_MAX)
+  end
 end
 
 return gparam

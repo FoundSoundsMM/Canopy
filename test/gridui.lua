@@ -7,7 +7,9 @@
 -- type; (3) K1+tap fires the cell -- a voice or drum strikes, an exciter
 -- grains, a trigger pulses, a sequencer step goes in or out; (4) the hold/tap
 -- cable gesture still works and is not confused by either of those; (5) the
--- sequencer lanes are visibly different in their three states.
+-- sequencer lanes are visibly different in their three states; (6) the Output
+-- row is exclusive -- a source is in one slot, and cabling it to a second one
+-- moves it; (7) an open cell page dims the rest of the panel down to it.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -265,6 +267,117 @@ do
         edge_id and M.patch.get(edge_id).oneway == true)
   T = T + 0.6
   gridui.on_grid_key(hx, hy, 0, K1)
+end
+
+-- 6: the Output row is exclusive ---------------------------------------------
+
+print("\n-- one source, one Output slot --")
+do
+  local M = fresh(12)
+  local gridui = wl("gridui")
+
+  local function cable(from, to)
+    local ax, ay = xy(M, from)
+    local bx, by = xy(M, to)
+    gridui.on_grid_key(ax, ay, 1, NONE)
+    T = T + 0.6
+    tap(gridui, bx, by)
+    T = T + 0.6
+    gridui.on_grid_key(ax, ay, 0, NONE)
+  end
+
+  cable("oak", "o.3")
+  check("a voice reaches the row", M.patch.has("oak", "o.3") ~= nil)
+  M.patch.set_gain(M.patch.has("oak", "o.3"), 0.42)
+
+  cable("oak", "o.12")
+  check("cabling a second slot moves it there",
+        M.patch.has("oak", "o.12") ~= nil)
+  check("and vacates the first", M.patch.has("oak", "o.3") == nil)
+  check("leaving exactly one Output cable", M.patch.degree("oak") == 1,
+        tostring(M.patch.degree("oak")))
+  check("at the gain it already had -- a move, not a fresh cable",
+        math.abs(M.patch.get(M.patch.has("oak", "o.12")).gain - 0.42) < 1e-9,
+        tostring(M.patch.get(M.patch.has("oak", "o.12")).gain))
+
+  -- tapping the slot it is already in is still an unpatch, not a no-op
+  cable("oak", "o.12")
+  check("tapping its own slot still pulls the cable",
+        M.patch.has("oak", "o.12") == nil)
+
+  -- everything else is unaffected: a source may still fan out anywhere else
+  M.patch.add("oak", "o.5", 0.6)
+  M.patch.add("oak", "h.taproot", 0.6)
+  M.patch.add("oak", "e.bracken", 0.6)
+  check("a source can still reach as many non-Output cells as it likes",
+        M.patch.degree("oak") == 3, tostring(M.patch.degree("oak")))
+  M.patch.add("oak", "o.9", 0.6)
+  check("and adding another Output cell still leaves just the one",
+        M.patch.has("oak", "o.5") == nil and M.patch.has("oak", "o.9") ~= nil)
+  check("with the rest of its patch untouched", M.patch.degree("oak") == 3,
+        tostring(M.patch.degree("oak")))
+
+  -- two Out cells together have no source to move, so nothing is displaced
+  M.patch.add("o.1", "o.2", 0.6)
+  check("an Out-to-Out cable displaces nothing",
+        M.patch.has("o.1", "o.2") ~= nil and M.patch.has("oak", "o.9") ~= nil)
+end
+
+-- 7: an open page dims the panel to its own cell -----------------------------
+
+print("\n-- inspecting a cell dims everything else --")
+do
+  local M = fresh(13)
+  local gridui = wl("gridui")
+
+  M.patch.add("oak", "o.4", 0.8)
+  M.patch.add("d.hob", "oak", 0.8)
+
+  local levels = {}
+  local g = {led = function(_, x, y, l)
+               local id = M.topology.at(x, y)
+               if id then levels[id] = l end
+             end,
+             all = function() end, refresh = function() end}
+
+  gridui.grid_redraw(g)
+  local idle_far = levels["r.drove"]
+
+  local ox, oy = xy(M, "oak")
+  tap(gridui, ox, oy)
+  check("the tap opened the page", M.state.cell_edit == "oak")
+
+  gridui.grid_redraw(g)
+  check("the inspected cell is at full", levels["oak"] == 15,
+        tostring(levels["oak"]))
+  check("what it is cabled to stays readable",
+        levels["o.4"] > 3 and levels["d.hob"] > 3,
+        levels["o.4"] .. "/" .. levels["d.hob"])
+  check("everything else is dimmed right down", levels["r.drove"] <= 1,
+        tostring(levels["r.drove"]))
+  check("which is dimmer than it was with no page open",
+        levels["r.drove"] < idle_far or idle_far <= 1,
+        idle_far .. " -> " .. levels["r.drove"])
+
+  -- a live D cell's pulse flash must not punch back through the dimming
+  M.state.flash("d.shuck", 1)
+  gridui.grid_redraw(g)
+  check("and a pulse elsewhere does not light back up through it",
+        levels["d.shuck"] <= 1, tostring(levels["d.shuck"]))
+
+  tap(gridui, ox, oy)
+  gridui.grid_redraw(g)
+  check("closing the page brings the panel back",
+        M.state.cell_edit == nil and levels["r.drove"] == idle_far,
+        tostring(levels["r.drove"]))
+
+  -- holding still wins: the hold reveal is the more urgent of the two
+  M.state.cell_edit = "oak"
+  M.state.held = {"d.hob"}
+  gridui.grid_redraw(g)
+  check("a hold overrides the inspect dimming", levels["d.hob"] == 15,
+        tostring(levels["d.hob"]))
+  M.state.held = {}
 end
 
 -- 5: the lanes are legible ---------------------------------------------------

@@ -112,6 +112,15 @@ function sequencer.level(id, base)
   return state.flash_level(id, lvl)
 end
 
+-- §4.3 an external transport Start or song-position reset: both lanes go
+-- back to before their first step, so the next driving pulse lands on step 1.
+-- step on/off state is the player's and is untouched.
+function sequencer.reset()
+  for _, lane in pairs(lanes) do
+    lane.playhead = 0
+  end
+end
+
 function sequencer.info(id)
   local cell = cells[id]
   if not cell then return nil end

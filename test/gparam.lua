@@ -1,8 +1,9 @@
 -- build phase 6b/7: the global param page (§4.1, §5.2, lib/gparam.lua). that
 -- E1/nudge/push behave like the sound page's own E1/E2/E3 (§5.5), that Scale
--- steps one entry per flick and quantises pitch only when it isn't free, that
--- Drops and the global Decay/Pitch macros actually reach the engine, and that
--- Rain and Excite forward what they're told to.
+-- steps one entry per flick and quantises pitch only when it isn't free, and
+-- that Drops and the global Decay/Pitch macros actually reach the engine.
+-- Rain and Excite used to live here too; the four soundscape loops that
+-- replaced them are test/mixer.lua's, and Excite has no successor at all.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -20,9 +21,16 @@ print("\n-- E1 walks the list, clamped at both ends --")
 do
   local M = fresh(1)
   local n = M.gparam.PARAM_COUNT
-  check("nine params", n == 9, "#" .. n)
+  check("seven params", n == 7, "#" .. n)
   check("bpm is first", M.gparam.PARAMS[1].key == "bpm")
-  check("excite is last", M.gparam.PARAMS[n].key == "rain_excite")
+  check("pitch is last", M.gparam.PARAMS[n].key == "pitch")
+  check("and no soundscape rows are left here",
+        (function()
+          for _, p in ipairs(M.gparam.PARAMS) do
+            if p.key:match("^rain") then return false end
+          end
+          return true
+        end)())
 end
 
 print("\n-- BPM: coarse is 1/detent, fine is a tenth of that --")
@@ -44,10 +52,10 @@ do
         clock.get_tempo() == M.state.global.bpm, tostring(clock.get_tempo()))
 end
 
-print("\n-- Swing/Scatter/Drops/Decay/Rain/Excite are plain 0..1 knobs --")
+print("\n-- Swing/Scatter/Drops/Decay are plain 0..1 knobs --")
 do
   local M = fresh(5)
-  local keys = {"swing", "scatter", "drops", "decay", "rain_volume", "rain_excite"}
+  local keys = {"swing", "scatter", "drops", "decay"}
   for i, p in ipairs(M.gparam.PARAMS) do
     local want
     for _, k in ipairs(keys) do if p.key == k then want = true end end
@@ -174,17 +182,40 @@ do
         string.format("%.3f", c.hz))
 end
 
-print("\n-- Rain and Excite forward to the engine --")
+-- §4.3 --------------------------------------------------------------------
+
+print("\n-- an external clock source makes BPM a readout --")
 do
-  local M = fresh(19)
-  M.gparam.nudge(8, 500, true)            -- Rain (volume)
-  check("rain volume reached the engine",
-        last(CALLS.rain_volume) and math.abs(last(CALLS.rain_volume).v - 1.0) < 1e-6,
-        tostring(last(CALLS.rain_volume) and last(CALLS.rain_volume).v))
-  M.gparam.nudge(9, 500, true)            -- Excite
-  check("rain excite reached the engine",
-        last(CALLS.rain_excite) and math.abs(last(CALLS.rain_excite).v - 1.0) < 1e-6,
-        tostring(last(CALLS.rain_excite) and last(CALLS.rain_excite).v))
+  local M = fresh(21)
+  M.gparam.nudge(1, 5, true)
+  local set_internally = M.state.global.bpm
+  check("internal: the row moves the tempo", set_internally == 125,
+        tostring(set_internally))
+  check("and says so plainly", M.gparam.PARAMS[1].text() == "125",
+        M.gparam.PARAMS[1].text())
+
+  params:set("clock_source", 2)          -- MIDI
+  check("gparam notices", M.gparam.external_clock())
+  M.gparam.nudge(1, 40, true)
+  check("the row no longer moves the tempo", clock.get_tempo() == 125,
+        tostring(clock.get_tempo()))
+  check("and our own copy is untouched too", M.state.global.bpm == 125,
+        tostring(M.state.global.bpm))
+  check("the readout says where the number comes from",
+        M.gparam.PARAMS[1].text() == "125 ext", M.gparam.PARAMS[1].text())
+
+  -- the source moves the tempo under us
+  TEMPO = 90
+  check("and reads the clock, not the stored copy", M.gparam.tempo() == 90,
+        tostring(M.gparam.tempo()))
+  M.gparam.adopt_tempo()
+  check("adopting it keeps the stored copy in step", M.state.global.bpm == 90,
+        tostring(M.state.global.bpm))
+
+  params:set("clock_source", 1)
+  check("back on internal, the row moves again",
+        (function() M.gparam.nudge(1, 5, true); return M.state.global.bpm end)() == 95,
+        tostring(M.state.global.bpm))
 end
 
 report()

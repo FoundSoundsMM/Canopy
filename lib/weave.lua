@@ -459,6 +459,15 @@ end
 -- the taps this row placed in the future. same split-before-firing shape as
 -- rambler's own scheduler, and for the same reason: firing can push a fresh
 -- entry (an echo whose tail is still going) and it must survive the swap.
+-- §4.3 an external transport Start: drop every tap this file has placed in
+-- the future. tick() is not called while Still, so a stop leaves echoes,
+-- flams and rolls sitting in `pending` with timestamps already in the past,
+-- and the first tick after a Start would fire all of them in one block --
+-- see rambler.resync, which calls this.
+function weave.resync()
+  pending = {}
+end
+
 function weave.tick(now)
   if #pending == 0 then return end
   local due, keep = {}, {}

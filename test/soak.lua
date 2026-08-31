@@ -63,6 +63,10 @@ clock.get_beats = real_clock.get_beats
 clock.run = function(f) f() return 1 end
 clock.cancel = function() end
 clock.sleep = function() end
+-- §4.3: norns really does hand scripts a clock.transport table of three
+-- overwritable stubs, so the strict surface has to have one too -- Canopy.lua
+-- assigns its Start/Stop/reset handlers into it at load.
+clock.transport = real_clock.transport
 
 local metros, gridobj = {}, nil
 metro.init = function(f, t, c)
@@ -138,6 +142,17 @@ do
     ok = guard("redraw global page", redraw) and ok
   end
   check("the global param page redraws with a live patch", ok, failures[1])
+
+  -- §4.1b the mixer, reached the way a player reaches it
+  ok = true
+  key(3, 1); key(3, 0)
+  for _ = 1, 20 do
+    tick(33)
+    ok = guard("redraw mixer page", redraw) and ok
+  end
+  check("the mixer page redraws too", ok and M.state.view == "mixer",
+        failures[1] or tostring(M.state.view))
+  key(2, 1); key(2, 0)
 
   ok = true
   for _, id in ipairs(all_ids) do
@@ -240,9 +255,13 @@ end
 -- (`level`/`fill`), which at 15 fps fills matron's screen queue faster than it
 -- drains. a full queue blocks the Lua thread, so the screen stops updating and
 -- the front panel stops responding while the grid -- its own callback, its own
--- metro -- carries on. the global param page that replaced it is nine label/
--- value/bar rows, the same shape as the sound page below, so the budget here
--- is really just guarding against a future regression. numbers, not vibes.
+-- metro -- carries on.
+--
+-- §5.2b's widget grid is the first thing since to cost real money here: ten
+-- knobs at three strokes each is most of a page, where ten label/value/bar
+-- rows were three text calls each. that is why draw_knob is three strokes and
+-- not five -- an inner circle and a separate track arc, both of which the
+-- first draft had, put the sound page over this line on their own.
 
 print("\n-- the screen budget, per frame --")
 do
@@ -292,6 +311,13 @@ do
   calls, paint = frame()
   check("the sound page: under 200 commands", calls < 200, calls .. " calls")
   M.state.cell_edit = nil
+
+  -- ten knobs is the most the widget grid ever draws, and the sound page
+  -- above is exactly that; the mixer's five is the other end of the range.
+  M.state.view = "mixer"
+  calls, paint = frame()
+  check("the mixer page: under 150 commands", calls < 150, calls .. " calls")
+  M.state.view = "global"
 
   M.state.held = {"d.hob"}
   calls, paint = frame()

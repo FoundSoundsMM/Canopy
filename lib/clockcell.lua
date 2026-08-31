@@ -50,6 +50,16 @@ for id, cell in topology.each() do
   end
 end
 
+-- §4.3 an external transport Start: forget where each cell was in the beat,
+-- so tick() re-seeds it from the clock silently. without this a stop of
+-- exactly eight beats sits just inside the catch-up window below and fires
+-- four pulses at once on resume.
+function clockcell.resync()
+  for _, id in ipairs(order) do
+    cells[id].abs = nil
+  end
+end
+
 -- called from rambler.tick, on the far side of the Still check -- a clock
 -- cell freezes with everything else rather than drifting out from under it.
 function clockcell.tick(now)

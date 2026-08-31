@@ -91,13 +91,22 @@ By default **nothing is heard**. The top row is sixteen output cells; position
 along it sets pan, hard left at column 1 to hard right at column 16. Cabling a
 voice, a percussion (GVOICE) cell, an exciter or a heartwood node to one of
 these is the only way its audio ever reaches the speakers — there is no
-automatic mix left anywhere in the engine (§7.3, §8). Patching one source to
-several O cells spreads it across the stereo field, each copy at that
-specific cable's own gain, summed the same way several cables landing on one
-mod path already sum.
+automatic mix left anywhere in the engine (§7.3, §8).
+
+**The row is exclusive: one source, one slot.** Position along the row *is*
+pan, so a source cabled to two O cells is one source at two pan positions at
+once — which reads on the panel as a patching mistake and sounds like a
+widened, phase-smeared copy of itself nobody asked for. Cabling a source that
+is already on the row to a second O cell therefore **moves** it: the cable it
+had is pulled first, at the same gain, so the gesture reads as dragging the
+source along the row rather than as adding to it. (`lib/patch.lua`'s
+`displace_output`; `patch.toggle` returns `"moved"` rather than `"added"` so
+the panel can say so.) Everything else about a source's patch is untouched —
+it may still fan out to as many non-Output cells as it likes.
 
 An O cell is a pure destination: a pulse landing on one means nothing (§6),
-and it never speaks itself.
+and it never speaks itself. Two O cells cabled together is not a cable at all
+— there is no source to move, so nothing is displaced and nothing flows.
 
 ### 2.2 Voices (4)
 
@@ -444,21 +453,98 @@ the original design carried (§1) is gone with the socket cluster.
 
 | Control | Function |
 |---------|----------|
-| E1 | pick one of nine global params (§5.2) |
+| E1 | pick one of seven global params (§5.2) |
 | E2 / E3 | nudge the picked param, coarse / fine |
 | K1 + E3 | Master level |
-| K2 | **Still** — freeze all pulse gaits; resonators ring out. Tap again to resume |
-| K3 | close the sound page, if it is open (nothing else to cycle to) |
+| K3 | **the mixer** (§4.1b) — from anywhere, including an open cell page, whose focus it drops on the way |
+| K2 | **back** — off the mixer, or out of an open cell page, to the main screen; on the main screen, **Still** |
 | K1 + K2 | **Regrow** — a seeded patch that already plays (hold to confirm) |
 | K1 + K3 | **Clearing** — cut every cable (hold to confirm) |
 
-**The nine global params** (`lib/gparam.lua`), in E1 order: BPM, Swing,
-Scatter, Scale, Drops, Decay, Pitch, Rain, Excite — all unchanged by the grid
-overhaul; see the earlier build phases (§9) for what each does.
+**The seven global params** (`lib/gparam.lua`), in E1 order: BPM, Swing,
+Scatter, Scale, Drops, Decay, Pitch. It was nine: Rain and Excite left when
+the one rain loop became four (§4.1b).
 
-**Regrow** always wires at least one Output cable per voice it uses now, or a
+**K2 and K3 are one shallow stack**, not a different pair of jobs per page.
+K3 goes down into the mixer from wherever you are; K2 comes back up one
+level. Still keeps K2 because the main screen is the one place with nothing
+to come back from, and freezing the patch is a fair reading of "there is
+nothing above this". K3's old job — closing a cell page — is K2's now, along
+with everything else that means "up one".
+
+**Regrow** always wires exactly one Output cable per voice it uses, or a
 freshly regrown patch would strike voices nobody can hear — the whole point
-of the gesture ("a patch that already plays") depends on it.
+of the gesture ("a patch that already plays") depends on it. Exactly one, not
+one-or-two: the row is exclusive (§2.1), so a second would only move the
+first.
+
+### 4.1b The mixer page — K3
+
+Four always-on soundscape loops (`lib/mixer.lua`), each a stereo field
+recording under `audio/`, each looping from init regardless of anything else
+on the panel, each with its own fader — plus the master, which is the same
+number `K1`+`E3` has always moved, given a face.
+
+| Fader | Sample | Engine index |
+|-------|--------|--------------|
+| Rain | `audio/Rain.wav` | 0 |
+| Cicada | `audio/Cicada.wav` | 1 |
+| Thunder | `audio/Thunder.wav` | 2 |
+| Sea | `audio/Sea.wav` | 3 |
+| Master | — | — |
+
+All four start at 0, so the script says nothing until it is asked to. `E1`
+picks a fader, `E2`/`E3` move it coarse/fine — the same page shape as §5.2
+and §5.5.
+
+**They are a dry mix and nothing else.** The old **Excite** knob — the same
+rain audio fed continuously into every voice's resonator, whether or not
+anything was patched — is gone rather than multiplied by four. These are
+soundscapes to sit the patch inside; the six E cells (§2.4) are still the
+panel's excitation sources, and `\woodland_voice` is back to being excited
+only by its own strike burst and by whatever a cable puts on its mod path.
+
+Engine side: `amb_load(i, path)`, `amb_volume(i, v)`, and one `\wl_amb`
+synth per loop summing into a single shared stereo `ambBus` that
+`\woodland_fx` reads. Each fader is applied (squared, and lagged) inside its
+own `\wl_amb` rather than at the reader, so four loops cost one bus. The
+faders are held engine-side whether or not that loop's `Buffer.read` has
+completed, so pushing them at init — which `mixer.init` does — loses nothing;
+a missing file simply leaves that one loop silent and does not touch the
+other three.
+
+**Cost.** Thunder and Cicada are minutes long; between them the four buffers
+hold roughly 130 MB of scsynth memory. If that ever becomes a problem, the
+fix is `VDiskIn` streaming rather than `PlayBuf`, or shorter loops — nothing
+above changes.
+
+### 4.1c External clock and transport
+
+norns' own clock owns the tempo source (`PARAMS > CLOCK > source`: internal,
+MIDI, Link, crow) and calls `clock.transport.start` / `.stop` / `.reset` back
+whichever source is running. So there is no MIDI parsing in the script and no
+second clock: select MIDI and the whole patch is externally clocked. Rooted
+gaits already read `clock.get_beats()` rather than integrating a rate of
+their own (§2.3), so they follow it exactly; `gparam`'s BPM row becomes a
+readout and says `ext`.
+
+What the script decides is what Start and Stop *mean* here, and the answer is
+the one the panel already has a word for:
+
+| Event | Effect |
+|-------|--------|
+| Stop | **Still** — gaits freeze, resonators ring out, and everything in flight freezes with them rather than flushing on resume |
+| Start | un-Still, and both sequencer lanes (§2.10) go back to before their first step, so the next driving pulse lands on step 1 |
+| Reset (song-position jump, no stop) | the lanes only; nothing freezes |
+
+Stop being Still — the *same flag* `K2` writes, not a parallel record of its
+own — is what makes a remote stop and a local freeze the same state, which is
+the only way the two can never disagree. `K2` resumes from an external stop
+for the same reason. The one thing Start has to do beyond clearing the flag is drop the
+scheduled/inbox/source queues (`rambler.resync`): `tick()` returns *before*
+those drains while Still, so a stop leaves entries sitting there with
+timestamps already in the past, and without clearing them the first tick
+after a Start would fire the lot in one block.
 
 ### 4.2 Holding a grid cell
 
@@ -527,25 +613,107 @@ floored to a minimum readable brightness. Every cell fades toward this floor
 the same way now — the old voice-only ×0.4 dim case is gone with the
 socket-endpoint exception it existed for.
 
+### 5.1b Inspect dimming — a settings page is open
+
+With a cell's page open and nothing held, the panel dims to that one cell:
+
+| | Level |
+|-|-------|
+| the cell whose page is open | 15 |
+| every cell cabled to it | 7, steady (not blinking) |
+| everything else | 1 |
+
+The page you are reading is about ONE cell, and ninety cells all doing their
+own thing behind it is ninety things competing with the four numbers you came
+to look at. So the grid shows the same one thing the screen is showing. It is
+deliberately dimmer and calmer than the held reveal above — a hold is a
+momentary gesture and can afford to blink, a page is something you sit on for
+a minute — and it is deliberately *flat*, not scaled from what each cell is
+currently doing: a trigger's pulse flash is noise while you are reading a
+page, and it must not punch back through.
+
+Holding wins over inspecting when both apply: the hold reveal is the more
+urgent question.
+
 ### 5.2 Screen — Global param page (nothing held)
 
-Unchanged since build phase 6b/7: the same two-column, nine-row list §5.5
-gives the voice sound page, for `lib/gparam.lua`'s nine global macros. `E1`
-walks the list, `E2` moves the picked param coarsely and `E3` finely. The
-title line's right side carries transient event feedback (a sever, a gait
-swap, Regrow/Clearing's result).
+`lib/gparam.lua`'s seven global macros, drawn as §5.2b's widget grid. `E1`
+walks the list, `E2` moves the picked param coarsely and `E3` finely. Seven
+fits on one page.
 
-### 5.3 Screen — Cell view (a cell held)
+### 5.2b Screen — the widget grid
 
-Unchanged in shape: title + type badge, a one-line plain-English gloss
-(`lexicon.describe`), a type-specific info row, then a one-row cable-list
-window following E1's focus. The type-specific row now also covers Clock
-cells (reaches, no value to show — a pure flasher) and SEQ cells (which step,
-whether it's on or driving, where the lane's playhead currently sits).
+Every full-screen page in the script — global (§5.2), mixer (§4.1b), and
+every cell page (§5.3, §5.5) — is drawn by one routine in `lib/screenui.lua`,
+and it is not a list any more.
 
-Two cells held → an edge view: both names, a bipolar gain bar (when cabled),
-and a short description of what actually flows across that edge given the
-two types (§6).
+It used to be: a two-column list of `label ....... value` rows with a
+hairline bar under each. That was compact, and it read like a settings menu —
+rows of small type you parse left to right, one at a time, while the thing
+you are editing is making noise. An Elektron box solves the same problem the
+opposite way round: a title bar that never moves, and then a fixed grid of
+widgets, each showing its value as a *shape* you read at a glance and its
+name as a word underneath. You look at the grid, not at the rows.
+
+**The header bar.** Inverted — a filled bar with the text knocked out of it,
+which is what makes it read as a title rather than as one more row. Eleven
+pixels, and always the same six things in the same places:
+
+| | |
+|-|-|
+| transport | a filled triangle running, a filled square frozen. Still and an external Stop are the same state (§4.1c), so one glyph reports both |
+| tag chip | two or three characters saying what kind of page this is: a cell's panel letter, `MIX`, `G` |
+| page dots | one per page, filled for the one you are on — eight pixels where "1/2" would cost twenty |
+| name | the page's name, or — for a few seconds after anything happens — what just happened |
+| value | the full, untrimmed reading of whatever the cursor is on: the one thing on the screen that is never abbreviated |
+| tempo chip | inverted again, at the right edge. `ext` when something else is deciding it |
+
+**The grid.** 4 × 2, eight to a page, a longer list paginating rather than
+wrapping back over itself.
+
+- a parameter whose reading is a **quantity** draws as a **knob**: a circle,
+  a bright arc from the start of a 270° sweep to the value, and a radial
+  pointer. Three strokes and no more than three — at fifteen frames a second
+  eight of these plus a header is the whole screen budget.
+- a parameter whose reading is a **word** — a gait, a scale, on/off — draws
+  as a **boxed readout** instead, filled and inverted when focused, outlined
+  when not. A pointer angle tells you nothing about "euclidean".
+- which one a parameter gets is decided from its text at draw time (does the
+  reading start with a digit, a sign, or the decay multiplier's `x`?), not
+  from a flag on the parameter. That keeps the one page contract every module
+  already shares, and a row that changes from a number to a word — Scale's
+  `free` at position zero — changes widget with it.
+- the label under each widget is the parameter's name, clipped to the column.
+  The value is never clipped: it is in the header in full.
+
+**Four columns, not the Digitakt's five.** At five a column is 25px, and 25px
+of this font is four or five characters — which turns both `Scatter` and
+`Scale` into `Sca.`, two adjacent parameters that now read identically. 32px
+fits the longest label the panel has. It also means eight to a page rather
+than ten, which lands every page in the script except a voice's twelve on one
+screen.
+
+`test/screen.lua` is the authority on the geometry: two words may never share
+pixels; a word may sit inside a box (the header bar, a chip, a widget's
+readout) but never inside a knob gauge, and never half-clipped by anything.
+
+### 5.3 Screen — Cell view (a cell held or open)
+
+The same widget grid as §5.2, for whichever page that cell's type has
+(`lib/cellparam.lua`, or `voice`/`gvoice`/`tm`'s own). The header's tag chip
+carries the panel letter and its dots the page number. Holding is a glance —
+the encoders are on the page for as long as you hold, and the patch gesture
+is live underneath; tapping latches it open, and dims the panel to that cell
+(§5.1b).
+
+The old cell view's second line — a plain-English gloss from
+`lexicon.describe`, or a list of what the cell is cabled to — is gone with
+the list layout. The grid dimming shows the cables more directly, and the
+edge view below still describes any one of them.
+
+Two cells held → an edge view: the same header, both names, a bipolar gain
+bar (when cabled), and a short description of what actually flows across that
+edge given the two types (§6).
 
 ### 5.4 Screen — Meters view (removed)
 
@@ -555,9 +723,11 @@ back-channel (§7.4) ever lands.
 ### 5.5 Screen — the voice sound page
 
 Tapping a voice cell replaces the screen with its parameters; tapping again
-puts the screen back. `E1` picks one, `E2` moves it coarsely, `E3` finely.
-*Holding* a voice cell shows the same page for as long as you hold it,
-without taking the encoders off the patch — unchanged.
+(or `K2`) puts the screen back. `E1` picks one, `E2` moves it coarsely, `E3`
+finely. *Holding* a voice cell shows the same page for as long as you hold
+it, without taking the encoders off the patch — unchanged. Twelve parameters
+is the only list in the script long enough to paginate on §5.2b's eight-wide
+grid.
 
 **Three new rows since the grid overhaul**, at the end of the list: the old
 T/P/M sockets' own knobs, which moved here because there is no socket left to
@@ -699,14 +869,16 @@ Canopy/
     grove.lua                -- pitch fields: modes, coupling, voice retuning
     voice.lua                -- the eleven-parameter voice sound page (§5.5)
     gvoice.lua               -- the six GVOICE-cell drums + their sound page
-    gparam.lua                -- the nine-parameter global page (§4.1, §5.2)
+    gparam.lua                -- the seven-parameter global page (§4.1, §5.2)
+    mixer.lua                 -- the four soundscape loops + master (§4.1b)
     gridui.lua                -- grid render + hold/tap state machine
-    screenui.lua              -- global param / cell / edge / voice views
+    screenui.lua              -- the widget grid (§5.2b): global / mixer /
+                                 cell / edge views
     bridge.lua                -- engine command wrapper
   lib/Engine_Canopy.sc      -- SC: modal voices, GVOICE drums, exciters, patch
-                               matrix, heartwood, the always-on rain ambience,
+                               matrix, heartwood, the four ambience loops,
                                the Output row's fixed-pan mix
-  audio/Rain.wav            -- the rain ambience's source loop
+  audio/*.wav               -- Rain, Cicada, Thunder, Sea: the mixer's loops
   README.md
 ```
 
@@ -730,7 +902,10 @@ modulation.
 ```
 groups:  gSrc -> gPatch -> gVoice -> gTap -> gFx
 
-rainBus         2  the always-on rain ambience (§4.1 Rain/Excite)
+ambBus          2  the four ambience loops' shared dry sum (§4.1b).
+                   each \wl_amb applies its own fader before writing here,
+                   so four loops cost one bus. read only by \woodland_fx --
+                   nothing feeds a voice from it any more.
 
 patchBus        6  exciter outputs        (excBase         0)
                 6  per-E colour-mod sums  (colourModBase   6)
@@ -857,17 +1032,18 @@ patch_add(id, kind, src, dst, gain)
 patch_gain(id, gain)            patch_free(id)
 heart_conductance(i, v)
 master_level(v)
-rain_load(path)                 rain_volume(v)
-rain_excite(v)
+amb_load(i, path)               amb_volume(i, v)
 ```
 
 `voice_choke` and `voice_tap` are gone — the socket collapse (§2.2) removed
-both discrete choke and the separate per-voice output-level knob. Everything
-else is unchanged from before the overhaul.
+both discrete choke and the separate per-voice output-level knob.
+`rain_load`/`rain_volume`/`rain_excite` are gone too: the first two are
+`amb_load`/`amb_volume` with a loop index in front (§4.1b), and the third has
+no successor at all.
 
 **CPU budget.** 4 voices x 6 modes = 24 resonators, plus 6 always-on GVOICE
 cells and up to 6 exciters (lazily allocated), ~50 patch synths worst case, a
-4-node heartwood, one stereo sample loop. Smaller across the board than
+4-node heartwood, four stereo sample loops. Smaller across the board than
 before the overhaul — the trims (§2) bought back headroom the same way the
 original design's four-voices-not-six trade did.
 
@@ -892,7 +1068,8 @@ instrument as it stood before the grid overhaul; what follows is additive.
 6b. **The global param page.** `gparam.lua`'s nine-parameter list replaces
    the old network view.
 7. **The re-name.** The script becomes Canopy; reverb and the output
-   Compressor removed; the always-on rain ambience added.
+   Compressor removed; the always-on rain ambience added (since grown into
+   the mixer's four loops — see 11 below).
 6c. **The re-cut's re-cut.** Six R cells become G cells (§2.7b).
 6d. **The Turing Machines.** Four TM cells join the D core (§2.3b).
 8. **Life.** Metering back-channel groundwork (still narrower than spec'd).
@@ -922,6 +1099,28 @@ instrument as it stood before the grid overhaul; what follows is additive.
       on phase-coupling and diffusion.
     - **Spec and test-suite pass.** This document, and the offline harness's
       coverage, brought back in step with the code.
+
+11. **The screen and the transport.** Five changes that are all about
+    *playing* the instrument rather than about what it can make. In order:
+    - **The widget grid** (§5.2b). `screenui.lua` rewritten around an
+      inverted header bar and a 4×2 grid of knobs and boxed readouts, in
+      place of the two-column text list every page used to be.
+      `test/screen.lua`'s collision model rewritten with it: backgrounds and
+      frames may hold text, knob gauges may not, and nothing may be
+      half-clipped.
+    - **External clock and transport** (§4.1c). `clock.transport` handlers in
+      `Canopy.lua`; `rambler.resync` and `sequencer.reset` so a Start does
+      not flush what a Stop froze; `gparam`'s BPM row becomes a readout under
+      an external source.
+    - **Inspect dimming** (§5.1b). An open cell page dims the panel to that
+      cell and its cables.
+    - **Output-row exclusivity** (§2.1). `patch.lua`'s `displace_output`: a
+      source cabled to a second Out cell moves rather than fans out. Regrow's
+      "sometimes a second Output cable" branch dropped with it.
+    - **The mixer** (§4.1b). Three more soundscape loops beside Rain, a page
+      of faders of their own on `K3`, `\wl_rain` generalised into four
+      `\wl_amb`s over one shared bus — and the old Excite path removed
+      rather than multiplied by four.
 
 ---
 
