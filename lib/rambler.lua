@@ -25,7 +25,7 @@
 -- them to the transport exactly instead of approximately.
 --
 -- quantise.lua sits between every *gait* and its output: a gait free-runs at
--- whatever rate it likes, but when it is heard is Swing/Rain's call. what the
+-- whatever rate it likes, but when it is heard is Swing/Scatter's call. what the
 -- weave and the voice outs emit is deliberately NOT re-quantised -- those
 -- pulses are derived from one that was already placed, and snapping a flam or
 -- a swung off-beat back onto the grid would undo the only thing it does.
@@ -48,7 +48,7 @@ rambler.FLASH_DECAY = 0.12  -- §5.1 "flash 15 on pulse, decay ~120 ms"
 local TICK = rambler.TICK
 
 -- Kuramoto coupling constant, in Hz of phase pull at unity edge gain (§2.3).
--- scaled by Rain and by each gait's own coupling multiplier.
+-- scaled by Scatter and by each gait's own coupling multiplier.
 local K_BASE = 2.0
 
 -- runaway guards. a patch is a graph with cycles in it by design -- and since
@@ -176,7 +176,7 @@ GAITS.slow = {
   wrap = function(r) return 1.0 end,
 }
 
--- burst: one wrap fires a ratchet of 2-7. Rain picks how many.
+-- burst: one wrap fires a ratchet of 2-7. Scatter picks how many.
 -- §4.1 wants the burst itself triggered on the beat, so it overrides the
 -- rate-derived grid with a whole beat, and lays its ratchet out on a
 -- subdivision of that beat rather than on a fraction of its own cycle -- the
@@ -191,7 +191,7 @@ GAITS.burst = {
   end,
   rate = function(r) return (GAITS.burst.read(r)) end,
   ratchet = function(r, t0, weight)
-    local n = 2 + math.floor((state.global.rain or 0) * 5 + 0.5)
+    local n = 2 + math.floor((state.global.scatter or 0) * 5 + 0.5)
     if n < 2 then return end
     local chaos = quantise.chaos()
     local grid_gap = quantise.ratchet_gap(n) * quantise.spb()
@@ -211,14 +211,14 @@ GAITS.burst = {
 }
 
 -- stochastic: a Bernoulli gate at the wrap. E2 is the probability; the rate
--- itself rides Rain, so wilder settings also mean faster dice.
+-- itself rides Scatter, so wilder settings also mean faster dice.
 GAITS.stochastic = {
   rooted_ok = false, coupling = 1.0, drift = 1.0,
   read = function(r)
     local p = char(r)
     return p, string.format("p %.2f", p)
   end,
-  rate = function(r) return 1.5 + (state.global.rain or 0) * 4.5 end,
+  rate = function(r) return 1.5 + (state.global.scatter or 0) * 4.5 end,
   wrap = function(r)
     if math.random() < (GAITS.stochastic.read(r)) then
       return 0.6 + math.random() * 0.4
@@ -450,7 +450,7 @@ local function period_of(gait, r)
   return 1 / hz
 end
 
--- the front door for a *gait*: Swing/Rain decide whether it speaks now or on
+-- the front door for a *gait*: Swing/Scatter decide whether it speaks now or on
 -- the next grid line (§4.1, and quantise.lua for the sweep). the ratchet hook
 -- hangs off the quantised time, not the raw one, so a burst's flam is laid
 -- out from where the burst is actually heard.
@@ -530,8 +530,8 @@ local function advance_rooted(r, gait)
 end
 
 local function advance_wild(r, gait, K, chaos)
-  -- §4.1 Rain is also "gait drift": a slow random walk on the rate, scaled
-  -- by chaos (Rain) rather than Swing -- there is nothing to be gained from
+  -- §4.1 Scatter is also "gait drift": a slow random walk on the rate, scaled
+  -- by chaos (Scatter) rather than Swing -- there is nothing to be gained from
   -- drifting a rate whose output is about to be snapped back onto the grid
   -- anyway.
   if gait.drift > 0 and chaos > 0 then
@@ -629,8 +629,8 @@ function rambler.tick()
     r.snap = r.phase
   end
 
-  local rain = state.global.rain or 0
-  local K = K_BASE * (0.15 + rain * 1.85)
+  local scatter = state.global.scatter or 0
+  local K = K_BASE * (0.15 + scatter * 1.85)
   local chaos = quantise.chaos()
 
   for _, id in ipairs(order) do
@@ -663,7 +663,7 @@ function rambler.level(id, base)
   return util.clamp(math.floor(lvl), 0, 15)
 end
 
--- which grid this cell is currently being held to, or nil once Rain has
+-- which grid this cell is currently being held to, or nil once Scatter has
 -- let go of it entirely (§5.3 reads this out under the gait).
 function rambler.grid_name(id)
   local r = ramblers[id]

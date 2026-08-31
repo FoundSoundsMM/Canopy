@@ -17,7 +17,7 @@ local bridge   = wl("bridge")
 local gparam = {}
 
 -- §4.1 E3 is the transport: the whole patch quantises against it at low
--- Rain, so it has to be reachable without diving into the list. norns' clock
+-- Scatter, so it has to be reachable without diving into the list. norns' clock
 -- reads its tempo from the clock_tempo param rather than from a setter, so
 -- that is what gets written -- and it is guarded, because the offline test
 -- harness has no params menu.
@@ -30,9 +30,6 @@ function gparam.set_bpm(v)
   end
   state.set_event(string.format("%.0f BPM", state.global.bpm), 0.8)
 end
-
--- fixed for now; only the overall wet amount (Canopy) is exposed.
-local CANOPY_SIZE, CANOPY_DAMP = 0.6, 0.5
 
 -- Drops: semitones of extra per-strike detune range at full knob, on top of
 -- the 0.02 st floor every strike has always had (grove.on_strike) -- that
@@ -80,14 +77,15 @@ gparam.PARAMS = {
   {
     -- §4.1's old Weather knob, upper half: how much a pulse's landing is
     -- displaced from the grid, growing to "nothing is held at all" at 1
-    -- (quantise.lua's "rain" reading). also scales the rhythm/field
+    -- (quantise.lua's "scatter" reading). also scales the rhythm/field
     -- wildness rambler.lua and grove.lua used to read off Weather directly.
-    key = "rain", label = "Rain", coarse = 1 / 80, fine = 1 / 500,
+    -- called Rain until the actual Rain.wav ambience below took that name.
+    key = "scatter", label = "Scatter", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
-    get = function() return state.global.rain or 0 end,
-    set = function(v) state.global.rain = util.clamp(v, 0, 1) end,
-    text = function() return string.format("%.2f", state.global.rain or 0) end,
-    frac = function() return state.global.rain or 0 end,
+    get = function() return state.global.scatter or 0 end,
+    set = function(v) state.global.scatter = util.clamp(v, 0, 1) end,
+    text = function() return string.format("%.2f", state.global.scatter or 0) end,
+    frac = function() return state.global.scatter or 0 end,
     push = function() end,
   },
   {
@@ -154,24 +152,30 @@ gparam.PARAMS = {
     end,
   },
   {
-    key = "compressor", label = "Comp", coarse = 1 / 80, fine = 1 / 500,
+    -- the always-on Rain.wav ambience (lib/Engine_Canopy.sc's \wl_rain):
+    -- it is looping and audible-ready from init, and this is just its dry
+    -- level in the mix. 0 by default -- it says nothing until asked to.
+    key = "rain_volume", label = "Rain", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
-    get = function() return state.global.compressor or 0 end,
-    set = function(v) state.global.compressor = util.clamp(v, 0, 1) end,
-    text = function() return string.format("%.2f", state.global.compressor or 0) end,
-    frac = function() return state.global.compressor or 0 end,
-    push = function() bridge.compressor(state.global.compressor or 0) end,
+    get = function() return state.global.rain_volume or 0 end,
+    set = function(v) state.global.rain_volume = util.clamp(v, 0, 1) end,
+    text = function() return string.format("%.2f", state.global.rain_volume or 0) end,
+    frac = function() return state.global.rain_volume or 0 end,
+    push = function() bridge.rain_volume(state.global.rain_volume or 0) end,
   },
   {
-    key = "canopy", label = "Canopy", coarse = 1 / 80, fine = 1 / 500,
+    -- the same rain audio, fed continuously into every voice's resonator as
+    -- excitation (like an M-socket "inject" stream, but global and always
+    -- running rather than patched). 0 is a no-op regardless of Rain volume,
+    -- so the two knobs are independent: you can hear the rain without it
+    -- touching the voices, or excite the voices with it below audibility.
+    key = "rain_excite", label = "Excite", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
-    get = function() return state.global.canopy or 0 end,
-    set = function(v) state.global.canopy = util.clamp(v, 0, 1) end,
-    text = function() return string.format("%.2f", state.global.canopy or 0) end,
-    frac = function() return state.global.canopy or 0 end,
-    push = function()
-      bridge.canopy(CANOPY_SIZE, CANOPY_DAMP, state.global.canopy or 0)
-    end,
+    get = function() return state.global.rain_excite or 0 end,
+    set = function(v) state.global.rain_excite = util.clamp(v, 0, 1) end,
+    text = function() return string.format("%.2f", state.global.rain_excite or 0) end,
+    frac = function() return state.global.rain_excite or 0 end,
+    push = function() bridge.rain_excite(state.global.rain_excite or 0) end,
   },
 }
 

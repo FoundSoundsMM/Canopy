@@ -285,11 +285,11 @@ end
 print("\n-- Still freezes the fields with everything else --")
 do
   local M = fresh(23)
-  -- wander's step size scales with Rain (grove.lua's wild()), which now
+  -- wander's step size scales with Scatter (grove.lua's wild()), which now
   -- defaults to 0 rather than the old Weather knob's 0.4 -- pinned explicitly
-  -- so this test (about Still, not about Rain) keeps the same headroom it
+  -- so this test (about Still, not about Scatter) keeps the same headroom it
   -- always had.
-  M.state.global.rain = 0.4
+  M.state.global.scatter = 0.4
   M.patch.add(PLOVER, "oak.pitch", 1.0)  -- wander: moves on the tick, unprompted
   M.state.character[PLOVER] = 1.0
   M.state.notify_character_change(PLOVER)

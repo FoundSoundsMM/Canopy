@@ -170,7 +170,7 @@ dphi_i  =  rate_i * dt  +  K * sum_j ( g_ij * sin(2*pi*(phi_j - phi_i)) )
 ```
 
 `g_ij` is the edge gain (bipolar). Positive gain pulls toward sync; negative
-gain pushes toward anti-phase. `K` scales with the global **Rain** macro.
+gain pushes toward anti-phase. `K` scales with the global **Scatter** macro.
 This is the whole rhythm engine — no step sequencer anywhere.
 
 Metric, euclidean and figure are *rooted* to the norns clock by default; the
@@ -371,7 +371,7 @@ in beats, so they stay in time when the tempo moves; Twitten, Holt, Bramble,
 Tangle and Briar measure themselves in milliseconds, because smearing across
 the grid is the whole point of them.
 
-**What the weave emits is not re-quantised.** Swing/Rain (§4.1) place a *gait's*
+**What the weave emits is not re-quantised.** Swing/Scatter (§4.1) place a *gait's*
 emission on a grid line. A pulse coming out of an R cell is derived from one
 that was already placed, and snapping a flam or a swung off-beat back onto the
 grid would undo the only thing that cell does.
@@ -470,15 +470,18 @@ one is unambiguously the sound-page gesture.
 |-------|--------------|-------|
 | BPM | transport tempo, writes `clock_tempo` | 20 .. 300 |
 | Swing | grid warp: each pair of 8ths stretched then squeezed, so off-beats land late and beats never move | 0 (straight) .. 1 (full, ~3:1 long-short) |
-| Rain | trigger randomness: loosens the quantise snap and grows a random displacement in its place; also scales gait-rate drift and coupling, and pitch-field wander | 0 (locked to the grid) .. 1 (free-running, "rain") |
-| Scale | quantises every voice's total pitch to a scale, unconditionally and after everything else has summed | 0 (free/unquantised) .. N (major, minor, pentatonic, whole tone, chromatic) |
+| Scatter | trigger randomness: loosens the quantise snap and grows a random displacement in its place; also scales gait-rate drift and coupling, and pitch-field wander | 0 (locked to the grid) .. 1 (free-running) |
+| Scale | quantises every voice's total pitch to a scale, unconditionally and after everything else has summed. pentatonic only, shorthand "Pent" | 0 (free/unquantised) .. N (Pent Maj, Pent Min, Equi Pent, Equi Pent2) |
 | Drops | per-strike random pitch offset, on top of the ~0.02 st floor every strike has always had | 0 .. 1 (up to ±1.5 st) |
 | Decay | multiplies every voice's resonator ring time at once | ×0.25 .. ×4 |
 | Pitch | transposes every voice at once | ±24 semitones |
-| Compressor | a glue compressor on the final stereo mix | 0 (bypass) .. 1 |
-| Canopy | global space/reverb amount | 0 .. 1 |
+| Rain | the always-on `audio/Rain.wav` ambience: its own dry level in the mix. loops from init regardless of this knob; 0 says nothing | 0 (silent) .. 1 |
+| Excite | how much that same rain audio continuously excites every voice's resonator, whether or not anything is patched | 0 (no-op) .. 1 |
 
-Swing and Rain decide *when* a pulse is allowed to land, not what it sounds
+There is no reverb and no output compressor anywhere in the signal path —
+build phase 7 removed both. §8 has the reasoning and what replaced them.
+
+Swing and Scatter decide *when* a pulse is allowed to land, not what it sounds
 like; `lib/quantise.lua` owns that mapping and `lib/rambler.lua` routes every
 emission through it. The grid is per cell, not global: each is quantised to
 the coarsest of 8th / 16th / 32nd / 64th that still fits inside one cycle of
@@ -492,7 +495,7 @@ only known about once it has happened. The cost is up to one grid interval of
 latency, and since the grid is never coarser than the cell's own cycle, it never
 costs the cell a pulse.
 
-Swing/Rain place a **gait's** emission. What the weave (§2.7) and a voice's O
+Swing/Scatter place a **gait's** emission. What the weave (§2.7) and a voice's O
 socket (§2.2) emit is deliberately not re-quantised: those pulses are derived
 from one that was already placed, and holding them to the grid a second time
 would undo the transform. Timing you want humanized is a patchable choice on
@@ -579,9 +582,10 @@ read a patch — and see what's still available to patch into — on the grid.
 What used to be here — the full 16x8 map drawn as a lit grid with dotted
 cable "wires" between cell centres, and a travelling dot per pulse — is gone.
 It was a nice picture, but it left the nine global macros with nowhere of
-their own to live: Canopy and the old Weather knob were plain encoder turns
-with no readout, and everything this page now exposes (Scale, Drops, global
-Decay, global Pitch, the output Compressor) had no home at all.
+their own to live: Canopy (now gone entirely, §8) and the old Weather knob
+were plain encoder turns with no readout, and everything this page now
+exposes (Scale, Drops, global Decay, global Pitch, Rain, Excite) had no home
+at all.
 
 In its place: the same two-column, nine-row list §5.5 already gave the voice
 sound page, for `lib/gparam.lua`'s nine params (§4.1) instead of one voice's
@@ -591,16 +595,16 @@ simply what the screen shows whenever nothing is held and no sound page is
 open, the same way the network view always was.
 
 ```
- Woodland                    severed Oak (2)
+ Canopy                      severed Oak (2)
  ─────────────────────────────────────
  BPM         120    Decay      x1.00
  ▐▓▓▓▓▓▓▓░░░░       ▐▓▓▓▓▓▓░░░░░░
  Swing      0.80    Pitch     +0.0 st
  ▐▓▓▓▓▓▓▓▓░░░       ▐▓▓▓▓▓▓░░░░░░
- Rain       0.00    Comp        0.00
+ Scatter    0.00    Rain        0.00
  ▐░░░░░░░░░░░       ▐░░░░░░░░░░░░
- Scale      free    Canopy      0.30
- ▐░░░░░░░░░░░       ▐▓▓▓▓░░░░░░░░
+ Scale      free    Excite      0.00
+ ▐░░░░░░░░░░░       ▐░░░░░░░░░░░░
  Drops      0.00
  ▐░░░░░░░░░░░
  E1 pick  E2/E3 coarse/fine
@@ -632,7 +636,7 @@ there so the numbers underneath it mean something the first time you hold a
 cell you have not held before.
 
 The row below that is whatever the cell type has to say about itself: a D
-cell's rooted/wild and the grid Rain is holding it to; an R cell's cables
+cell's rooted/wild and the grid Scatter is holding it to; an R cell's cables
 in and out and whether its gate is open; an H cell's hop, links and loss; an F
 cell's current degree in semitones; a C cell's reach and current value; and
 for anything with a sound of its own, the decay row.
@@ -647,7 +651,7 @@ description of what actually flows across that edge given the two types.
 ### 5.4 Screen — Meters view (removed)
 
 Was a placeholder per-cell activity view, cycled in with K3 alongside the
-network view. It went with the network view in build phase 7 (§5.2) — a
+network view. It went with the network view in build phase 6b (§5.2) — a
 metering back-channel (§7.4) still doesn't exist, and there is no longer a
 screen mode reserved for it. If per-cell metering lands, it belongs on the
 cell view (§5.3), read live under whichever cell is held, rather than as its
@@ -777,8 +781,8 @@ Notes on the awkward pairs:
 ### 7.1 File layout
 
 ```
-Woodland/
-  Woodland.lua              -- entry: init, grid/key/enc handlers, Regrow
+Canopy/
+  Canopy.lua                -- entry: init, grid/key/enc handlers, Regrow
   lib/
     topology.lua            -- the map: cell records, coords, types, adjacency
     lexicon.lua             -- names, descriptions, each cell type's one knob
@@ -788,7 +792,7 @@ Woodland/
                                the shared pulse bus everything emits through
     weave.lua               -- the twenty R-cell pulse transforms
     climate.lua             -- the eight C-cell slow modulators
-    quantise.lua            -- the groove: Swing/Rain place a gait's emission
+    quantise.lua            -- the groove: Swing/Scatter place a gait's emission
     exciter.lua             -- S-cell control layer (audio side lives in SC)
     heartwood.lua           -- diffusion lattice
     grove.lua               -- pitch fields: modes, coupling, voice retuning
@@ -797,7 +801,9 @@ Woodland/
     gridui.lua              -- grid render + hold/tap state machine
     screenui.lua            -- global param / cell / edge / voice views
     bridge.lua              -- engine command wrapper, throttling, meter cache
-  lib/Engine_Woodland.sc    -- SC: modal voices, exciters, patch matrix, canopy
+  lib/Engine_Canopy.sc      -- SC: modal voices, exciters, patch matrix,
+                               heartwood, the always-on rain ambience
+  audio/Rain.wav            -- the rain ambience's source loop
   README.md
 ```
 
@@ -811,7 +817,7 @@ counter; 2 ms per hop is inaudible.
 
 **Module loading.** norns' `include()` is `dofile`-based and returns a new table
 each call, so every module here is loaded through a memo (`wl()`) defined in
-`Woodland.lua`. `topology`, `patch` and `state` are shared mutable singletons
+`Canopy.lua`. `topology`, `patch` and `state` are shared mutable singletons
 and plain `include()`s would give three separate patch graphs.
 
 ### 7.2 Lua / SC split
@@ -839,7 +845,12 @@ the transport exactly rather than approximately.)
 ```
 groups:  gSrc -> gPatch -> gVoice -> gTap -> gFx
 
-voiceBus        4  voice outputs (summed by the Canopy reverb)
+voiceBus        4  voice outputs (panned, summed, and mixed with rainBus in gFx)
+rainBus         2  the always-on rain ambience (§4.1 Rain/Excite), written once
+                   in gSrc by \wl_rain -- silent until rain_load's buffer is
+                   ready. read directly (plain In.ar, not InFeedback) by every
+                   voice's excitation and by gFx's dry level, since both live
+                   in groups after gSrc.
 
 patchBus       20  exciter outputs        (excBase        0)
                20  per-S colour-mod sums  (colourModBase 20)
@@ -898,10 +909,10 @@ The patch graph is saved alongside the PSET:
 
 ```lua
 params.action_write = function(filename, name, number)
-  write_graph(norns.state.data .. number .. ".woodland")
+  write_graph(norns.state.data .. number .. ".canopy")
 end
 params.action_read = function(filename, silent, number)
-  read_graph(norns.state.data .. number .. ".woodland")
+  read_graph(norns.state.data .. number .. ".canopy")
 end
 ```
 
@@ -945,14 +956,29 @@ replaced it.
    below), plus a small amplitude-dependent pitch drop (`freq * (1 - amp *
    0.02)`) — the "thunk" of real wood under a hard hit.
 
-One shared plate/hall — **Canopy** — across the whole instrument. There is
-deliberately no per-voice body-cavity diffuser: the original design cascaded
-two `AllpassC` stages (~20 ms / ~31 ms) after the mode bank, and in practice
-that read as a slapback/flutter echo through a resonant filter bank, not as
-diffusion — the "odd reverb-like/slappy" artifact. It's gone; the tanh stage
-is still there (a much gentler `x0.8` drive instead of the original `x3`) but
+**No reverb, anywhere.** There never was a per-voice body-cavity diffuser --
+the original design cascaded two `AllpassC` stages (~20 ms / ~31 ms) after the
+mode bank, and in practice that read as a slapback/flutter echo through a
+resonant filter bank, not as diffusion, so it never shipped. What did ship for
+a while was a single shared plate/hall across the whole instrument (**Canopy**,
+`FreeVerb`) plus an output glue **Compressor**; build phase 7 removed both --
+the mix is dry, four voices panned and summed, nothing else. The tanh stage is
+still there (a much gentler `x0.8` drive instead of the original `x3`) but
 purely as the DC-blocked, soft-saturating, limited safety net §6 wants once
 voice↔voice feedback lands, not as a tone-shaping effect in its own right.
+
+**The always-on rain ambience.** What replaced Canopy on the global page is
+literal rather than an effect: `\wl_rain` (`Engine_Canopy.sc`) loops
+`audio/Rain.wav` continuously from init, on its own stereo bus (`rainBus`,
+§7.3), loaded async by `rain_load` once Lua knows the sample's path. Two
+knobs read that same bus two different ways: **Rain** (`rain_volume`) is its
+plain dry level in the mix, mixed in alongside the four panned voices in
+`\woodland_fx`; **Excite** (`rain_excite`) feeds a mono sum of it into every
+voice's own resonator as continuous excitation -- the same signal path a
+strike's noise burst uses, `totalExc` in `\woodland_voice` -- at whatever
+depth the knob asks for, whether or not anything is patched. Both default to
+0, so an untouched patch is exactly as quiet as it always was; turning Rain
+up is weather in the room, turning Excite up is the wood being rained on.
 
 **FM and tuneable-noise addendum.** Every voice, and every S-cell exciter, now
 also takes an `fmRatio`/`fmDepth` pair: an internal sine modulator (ratio =
@@ -1002,18 +1028,21 @@ exciter_fm(i, ratio, depth)
 patch_add(id, kind, src, dst, gain)
 patch_gain(id, gain)            patch_free(id)
 heart_conductance(i, v)
-canopy(size, damp, mix)         master_level(v)
-compressor(amount)
+master_level(v)
+rain_load(path)                 rain_volume(v)
+rain_excite(v)
 ```
 
 `voice_grain` is gone; `voice_sap`/`voice_sway`/`voice_moss` collapsed into
-`voice_mod`; `voice_structure` and `voice_tap` are new.
+`voice_mod`; `voice_structure` and `voice_tap` are new. `canopy`/`compressor`
+are gone with build phase 7; `rain_load`/`rain_volume`/`rain_excite` are new.
 
 **CPU budget.** 4 voices x 6 modes = 24 resonators, plus up to 20 exciters
 (lazily allocated, so in practice a handful), ~64 patch synths, the eight-node
-heartwood delay network, and one reverb. Fewer voices than before pays for the
-larger exciter bank. Mitigations: the mode-count knob (`voice_modes`), lazy
-exciter allocation, and the fact that an unpatched cell costs nothing at all.
+heartwood delay network, and one stereo sample loop (`\wl_rain` -- no reverb
+any more). Fewer voices than before pays for the larger exciter bank.
+Mitigations: the mode-count knob (`voice_modes`), lazy exciter allocation, and
+the fact that an unpatched cell costs nothing at all.
 
 **Lua-side budget.** The 2 ms tick, measured offline: idle 0.4% of one core,
 a modest patch 0.4%, the full heartwood 0.6%, all eight fields cabled 0.7%, the
@@ -1050,13 +1079,22 @@ Each phase ends in something testable on the device.
 6b. **The global param page.** The network view (and the meters view
    cycled alongside it) is gone, replaced by §5.2's nine-parameter list —
    `gparam.lua`. Weather is gone with it, split into independent Swing and
-   Rain; Scale, Drops, global Decay, global Pitch and an output Compressor
-   are new. Out of build order for the same reason 5b/5c were: this is a
-   control-surface rework, not something that needed the phases between it
-   and phase 6 to exist first.
-7. **Life.** Metering back-channel → grid and screen animation. Narrower than
+   Rain (renamed Scatter in 7); Scale, Drops, global Decay, global Pitch and
+   an output Compressor are new. Out of build order for the same reason
+   5b/5c were: this is a control-surface rework, not something that needed
+   the phases between it and phase 6 to exist first.
+7. **The re-name.** The script becomes Canopy (§1's file layout, engine.name,
+   every in-code/doc title). Canopy the reverb and the output Compressor are
+   both gone — the mix is dry (§8). The old Rain macro is renamed Scatter,
+   freeing "Rain" for `audio/Rain.wav`: an always-on loop with its own dry
+   level (Rain) and how much it excites every voice's resonator (Excite),
+   both new global params replacing Compressor/Canopy in the same nine-slot
+   list. Scale is narrowed to pentatonic only (§4.1). Like 6b, this is a
+   control-surface and naming rework rather than a phase that depended on 7/8
+   below existing first — renumbered ahead of them for that reason.
+8. **Life.** Metering back-channel → grid and screen animation. Narrower than
    it was: see §7.4.
-8. **Persistence and polish.** PARAMS, PSET + graph save/load, clock sync,
+9. **Persistence and polish.** PARAMS, PSET + graph save/load, clock sync,
    README.
 
 ---

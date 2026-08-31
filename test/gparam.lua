@@ -1,8 +1,8 @@
--- build phase 6b: the global param page (§4.1, §5.2, lib/gparam.lua). that
+-- build phase 6b/7: the global param page (§4.1, §5.2, lib/gparam.lua). that
 -- E1/nudge/push behave like the sound page's own E1/E2/E3 (§5.5), that Scale
 -- steps one entry per flick and quantises pitch only when it isn't free, that
 -- Drops and the global Decay/Pitch macros actually reach the engine, and that
--- Compressor and Canopy forward what they're told to.
+-- Rain and Excite forward what they're told to.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -22,7 +22,7 @@ do
   local n = M.gparam.PARAM_COUNT
   check("nine params", n == 9, "#" .. n)
   check("bpm is first", M.gparam.PARAMS[1].key == "bpm")
-  check("canopy is last", M.gparam.PARAMS[n].key == "canopy")
+  check("excite is last", M.gparam.PARAMS[n].key == "rain_excite")
 end
 
 print("\n-- BPM: coarse is 1/detent, fine is a tenth of that --")
@@ -44,10 +44,10 @@ do
         clock.get_tempo() == M.state.global.bpm, tostring(clock.get_tempo()))
 end
 
-print("\n-- Swing/Rain/Drops/Decay/Compressor/Canopy are plain 0..1 knobs --")
+print("\n-- Swing/Scatter/Drops/Decay/Rain/Excite are plain 0..1 knobs --")
 do
   local M = fresh(5)
-  local keys = {"swing", "rain", "drops", "decay", "compressor", "canopy"}
+  local keys = {"swing", "scatter", "drops", "decay", "rain_volume", "rain_excite"}
   for i, p in ipairs(M.gparam.PARAMS) do
     local want
     for _, k in ipairs(keys) do if p.key == k then want = true end end
@@ -63,7 +63,7 @@ end
 print("\n-- Scale steps one entry per flick, and 0 is free --")
 do
   local M = fresh(7)
-  local scale_i = 4  -- Scale is BPM, Swing, Rain, Scale
+  local scale_i = 4  -- Scale is BPM, Swing, Scatter, Scale
   check("starts free", M.state.global.scale_i == 0)
   -- SCALE_DETENTS is 3 in gparam.lua; two ticks of 3 should not move it yet
   M.gparam.nudge(scale_i, 2, true)
@@ -88,14 +88,14 @@ do
   M.voice.init()
   local root = M.topology.get(OAK).root
   -- voice.tune_semitones: (v - 0.5) * 2 * TUNE_UP_ST(24) = 1.5 semitones at
-  -- v = 0.5 + 1.5/48 -- unambiguously closer to the major scale's 2 than
+  -- v = 0.5 + 1.5/48 -- unambiguously closer to the major pentatonic's 2 than
   -- its 0, unlike a round 1 semitone which ties between them.
   M.state.set_vparam(OAK, "tune", 0.5 + (1.5 / 48))
   local free_hz = M.grove.hz(OAK)
   check("1.5 semitones up, unquantised",
         math.abs(free_hz - root * 2 ^ (1.5 / 12)) < 1e-6, string.format("%.3f", free_hz))
 
-  -- major scale is SCALES[1]: {0,2,4,5,7,9,11}. 1.5 semitones off the root
+  -- major pentatonic is SCALES[1]: {0,2,4,7,9}. 1.5 semitones off the root
   -- snaps to the nearest scale tone, which is 2 (a whole tone up).
   M.state.global.scale_i = 1
   local snapped_hz = M.grove.hz(OAK)
@@ -169,13 +169,17 @@ do
         string.format("%.3f", c.hz))
 end
 
-print("\n-- Compressor and Canopy forward to the engine --")
+print("\n-- Rain and Excite forward to the engine --")
 do
   local M = fresh(19)
-  M.gparam.nudge(8, 500, true)            -- Compressor
-  check("compressor amount reached the engine",
-        last(CALLS.compressor) and math.abs(last(CALLS.compressor).v - 1.0) < 1e-6,
-        tostring(last(CALLS.compressor) and last(CALLS.compressor).v))
+  M.gparam.nudge(8, 500, true)            -- Rain (volume)
+  check("rain volume reached the engine",
+        last(CALLS.rain_volume) and math.abs(last(CALLS.rain_volume).v - 1.0) < 1e-6,
+        tostring(last(CALLS.rain_volume) and last(CALLS.rain_volume).v))
+  M.gparam.nudge(9, 500, true)            -- Excite
+  check("rain excite reached the engine",
+        last(CALLS.rain_excite) and math.abs(last(CALLS.rain_excite).v - 1.0) < 1e-6,
+        tostring(last(CALLS.rain_excite) and last(CALLS.rain_excite).v))
 end
 
 report()

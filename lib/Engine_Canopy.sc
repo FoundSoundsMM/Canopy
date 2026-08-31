@@ -1,6 +1,6 @@
-// Engine_Woodland
+// Engine_Canopy
 // four modal/pinged-filter voices, DynKlank-style but hand-built so strike
-// position and structure can be re-shaped live. see docs/woodland-spec.md
+// position and structure can be re-shaped live. see docs/canopy-spec.md
 // §8 for the woodiness recipe, §9 for the build order.
 //
 // build phase 4 added the S-cell exciters (§2.4), the generic audio-rate
@@ -23,16 +23,27 @@
 // the Grain macro is gone with it: the voice page (§5.5) exposes structure,
 // damping, brightness, drive, strike position, decay, tune and level
 // individually, so there is nothing left for a macro to hide.
+//
+// build phase 7, the re-name: Canopy -- the shared plate/hall reverb -- and
+// the output Compressor are both gone. what replaces Canopy on the global
+// page is literal rather than an effect: an always-on loop of a real rain
+// recording (\wl_rain, loaded async by rain_load once Lua knows its path),
+// mixed dry into the output at whatever level `rain_volume` asks for, and
+// fed continuously into every voice's resonator as excitation at whatever
+// depth `rain_excite` asks for -- the wood actually being rained on, rather
+// than a reverb pretending to be weather.
 
-Engine_Woodland : CroneEngine {
+Engine_Canopy : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
-	var voiceBus, patchBus, excMeterBus;
+	var voiceBus, patchBus, excMeterBus, rainBus;
 	var voiceSynths;
 	var excSynths;
 	var patchSynths;
 	var heartSynth;
 	var fxSynth;
 	var excMeterSynth;
+	var rainBuf;
+	var rainSynth;
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
 	// §8 "per-voice defaults" table. keep freq/structureBase/dampBase/decay in
@@ -99,6 +110,12 @@ Engine_Woodland : CroneEngine {
 		// addPoll funcs below -- no OSC round trip, so twenty of them every
 		// poll tick is cheap.
 		excMeterBus = Bus.control(server, nExc);
+		// the always-on rain ambience (§4.1 Rain/Excite): a stereo bus, always
+		// allocated, silent until rain_load's buffer finishes loading and
+		// \wl_rain starts writing to it. every voice and the fx stage read it
+		// with plain In.ar -- both live in groups after gSrc, so a block with
+		// nothing writing here is just a block of zeros, not stale data.
+		rainBus = Bus.audio(server, 2);
 
 		SynthDef(\woodland_voice, {
 			arg out=0, tapOut=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
@@ -108,7 +125,7 @@ Engine_Woodland : CroneEngine {
 				modIn=0, modBalance=0.5, tapLevel=0.5,
 				fmRatio=2.0, fmDepth=0, noiseTune=0, exciteQ=0.35,
 				glide=0.02, driftDepth=0.06, driftRate=0.07, driftSeed=0,
-				bendAmt=0;
+				bendAmt=0, rainIn=0, rainExcite=0;
 
 			var harmonicRatio = [1, 2, 3, 4, 5, 6];
 			var barRatio = [1, 2.756, 5.404, 8.933, 13.34, 18.64];
@@ -141,7 +158,14 @@ Engine_Woodland : CroneEngine {
 			// to one or two steps and `hardness` stops shortening it at all.
 			var env = EnvGen.ar(Env.perc(0.0003, burstDur), t_trig);
 			var exc = BPF.ar(PinkNoise.ar(1), bpFreq, exciteQ) * env * force;
-			var totalExc = exc + (inject * 0.8);
+			// §4.1 rain_excite: the same always-on rain ambience every voice
+			// can be cabled to nothing and still hear -- a mono sum of the
+			// stereo loop, scaled down for headroom (the wav is a full-level
+			// recording, not a designed exciter burst) and by the knob
+			// itself. 0 (the default) is a no-op.
+			var rainSig = (Mix.ar(In.ar(rainIn, 2)) * 0.5)
+				* rainExcite.clip(0, 1) * 0.7;
+			var totalExc = exc + (inject * 0.8) + rainSig;
 
 			// §8.5: amplitude-dependent pitch drop -- the "thunk" of a hard hit.
 			var pitchDrop = 1 - (force.clip(0, 1) * 0.02);
@@ -239,26 +263,19 @@ Engine_Woodland : CroneEngine {
 			Out.ar(tapOut, sig * tapLevel.clip(0, 1));
 		}).add;
 
+		// build phase 7: no reverb, no compressor. just the four voices panned
+		// and summed, the rain ambience's own dry level added in alongside
+		// them, and master level on top -- a plain, dry mix.
 		SynthDef(\woodland_fx, {
-			arg busIn=0, out=0, size=0.5, damp=0.5, mix=0.3, level=0.8, compAmt=0;
+			arg busIn=0, out=0, level=0.8, rainIn=0, rainVol=0;
 			var voices = In.ar(busIn, 4);
 			// fixed stereo placement, oak/rowan (1, 4) slightly left, hazel/alder
 			// (2, 3) slightly right -- a small spread so the four voices aren't
-			// stacked in the centre. Pan2.ar keeps `dry` a 2-channel signal, so
-			// FreeVerb below runs one instance per side instead of one mono verb
-			// duplicated to both speakers.
+			// stacked in the centre.
 			var panPos = [-0.25, 0.25, 0.25, -0.25];
 			var dry = Mix.ar(Array.fill(4, { |i| Pan2.ar(voices[i], panPos[i]) }));
-			var wet = FreeVerb.ar(dry, mix, size, damp);
-			var sig = wet * level;
-			// §4.1 Output compressor: a bus glue stage on the final mix, not a
-			// per-voice one -- threshold and ratio both ride compAmt so 0 is a
-			// true bypass (threshold 1, ratio 1) and 1 is a hard, fast-ish
-			// squeeze. fixed attack/release: this is meant to sit and glue, not
-			// be tuned per patch.
-			var thresh = 1 - (compAmt * 0.85);
-			var ratio = 1 + (compAmt * 7);
-			sig = Compander.ar(sig, sig, thresh, 1, 1 / ratio, 0.01, 0.15);
+			var rainDry = In.ar(rainIn, 2) * rainVol.clip(0, 1);
+			var sig = (dry + rainDry) * level;
 			Out.ar(out, sig);
 		}).add;
 
@@ -651,6 +668,15 @@ Engine_Woodland : CroneEngine {
 			Out.kr(out, Amplitude.kr(sig, 0.005, 0.2));
 		}).add;
 
+		// the always-on rain ambience (§4.1). a plain looping stereo playback
+		// of whatever rain_load hands it -- no envelope, no gate, because the
+		// whole point is that it is always running and rain_volume/rain_excite
+		// are the only things that ever make it audible or felt.
+		SynthDef(\wl_rain, { arg out=0, bufnum=0;
+			var sig = PlayBuf.ar(2, bufnum, BufRateScale.kr(bufnum), loop: 1);
+			Out.ar(out, sig);
+		}).add;
+
 		server.sync;
 
 		voiceSynths = Array.newClear(nVoices);
@@ -663,7 +689,8 @@ Engine_Woodland : CroneEngine {
 				\oddOnly, def[3],
 				\damp, def[4],
 				\decayBase, def[5],
-				\modIn, patchBus.index + modInBase + i
+				\modIn, patchBus.index + modInBase + i,
+				\rainIn, rainBus.index
 			], gVoice);
 		});
 
@@ -684,7 +711,8 @@ Engine_Woodland : CroneEngine {
 
 		fxSynth = Synth.new(\woodland_fx, [
 			\busIn, voiceBus.index,
-			\out, context.out_b.index
+			\out, context.out_b.index,
+			\rainIn, rainBus.index
 		], gFx);
 
 		// gTap: after gVoice (so the exciter meters below share the group
@@ -958,20 +986,38 @@ Engine_Woodland : CroneEngine {
 			};
 		});
 
-		this.addCommand("canopy", "fff", { |msg|
-			fxSynth.set(\size, msg[1], \damp, msg[2], \mix, msg[3]);
-		});
-
 		// not in §8's command list, but E3-with-nothing-held is spec'd as
 		// master level (§4.1) and needs somewhere to land.
 		this.addCommand("master_level", "f", { |msg|
 			fxSynth.set(\level, msg[1]);
 		});
 
-		// compressor(amount) -- §4.1 Output compressor, the global page's
-		// ninth knob.
-		this.addCommand("compressor", "f", { |msg|
-			fxSynth.set(\compAmt, msg[1]);
+		// rain_load(path) -- §4.1: the always-on Rain.wav ambience. Lua sends
+		// its absolute path once, at init; Buffer.read is async, so \wl_rain
+		// is only started once the read's completion action fires. before
+		// that (and if the read never arrives -- the offline sc_check has no
+		// Lua side to call this at all) rainBus just stays silent, which is
+		// indistinguishable from rain_volume/rain_excite both being 0.
+		this.addCommand("rain_load", "s", { |msg|
+			var path = msg[1].asString;
+			if (rainBuf.notNil) { rainBuf.free };
+			rainBuf = Buffer.read(server, path, action: { |buf|
+				if (rainSynth.notNil) { rainSynth.free };
+				rainSynth = Synth.new(\wl_rain, [
+					\out, rainBus.index, \bufnum, buf.bufnum
+				], gSrc);
+			});
+		});
+
+		// rain_volume(v) -- the rain ambience's own dry level in the mix.
+		this.addCommand("rain_volume", "f", { |msg|
+			fxSynth.set(\rainVol, msg[1]);
+		});
+
+		// rain_excite(v) -- how much the same rain audio excites every
+		// voice's resonator, continuously, whether or not anything is patched.
+		this.addCommand("rain_excite", "f", { |msg|
+			voiceSynths.do({ |s| if (s.notNil) { s.set(\rainExcite, msg[1]) } });
 		});
 	}
 
@@ -982,9 +1028,12 @@ Engine_Woodland : CroneEngine {
 		if (heartSynth.notNil) { heartSynth.free };
 		if (fxSynth.notNil) { fxSynth.free };
 		if (excMeterSynth.notNil) { excMeterSynth.free };
+		if (rainSynth.notNil) { rainSynth.free };
+		if (rainBuf.notNil) { rainBuf.free };
 		voiceBus.free;
 		patchBus.free;
 		excMeterBus.free;
+		rainBus.free;
 		gFx.free;
 		gTap.free;
 		gVoice.free;

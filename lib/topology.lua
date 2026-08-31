@@ -1,7 +1,7 @@
 -- topology.lua
 -- the map: cell records, coords, types, adjacency.
 -- ids are stable strings (never coordinates) so layout can change without
--- breaking saved patches. see docs/woodland-spec.md §2, §7.5.
+-- breaking saved patches. see docs/canopy-spec.md §2, §7.5.
 --
 -- build phase 6 re-cuts the whole map. the panel is now four voice clusters
 -- in the four corners, a sealed box of pulse-makers dead centre, and four
@@ -54,7 +54,7 @@ end
 -- 2.1 voices ------------------------------------------------------------
 
 -- `root` is the voice's fundamental in Hz and `decay` its default ring time
--- in seconds -- columns 2 and 6 of Engine_Woodland.sc's `voiceDefs` table,
+-- in seconds -- columns 2 and 6 of Engine_Canopy.sc's `voiceDefs` table,
 -- duplicated here because both are needed on the Lua side: grove.lua computes
 -- an absolute Hz from a semitone offset, and voice.lua maps the sound
 -- editor's 0..1 knobs to real units around each voice's own defaults. the two
@@ -166,7 +166,7 @@ for _, r in ipairs(R_CELLS) do
 end
 
 -- 2.4 exciter cells -- S (20) ----------------------------------------------
--- source keys match Engine_Woodland.sc's `excDefs` array, in this order.
+-- source keys match Engine_Canopy.sc's `excDefs` array, in this order.
 -- the top row is the original ten; the bottom row is the ten that came with
 -- the re-cut, aimed squarely at a kit -- clicks, metals, scrapes, impacts.
 
@@ -197,7 +197,7 @@ for i, s in ipairs(S_CELLS) do
   local id = "s." .. s.id
   local name = s.id:sub(1, 1):upper() .. s.id:sub(2)
   -- index is this cell's channel in the engine's exciter bus block AND its
-  -- position in Engine_Woodland.sc's `excDefs` array -- the two lists must
+  -- position in Engine_Canopy.sc's `excDefs` array -- the two lists must
   -- stay in the same order (they do: both follow this table).
   local cp
   for _, o in ipairs(S_CELLS) do
@@ -229,7 +229,7 @@ local H_CELLS = {
 
 for i, h in ipairs(H_CELLS) do
   -- index is this node's slot in the engine's heartwood buses AND its row in
-  -- Engine_Woodland.sc's `hNbr` adjacency table -- the two lists must stay in
+  -- Engine_Canopy.sc's `hNbr` adjacency table -- the two lists must stay in
   -- the same order (they do: both follow the ring order below).
   reg("H", "h." .. h.id, h.id:sub(1, 1):upper() .. h.id:sub(2), {{h.x, h.y}},
       {index = i - 1})

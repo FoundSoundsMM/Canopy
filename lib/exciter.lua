@@ -109,7 +109,7 @@ end)
 
 patch.on_change(exciter.resync)
 
--- §7.4 metering back-channel: one poll per exciter (Engine_Woodland.sc's
+-- §7.4 metering back-channel: one poll per exciter (Engine_Canopy.sc's
 -- \wl_exc_meter synth + its addPoll loop, named "exc_lvl_<index>" to match
 -- this cell's own `index`). folded straight into the same decaying flash a
 -- grain-fire already uses (state.flash, shared with rambler/weave/heartwood)

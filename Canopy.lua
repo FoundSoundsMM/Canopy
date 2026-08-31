@@ -1,4 +1,4 @@
--- woodland
+-- canopy
 --
 -- four modal voices in the corners, a sealed core of pulse-makers, and four
 -- banks of things to do to a pulse on its way between them. every socket is
@@ -12,7 +12,7 @@
 -- K1 + tap an F cell: snap its field to the scale, or set it free.
 -- hold a D/R/F/C cell, K1+E2: swap its gait / rule / mode / shape.
 -- E1/E2/E3 with nothing held: the global param page -- E1 picks one of nine
--- (BPM, Swing, Rain, Scale, Drops, Decay, Pitch, Compressor, Canopy), E2/E3
+-- (BPM, Swing, Scatter, Scale, Drops, Decay, Pitch, Rain, Excite), E2/E3
 -- nudge it coarse/fine. K1+E3: master level.
 -- K3: close the sound page (nothing else to cycle to now).
 -- K2: freeze the pulse gaits (Still).
@@ -30,15 +30,21 @@
 -- (lib/climate.lua -- eight very slow modulators), twenty exciters instead of
 -- ten, and a per-voice sound page instead of one Grain macro. the metering
 -- back-channel and PARAMS/PSET persistence are still ahead
--- (docs/woodland-spec.md §9 has the build order).
+-- (docs/canopy-spec.md §9 has the build order).
 -- build phase 6b: the network view -- the patch drawn as a lit map with
 -- dotted cable wires -- is gone, replaced by §5.2's global param page
 -- (lib/gparam.lua): the same E1-select/E2-E3-nudge shape as the sound page,
 -- for nine macros instead of one voice. Weather is gone with it, split into
--- independent Swing and Rain; Scale, Drops, global Decay, global Pitch and
+-- independent Swing and Scatter; Scale, Drops, global Decay, global Pitch and
 -- an output Compressor are new.
+-- build phase 7, the re-name: the script becomes Canopy. no more reverb (the
+-- old Canopy knob and its FreeVerb are gone entirely) and no more output
+-- Compressor. the old Rain macro -- trigger/field wildness -- is renamed
+-- Scatter, freeing "Rain" for something literal: an always-on loop of a real
+-- rain recording, with its own dry level (Rain) and how much it excites the
+-- four resonators (Excite). Scale is pentatonic-only now, shorthand "Pent".
 
-engine.name = "Woodland"
+engine.name = "Canopy"
 
 -- norns' global include() is dofile-based: it re-executes the file and hands
 -- back a NEW table every call. topology/patch/state are shared mutable
@@ -46,13 +52,13 @@ engine.name = "Woodland"
 -- scheduler three separate patch graphs that never see each other's cables.
 -- everything goes through this memo instead. globals outlive a script, so the
 -- table is cleared here -- at load time -- to keep reloads clean.
-_woodland_mods = {}
+_canopy_mods = {}
 
 function wl(name)
-  local m = _woodland_mods[name]
+  local m = _canopy_mods[name]
   if m == nil then
-    m = include("Woodland/lib/" .. name)
-    _woodland_mods[name] = m
+    m = include("Canopy/lib/" .. name)
+    _canopy_mods[name] = m
   end
   return m
 end
@@ -406,6 +412,10 @@ function init()
   gparam.init() -- adopts the clock's tempo, pushes the other eight (§5.2)
   exciter.start_meters() -- §7.4: per-exciter activity polls
   bridge.master_level(state.global.level)
+  -- §4.1 the always-on rain ambience: the engine loads it async and starts
+  -- \wl_rain once it's ready, so this can fire before anything downstream of
+  -- it (rain_volume/rain_excite) is pushed without losing either.
+  bridge.rain_load(_path.code .. "Canopy/audio/Rain.wav")
   rambler.start()
 end
 

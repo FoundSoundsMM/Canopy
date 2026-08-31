@@ -118,14 +118,14 @@ end
 
 -- §5.2 global param page (nothing held, no voice page open) -------------------
 -- what replaced the network view: E1 walks gparam.PARAMS, E2/E3 nudge the
--- one under the cursor coarse/fine (Woodland.lua's enc()). the title line's
+-- one under the cursor coarse/fine (Canopy.lua's enc()). the title line's
 -- right side carries the same transient event feedback the network view used
 -- to print along its bottom edge (a sever, a gait swap, Regrow/Clearing).
 
 function screenui.draw_global()
   screen.level(15)
   screen.move(2, 8)
-  screen.text("Woodland")
+  screen.text("Canopy")
 
   screen.level(4)
   screen.move(2, 11)

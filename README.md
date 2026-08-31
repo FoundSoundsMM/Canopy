@@ -1,9 +1,9 @@
-# Woodland
+# Canopy
 
 A monome norns script for grid (128). Full design in
-[`docs/woodland-spec.md`](docs/woodland-spec.md).
+[`docs/canopy-spec.md`](docs/canopy-spec.md).
 
-## Status: build phase 6 — "the re-cut"
+## Status: build phase 7 — "the re-name"
 
 Phases 1–5c built the instrument the spec describes: the patch graph and
 grid/screen UI, the SC engine's modal voices, all the D-cell gaits with
@@ -110,7 +110,7 @@ The network view described above, and the meters view cycled alongside it,
 are gone — replaced by a nine-parameter list (§5.2, `gparam.lua`): the same
 E1-select/E2-E3-nudge shape the voice sound page already had, for macros that
 reach every voice at once. Weather is gone with it, split into independent
-**Swing** and **Rain**. New: **Scale** (quantises every voice's pitch to a
+**Swing** and **Scatter**. New: **Scale** (quantises every voice's pitch to a
 scale, 0 = free), **Drops** (random pitch offset per strike), a global
 **Decay** multiplier, a global **Pitch** transpose, and an output
 **Compressor**. Canopy moved into the same list rather than keeping its own
@@ -119,16 +119,34 @@ bare encoder.
 Not yet built: the metering back-channel (§7.4 — so continuous audio-rate
 cell response is not lit), and PARAMS/PSET persistence.
 
+### Build phase 7 — the re-name
+
+The script becomes **Canopy**. Two things go with the old name: the reverb
+that used to share it (Canopy's `FreeVerb`, and the output **Compressor**
+alongside it) is gone entirely — the mix is dry, four voices panned and
+summed, nothing else. The old **Rain** macro — trigger/field wildness, §4.1
+— is renamed **Scatter**, which frees "Rain" for something literal: `audio/
+Rain.wav`, a real rain recording, loops continuously from init. It says
+nothing until asked to: **Rain** is its own dry level in the mix (0 by
+default), and **Excite** is how much that same audio continuously drives
+every voice's resonator as excitation, whether or not anything is patched —
+the wood actually being rained on, rather than a reverb standing in for
+weather. Scale is pentatonic-only now — major, minor, and two 12-TET
+roundings of an equal-step (slendro-style) division — shorthand **Pent** so
+the value column stays readable.
+
 ## Install
 
-From Maiden (norns' web REPL):
+From Maiden (norns' web REPL) — the GitHub repo is still named `Woodland`,
+so this installs into `~/dust/code/Woodland`; rename that folder to `Canopy`
+afterward so it matches `engine.name` and the script menu entry below:
 
 ```
 ;install https://github.com/FoundSoundsMM/Woodland
 ```
 
-or copy this repo to `~/dust/code/Woodland` by hand. Then select
-**Woodland** from the norns script menu. A grid is required.
+or copy this repo to `~/dust/code/Canopy` by hand. Then select
+**Canopy** from the norns script menu. A grid is required.
 
 ## Controls
 
@@ -152,33 +170,38 @@ or copy this repo to `~/dust/code/Woodland` by hand. Then select
   set it wild — metric, euclidean and figure are the ones with something to
   root to. Same gesture on an F cell snaps its field to the scale, or sets
   it free.
-- Nothing held: `E1` picks one of nine global params (BPM, Swing, Rain,
-  Scale, Drops, Decay, Pitch, Compressor, Canopy), `E2`/`E3` nudge it coarse/
+- Nothing held: `E1` picks one of nine global params (BPM, Swing, Scatter,
+  Scale, Drops, Decay, Pitch, Rain, Excite), `E2`/`E3` nudge it coarse/
   fine. `K1`+`E3` is the master level; `K2` toggles Still.
-- **Swing and Rain are the groove knobs.** At Swing 0 / Rain 0 every pulse —
-  however freely its cell runs — snaps onto a grid line, and unrelated gaits
-  cohere into one groove: each cell quantises to the coarsest of
-  8th/16th/32nd/64th that fits inside its own cycle, and a burst is triggered
-  on the beat with its ratchet on a subdivision. Turning Swing up warps the
-  grid so off-beats land late and beats stay put. Turning Rain up loosens the
-  snap and grows jitter in its place, until at 1 nothing is held at all and
-  the patch is rainfall in a forest — Rain also scales gait-rate drift,
-  D↔D coupling and pitch-field wander. What the weave emits is deliberately
-  *not* re-quantised — those pulses are derived from one that was already
-  placed, and snapping a flam or a swung off-beat back onto the grid would
-  undo the only thing it does.
+- **Swing and Scatter are the groove knobs.** At Swing 0 / Scatter 0 every
+  pulse — however freely its cell runs — snaps onto a grid line, and
+  unrelated gaits cohere into one groove: each cell quantises to the coarsest
+  of 8th/16th/32nd/64th that fits inside its own cycle, and a burst is
+  triggered on the beat with its ratchet on a subdivision. Turning Swing up
+  warps the grid so off-beats land late and beats stay put. Turning Scatter
+  up loosens the snap and grows jitter in its place, until at 1 nothing is
+  held at all — Scatter also scales gait-rate drift, D↔D coupling and
+  pitch-field wander. What the weave emits is deliberately *not*
+  re-quantised — those pulses are derived from one that was already placed,
+  and snapping a flam or a swung off-beat back onto the grid would undo the
+  only thing it does.
+- **Rain and Excite are the literal rain.** `audio/Rain.wav` loops from init
+  regardless of anything else on the panel; Rain is its own dry level in the
+  mix (0 by default, so it says nothing until asked to), and Excite is how
+  much that same audio continuously drives every voice's resonator, whether
+  or not anything is patched.
 - `K1`+`K2` (hold ~1s): Regrow — a seeded patch that already plays.
 - `K1`+`K3` (hold ~1s): Clearing — cut every cable.
 
 ## Layout
 
 ```
-Woodland.lua                entry: init, grid/key/enc handlers, Regrow
+Canopy.lua                  entry: init, grid/key/enc handlers, Regrow
 lib/
   topology.lua              the map: cell records, coords, types, adjacency
   lexicon.lua               names, descriptions, each cell type's one knob
   patch.lua                 the cable graph: add/remove/trim, serialisation
-  quantise.lua              the groove: Swing/Rain place a gait's emission
+  quantise.lua              the groove: Swing/Scatter place a gait's emission
   state.lua                 shared runtime UI state
   gridui.lua                grid render + hold/tap state machine
   screenui.lua              global param / cell / edge / voice views
@@ -195,9 +218,11 @@ lib/
   heartwood.lua             the diffusion lattice's discrete-event side
   grove.lua                 the pitch fields: modes, coupling, voice retuning
   bridge.lua                Lua-side wrapper around the engine commands
-  Engine_Woodland.sc        SC: four modal voices with an output tap, twenty
+  Engine_Canopy.sc          SC: four modal voices with an output tap, twenty
                              exciters, the patch matrix, the heartwood delay
-                             network, glide + pitch drift
+                             network, glide + pitch drift, the rain ambience
+audio/
+  Rain.wav                  the always-on rain ambience (Rain/Excite, §4.1)
 test/
   run.sh                    offline test run (needs `lua`, no hardware)
   sc_check.sh               headless SuperCollider compile/load check
@@ -210,7 +235,7 @@ returns a **new table** every call. `topology`, `patch` and `state` are
 shared mutable singletons, so plain `include()`s would hand `gridui`,
 `screenui` and the scheduler three separate patch graphs that never see
 each other's cables. Every module here is loaded through the `wl()` memo
-defined at the top of `Woodland.lua` instead. If you add a lib, load its
+defined at the top of `Canopy.lua` instead. If you add a lib, load its
 dependencies with `wl("name")`, never `include()`.
 
 ## Tests
@@ -239,9 +264,9 @@ to actually render audio.
   two climates average rather than race, every shape moves and stays in
   range, a pulse landing on a climate does nothing to it (see the C handler
   in `dispatch.lua` for why that matters), and Still freezes it.
-- `groove.lua` — the Swing/Rain groove: divisions, lock, Swing ramping in and
-  landing off-beats late without moving the grid, bursts triggered on the
-  beat, Rain letting go independently of Swing, and the grid following the
+- `groove.lua` — the Swing/Scatter groove: divisions, lock, Swing ramping in
+  and landing off-beats late without moving the grid, bursts triggered on the
+  beat, Scatter letting go independently of Swing, and the grid following the
   transport.
 - `decay.lua` — every voice starts on its own ring time, the knob moves it
   in seconds, a socket hands the gesture to its voice, an exciter gets the
@@ -265,8 +290,8 @@ to actually render audio.
   coarse/fine steps and clock/floor/ceiling clamping, Scale's one-entry-per-
   flick detent and quantising `grove.hz` only once it isn't free, Drops
   widening the per-strike spread, global Decay and Pitch reaching the engine
-  for every voice at once, and Compressor forwarding to the engine.
-- `smoke.lua` — loads `Woodland.lua` itself and exercises every screen
+  for every voice at once, and Rain/Excite forwarding to the engine.
+- `smoke.lua` — loads `Canopy.lua` itself and exercises every screen
   view, the sound page, and every control.
 - `soak.lua` — the same, but against a *strict* norns stub: `screen`, `util`
   and `clock` expose only the functions norns actually has, so calling one it
@@ -281,7 +306,7 @@ to actually render audio.
 
 ## SuperCollider toolchain (optional, for compile-checking off-device)
 
-`Engine_Woodland.sc` extends `CroneEngine`, a norns-specific class that
+`Engine_Canopy.sc` extends `CroneEngine`, a norns-specific class that
 isn't part of stock SuperCollider, so checking it compiles needs SC itself
 plus norns' Crone architecture:
 
@@ -304,10 +329,11 @@ Then:
 sh test/sc_check.sh
 ```
 
-symlinks `lib/Engine_Woodland.sc` into SC's Extensions folder, headlessly
+symlinks `lib/Engine_Canopy.sc` into SC's Extensions folder, headlessly
 boots Crone, loads the engine, and reports pass/fail with a real exit code —
 the same thing Maiden's compile log tells you on-device, runnable locally.
 `Crone.context` is only set once the server's async boot finishes, so the
 check polls for it rather than guessing a fixed delay (a fixed delay races
-the boot and makes `Engine_Woodland:alloc`'s `context.server` read a nil
-context).
+the boot and makes `Engine_Canopy:alloc`'s `context.server` read a nil
+context). This check never calls `rain_load`, so it never touches
+`audio/Rain.wav` — a missing or unloaded sample is silent, not an error.

@@ -1,5 +1,5 @@
 -- bridge.lua
--- thin wrapper around Engine_Woodland's OSC commands (§7.2: "SC owns every
+-- thin wrapper around Engine_Canopy's OSC commands (§7.2: "SC owns every
 -- sample of audio"; this is just the Lua-side call surface, one function
 -- per command in §8's list, so callers never touch `engine.*` directly).
 --
@@ -8,7 +8,7 @@
 
 local bridge = {}
 
--- offsets into Engine_Woodland.sc's single 64-channel `patchBus` (see the
+-- offsets into Engine_Canopy.sc's single 64-channel `patchBus` (see the
 -- classvar block at the top of that file). dispatch.lua resolves a cabled
 -- pair's endpoints to {bus name, per-cell index} and calls bridge.bus() to
 -- get the absolute number patch_add/patch_gain/patch_free expect. keep the
@@ -79,7 +79,7 @@ end
 
 -- §5.5 Bend: a pitch envelope on top of Tune, fired the same instant as the
 -- strike. 0 is a no-op; turned up, the voice starts sharp and glides down
--- to its tuned pitch over a short, fixed time (see Engine_Woodland.sc).
+-- to its tuned pitch over a short, fixed time (see Engine_Canopy.sc).
 function bridge.voice_bend(voice_index, v)
   engine.voice_bend(voice_index, v)
 end
@@ -118,7 +118,7 @@ function bridge.voice_tap(voice_index, level)
 end
 
 -- FM addendum: voice_fm's ratio/depth are engine-level knobs, not (yet) a
--- patchable cable -- see docs/woodland-spec.md §8. depth=0 is a no-op.
+-- patchable cable -- see docs/canopy-spec.md §8. depth=0 is a no-op.
 function bridge.voice_fm(voice_index, ratio, depth)
   engine.voice_fm(voice_index, ratio, depth)
 end
@@ -188,16 +188,26 @@ function bridge.patch_free(id)
   engine.patch_free(id)
 end
 
-function bridge.canopy(size, damp, mix)
-  engine.canopy(size, damp, mix)
-end
-
 function bridge.master_level(v)
   engine.master_level(v)
 end
 
-function bridge.compressor(v)
-  engine.compressor(v)
+-- the always-on Rain.wav ambience (§4.1). rain_load fires once at init with
+-- the sample's absolute path; the engine loads it async and only starts
+-- \wl_rain once it's ready. rain_volume/rain_excite are ordinary always-on
+-- synth sets (the fx stage and every voice exist from alloc), so they work
+-- immediately either way -- the bus they read from is just silent until
+-- \wl_rain exists to write to it.
+function bridge.rain_load(path)
+  engine.rain_load(path)
+end
+
+function bridge.rain_volume(v)
+  engine.rain_volume(v)
+end
+
+function bridge.rain_excite(v)
+  engine.rain_excite(v)
 end
 
 return bridge

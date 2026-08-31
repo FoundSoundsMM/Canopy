@@ -2,9 +2,9 @@ arg = {os.getenv("ROOT")}
 local ROOT = os.getenv("ROOT")
 dofile(os.getenv("SP") .. "/harness.lua")
 
--- norns' real include(), which Woodland.lua wraps
+-- norns' real include(), which Canopy.lua wraps
 function include(file)
-  return dofile(ROOT .. "/" .. file:gsub("^Woodland/", "") .. ".lua")
+  return dofile(ROOT .. "/" .. file:gsub("^Canopy/", "") .. ".lua")
 end
 
 local metros, gridobj = {}, nil
@@ -20,11 +20,11 @@ grid.connect = function()
   return gridobj
 end
 
-_woodland_mods = nil   -- as if this were a cold script load
-dofile(ROOT .. "/Woodland.lua")
+_canopy_mods = nil   -- as if this were a cold script load
+dofile(ROOT .. "/Canopy.lua")
 init()
 
-local M = _woodland_mods
+local M = _canopy_mods
 do
   local names, n = {}, 0
   for k in pairs(M) do table.insert(names, k) n = n + 1 end

@@ -1,14 +1,14 @@
 -- quantise.lua
--- the groove machine (§4.1 Swing/Rain): *when* a pulse is allowed to land.
+-- the groove machine (§4.1 Swing/Scatter): *when* a pulse is allowed to land.
 --
 -- rambler.lua decides when a gait wants to speak. this decides when it
 -- actually does, on two independent knobs:
 --
---   Swing 0 -> 1   every emission starts on a straight grid line; swing
---                  ramps in, delaying the off-grid positions, until the
---                  off-beats sit as late as they are ever going to
---   Rain  0 -> 1   the snap loosens and jitter grows in its place, until at
---                  1 nothing is held at all and the patch is rain in a forest
+--   Swing   0 -> 1   every emission starts on a straight grid line; swing
+--                    ramps in, delaying the off-grid positions, until the
+--                    off-beats sit as late as they are ever going to
+--   Scatter 0 -> 1   the snap loosens and jitter grows in its place, until at
+--                    1 nothing is held at all and the patch scatters
 --
 -- the grid is per cell, not global: each one is quantised to the coarsest of
 -- 8th / 16th / 32nd / 64th that still fits inside one cycle of its own rate,
@@ -67,7 +67,7 @@ quantise.JITTER_MAX = 0.9
 
 -- macro readings ------------------------------------------------------------
 --
--- swing and rain used to be one combined Weather knob, split at its
+-- swing and scatter used to be one combined Weather knob, split at its
 -- midpoint (low half swing, high half chaos). gparam.lua now exposes them as
 -- independent params, so both read their own value directly.
 
@@ -76,7 +76,7 @@ function quantise.swing()
 end
 
 function quantise.chaos()
-  return util.clamp(state.global.rain or 0, 0, 1)
+  return util.clamp(state.global.scatter or 0, 0, 1)
 end
 
 function quantise.spb()
@@ -183,7 +183,7 @@ end
 function quantise.tag()
   local c = quantise.chaos()
   if c > 0 then
-    if c >= 0.995 then return "rain" end
+    if c >= 0.995 then return "scat" end
     return string.format("ls%02.0f", c * 100)
   end
   local sw = quantise.swing()

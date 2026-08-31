@@ -86,9 +86,9 @@ local last_drift = {}   -- voice_id -> the drift depth last sent
 local tick_n = 0
 
 -- rhythm/field wildness used to read Weather directly; gparam.lua now
--- exposes that half of it as Rain (state.global.rain), independent of Swing.
+-- exposes that half of it as Scatter (state.global.scatter), independent of Swing.
 local function wild()
-  return state.global.rain or 0
+  return state.global.scatter or 0
 end
 
 -- scale ---------------------------------------------------------------------
@@ -118,13 +118,19 @@ end
 -- wandering degree before it is summed with everything else; this one
 -- quantises the sum, unconditionally, whenever a scale is selected. index 0
 -- is "free": the tuning is whatever it already was.
-grove.SCALE_NAMES = {"major", "minor", "pentatonic", "whole tone", "chromatic"}
+--
+-- pentatonic only, on purpose: every entry here is a five-note anhemitonic
+-- set, so nothing this quantises to a scale can land a semitone against
+-- itself. "Pent" is the shared shorthand (screenui's value column is narrow)
+-- -- Equi Pent and Equi Pent 2 are the two distinct 12-TET roundings of a
+-- true five-equal-step (slendro-style) division of the octave that aren't
+-- already major or minor pentatonic under some rotation.
+grove.SCALE_NAMES = {"Pent Maj", "Pent Min", "Equi Pent", "Equi Pent2"}
 grove.SCALES = {
-  {0, 2, 4, 5, 7, 9, 11},        -- major
-  {0, 2, 3, 5, 7, 8, 10},        -- natural minor
-  {0, 3, 5, 7, 10},              -- minor pentatonic (grove.SCALE's own scale)
-  {0, 2, 4, 6, 8, 10},           -- whole tone
-  {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, -- chromatic
+  {0, 2, 4, 7, 9},                -- major pentatonic
+  {0, 3, 5, 7, 10},               -- minor pentatonic (grove.SCALE's own scale)
+  {0, 2, 5, 7, 9},                -- equidistant pentatonic, rounding A
+  {0, 2, 5, 8, 10},               -- equidistant pentatonic, rounding B
 }
 
 function grove.quantise_semitones(x)
@@ -221,7 +227,7 @@ MODES.scatter = {
 -- wander: no degrees at all. the field picks somewhere to be and walks
 -- there at a steady speed, then picks somewhere else -- so a voice under it
 -- is always on its way to a note rather than sitting on one. an incoming
--- pulse throws the destination somewhere new mid-walk. Rain sets both how
+-- pulse throws the destination somewhere new mid-walk. Scatter sets both how
 -- far it strays and how fast it gets there.
 --
 -- an earlier version had `target` random-walking by a per-tick increment and

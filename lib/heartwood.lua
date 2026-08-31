@@ -42,7 +42,7 @@ heartwood.CHARGE_TAU = 0.9     -- how fast the screen's energy readout falls
 -- conductor -- shorter hop, less lost per hop, hence "energy circulates the
 -- ring for a long time". low conductance is one slow, lossy thud that "dies
 -- within one hop". keep these two ranges in step with the same mapping in
--- Engine_Woodland.sc's \wl_heartwood, or the pulse and stream halves of one
+-- Engine_Canopy.sc's \wl_heartwood, or the pulse and stream halves of one
 -- node will disagree about what its knob does.
 local HOP_MIN, HOP_MAX = 0.05, 0.35
 local LOSS_MIN, LOSS_MAX = 0.10, 0.90

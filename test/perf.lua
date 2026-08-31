@@ -1,8 +1,8 @@
 arg = {os.getenv("ROOT")}
 dofile(os.getenv("SP") .. "/harness.lua")
-local function bench(label, setup, rain)
+local function bench(label, setup, scatter)
   local M = fresh(2)
-  if rain then M.state.global.rain = rain end
+  if scatter then M.state.global.scatter = scatter end
   setup(M)
   local t0 = os.clock()
   run(M, 60)
@@ -63,10 +63,10 @@ bench("saturated (all 8 D ringed)", function(M)
   M.patch.add(ds[1], "oak.trig", 0.9)
 end)
 
--- the quantised path is the one added in phase 5c: at Rain=0 every emission
+-- the quantised path is the one added in phase 5c: at Scatter=0 every emission
 -- is placed on a grid line and rides the scheduled queue for up to a grid
 -- interval instead of going out on the tick it was made. this is the same
--- saturated ring as the row above, run at both ends of the Rain knob, so
+-- saturated ring as the row above, run at both ends of the Scatter knob, so
 -- the cost of holding the whole patch in time is visible next to the cost of
 -- letting it go.
 local function saturated(M)
@@ -79,9 +79,9 @@ local function saturated(M)
   M.patch.add(ds[6], "rowan.trig", 0.9)
   M.patch.add(ds[8], "hazel.mod", 0.9)
 end
-bench("saturated, quantised (Rain=0)", saturated, 0)
-bench("saturated, mid (Rain=0.5)", saturated, 0.5)
-bench("saturated, loose (Rain=1)", saturated, 1.0)
+bench("saturated, quantised (Scatter=0)", saturated, 0)
+bench("saturated, mid (Scatter=0.5)", saturated, 0.5)
+bench("saturated, loose (Scatter=1)", saturated, 1.0)
 
 -- the weave is the other thing the re-cut added to the tick: twenty cells,
 -- each of them capable of putting more taps in the queue than it took out.

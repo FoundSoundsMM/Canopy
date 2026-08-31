@@ -16,21 +16,23 @@ state.vparam_focus = 1
 -- map -- see lib/gparam.lua.
 state.gparam_focus = 1
 
--- §4.1 global macros. `swing` and `rain` used to be one combined "Weather"
+-- §4.1 global macros. `swing` and `scatter` used to be one combined "Weather"
 -- knob (low half swing, high half chaos/wildness); gparam.lua now exposes
 -- them as independent params, so quantise.lua and every rhythm/field
 -- "wildness" read in rambler.lua/grove.lua that used to share the one
--- weather value now reads `rain` directly.
+-- weather value now reads `scatter` directly. (`scatter` was called `rain`
+-- until the actual Rain.wav ambience below took that name for something
+-- literal.)
 state.global = {
-  canopy = 0.3,      -- reverb amount
   swing = 0.8,       -- quantise.lua's swing() -- preserves the old default feel
-  rain = 0,          -- quantise.lua's chaos(), plus rhythm/field wildness
+  scatter = 0,       -- quantise.lua's chaos(), plus rhythm/field wildness
   bpm = 120,         -- transport tempo, mirrored onto the norns clock param
   scale_i = 0,       -- global pitch quantisation; 0 = free (grove.SCALES)
   drops = 0,         -- per-strike random pitch offset range
   decay_mult = 0.5,  -- global decay multiplier, 0.5 = x1 (voice.lua)
   pitch_offset = 0,  -- global transpose, semitones (grove.lua)
-  compressor = 0,    -- output bus compressor amount
+  rain_volume = 0,   -- the always-on Rain.wav ambience, dry level. off by default.
+  rain_excite = 0,   -- how much that same audio excites the four resonators
   level = 0.8,       -- K1+E3: master level
   still = false,     -- K2: freeze all pulse gaits
 }

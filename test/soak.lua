@@ -19,7 +19,7 @@ local ROOT = os.getenv("ROOT")
 arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
-function include(file) return dofile(ROOT .. "/" .. file:gsub("^Woodland/", "") .. ".lua") end
+function include(file) return dofile(ROOT .. "/" .. file:gsub("^Canopy/", "") .. ".lua") end
 
 -- strict norns surfaces ------------------------------------------------------
 
@@ -86,10 +86,10 @@ grid.connect = function()
   return gridobj
 end
 
-_woodland_mods = nil
-dofile(ROOT .. "/Woodland.lua")
+_canopy_mods = nil
+dofile(ROOT .. "/Canopy.lua")
 init()
-local M = _woodland_mods
+local M = _canopy_mods
 
 -- helpers ---------------------------------------------------------------------
 

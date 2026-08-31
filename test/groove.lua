@@ -1,8 +1,8 @@
--- build phase 5c/6b: the Swing/Rain groove (§4.1, lib/quantise.lua). that at
+-- build phase 5c/6b: the Swing/Scatter groove (§4.1, lib/quantise.lua). that at
 -- 0 every gait -- however it free-runs -- is heard on the grid, that Swing
 -- ramps in and puts the off-beats late without ever touching the grid error,
 -- that a burst is triggered on the beat with its ratchet on grid lines, and
--- that Rain lets go of all of it until nothing is held at 1 -- independently
+-- that Scatter lets go of all of it until nothing is held at 1 -- independently
 -- of whatever Swing is doing.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
@@ -79,11 +79,11 @@ do
         q.ratchet_gap(5) * 4 < 1, tostring(q.ratchet_gap(5)))
 end
 
-print("\n-- Swing=Rain=0: a wild gait is heard on the grid --")
+print("\n-- Swing=Scatter=0: a wild gait is heard on the grid --")
 do
   local M = fresh(3)
   M.state.global.swing = 0
-  M.state.global.rain = 0
+  M.state.global.scatter = 0
   M.rambler.set_gait(KNOCKER, "drifter")   -- free-running, nothing to root to
   M.state.character[KNOCKER] = 0.20        -- 2.0 Hz, no relation to the beat
   M.patch.add(KNOCKER, KNOCK, 1.0)
@@ -93,11 +93,11 @@ do
         string.format("worst %.3f of a 64th", worst_grid_error()))
 end
 
-print("\n-- Swing=Rain=0: unrelated gaits cohere onto one grid --")
+print("\n-- Swing=Scatter=0: unrelated gaits cohere onto one grid --")
 do
   local M = fresh(5)
   M.state.global.swing = 0
-  M.state.global.rain = 0
+  M.state.global.scatter = 0
   -- three cells with nothing in common: a triplet division, a free drifter
   -- and a slow one, none of them rooted.
   M.rambler.set_gait(KNOCKER, "metric")
@@ -138,11 +138,11 @@ do
   check("straight is the identity", math.abs(q.warp(0.3, 0) - 0.3) < 1e-9)
 end
 
-print("\n-- Swing ramps in, independently of Rain --")
+print("\n-- Swing ramps in, independently of Scatter --")
 local function offbeat_positions(swing)
   local M = fresh(7)
   M.state.global.swing = swing
-  M.state.global.rain = 0
+  M.state.global.scatter = 0
   M.rambler.set_gait(KNOCKER, "metric")
   M.state.character[KNOCKER] = 0.75        -- 2 x beat -> an 8th-note grid
   M.state.rooted[KNOCKER] = true
@@ -171,7 +171,7 @@ do
   check("fully swung at Swing=1: three quarters of the way through the beat",
         math.abs(offf - 0.75) < 0.03, string.format("%.3f", offf))
   check("and swinging costs no pulses", n0 == nf, n0 .. " vs " .. nf)
-  check("full swing with Rain=0 is still exactly on the grid",
+  check("full swing with Scatter=0 is still exactly on the grid",
         worst_grid_error() < TOLERANCE,
         string.format("worst %.3f of a 64th", worst_grid_error()))
 end
@@ -180,14 +180,14 @@ print("\n-- a burst is triggered on the beat --")
 do
   local M = fresh(13)
   M.state.global.swing = 0
-  M.state.global.rain = 0
+  M.state.global.scatter = 0
   M.rambler.set_gait(BOGGART, "burst")
   M.state.character[BOGGART] = 0.3
   M.patch.add(BOGGART, KNOCK, 1.0)
   run(M, 20)
   check("the burst fires", #CALLS.strike > 10, "#" .. #CALLS.strike)
 
-  -- Rain=0 means a ratchet of 2 on 16ths, so a burst is a beat-aligned pair:
+  -- Scatter=0 means a ratchet of 2 on 16ths, so a burst is a beat-aligned pair:
   -- the trigger on the beat, the tap a 16th later.
   local on_beat, on_tap, stray = 0, 0, 0
   for _, s in ipairs(CALLS.strike) do
@@ -201,11 +201,11 @@ do
   check("with nothing off the grid at all", stray == 0, "#" .. stray)
 end
 
-print("\n-- Rain lets go, independently of Swing --")
+print("\n-- Scatter lets go, independently of Swing --")
 do
-  local function looseness(rain, swing, seed)
+  local function looseness(scatter, swing, seed)
     local M = fresh(seed or 17)
-    M.state.global.rain = rain
+    M.state.global.scatter = scatter
     M.state.global.swing = swing or 0
     M.rambler.set_gait(KNOCKER, "drifter")
     M.state.character[KNOCKER] = 0.20
@@ -217,38 +217,38 @@ do
   local e0 = looseness(0)
   local e75 = looseness(0.75)
   local e100, n100 = looseness(1.0)
-  check("Rain=0 is locked", e0 < 0.05, string.format("%.3f", e0))
-  check("Rain=0.75 has come off the grid", e75 > e0 + 0.05,
+  check("Scatter=0 is locked", e0 < 0.05, string.format("%.3f", e0))
+  check("Scatter=0.75 has come off the grid", e75 > e0 + 0.05,
         string.format("%.3f -> %.3f", e0, e75))
-  check("Rain=1 is loose -- a mean error near the 0.25 of pure chance",
+  check("Scatter=1 is loose -- a mean error near the 0.25 of pure chance",
         e100 > 0.15, string.format("%.3f", e100))
-  check("and it is rain, not silence", n100 > 20, "#" .. n100)
+  check("and it is scattered, not silent", n100 > 20, "#" .. n100)
 
-  -- Swing and Rain used to be one knob, split at its midpoint; now they are
-  -- independent, so full Swing with Rain still at 0 must stay locked.
+  -- Swing and Scatter used to be one knob, split at its midpoint; now they are
+  -- independent, so full Swing with Scatter still at 0 must stay locked.
   local e0_swung = looseness(0, 1.0)
-  check("Rain=0 stays locked even at full Swing", e0_swung < 0.05,
+  check("Scatter=0 stays locked even at full Swing", e0_swung < 0.05,
         string.format("%.3f", e0_swung))
 end
 
-print("\n-- swing() and chaos() read Swing and Rain directly --")
+print("\n-- swing() and chaos() read Swing and Scatter directly --")
 do
   local M = fresh(19)
   local q = M.quantise
-  M.state.global.swing, M.state.global.rain = 0, 0
+  M.state.global.swing, M.state.global.scatter = 0, 0
   check("both zero", q.swing() == 0 and q.chaos() == 0)
-  M.state.global.swing, M.state.global.rain = 0.8, 0.3
+  M.state.global.swing, M.state.global.scatter = 0.8, 0.3
   check("read back independently, no midpoint split",
         q.swing() == 0.8 and q.chaos() == 0.3,
         string.format("swing %.2f chaos %.2f", q.swing(), q.chaos()))
 
-  M.state.global.swing, M.state.global.rain = 0, 0
+  M.state.global.swing, M.state.global.scatter = 0, 0
   M.rambler.set_gait(KNOCKER, "drifter")
   M.state.character[KNOCKER] = 0.20
   check("and the cell view names its grid",
         M.rambler.info(KNOCKER).grid == "1/8", tostring(M.rambler.info(KNOCKER).grid))
-  M.state.global.rain = 1.0
-  check("and drops it once Rain has let go",
+  M.state.global.scatter = 1.0
+  check("and drops it once Scatter has let go",
         M.rambler.info(KNOCKER).grid == nil, tostring(M.rambler.info(KNOCKER).grid))
 end
 
@@ -256,7 +256,7 @@ print("\n-- the grid follows the transport --")
 do
   local M = fresh(23)
   M.state.global.swing = 0
-  M.state.global.rain = 0
+  M.state.global.scatter = 0
   TEMPO = 75
   M.rambler.set_gait(KNOCKER, "drifter")
   M.state.character[KNOCKER] = 0.20
@@ -278,7 +278,7 @@ print("\n-- Still still freezes it --")
 do
   local M = fresh(29)
   M.state.global.swing = 0
-  M.state.global.rain = 0
+  M.state.global.scatter = 0
   M.rambler.set_gait(KNOCKER, "drifter")
   M.state.character[KNOCKER] = 0.20
   M.patch.add(KNOCKER, KNOCK, 1.0)

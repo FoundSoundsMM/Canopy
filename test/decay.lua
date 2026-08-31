@@ -76,7 +76,7 @@ do
         string.format("%.3f s", M.voice.decay_seconds(HAZEL)))
   -- Rowan's 1.8s default x4 is the longest ring the sound page can ask for
   -- anywhere, and it has to stay under the mode bank's own ceiling (Ringz,
-  -- clipped at 30s in Engine_Woodland.sc) or the page would read out a decay
+  -- clipped at 30s in Engine_Canopy.sc) or the page would read out a decay
   -- you cannot hear.
   M.state.decay[ROWAN] = 1.0
   check("and the longest is a real bell",

@@ -34,6 +34,10 @@ params = {
   get = function(_, k) if k == "clock_tempo" then return TEMPO end end,
 }
 
+-- norns' global paths table. only `.code` is used (Canopy.lua's rain_load
+-- call) and only for string concatenation -- nothing here touches disk.
+_path = {code = "/home/we/dust/code/"}
+
 screen = setmetatable({}, {__index = function() return function() end end})
 grid = {connect = function() return {key = nil, led = function() end, all = function() end,
                                      refresh = function() end} end}
@@ -47,7 +51,7 @@ local function fresh_calls()
     heart_conductance = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
-    compressor = {},
+    rain_load = {}, rain_volume = {}, rain_excite = {},
   }
 end
 CALLS = fresh_calls()
@@ -94,18 +98,22 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.exciter_decay, {t = T, index = a[1], scale = a[2]})
     elseif k == "voice_bend" then
       table.insert(CALLS.voice_bend, {t = T, voice = a[1], v = a[2]})
-    elseif k == "compressor" then
-      table.insert(CALLS.compressor, {t = T, v = a[1]})
+    elseif k == "rain_load" then
+      table.insert(CALLS.rain_load, {t = T, path = a[1]})
+    elseif k == "rain_volume" then
+      table.insert(CALLS.rain_volume, {t = T, v = a[1]})
+    elseif k == "rain_excite" then
+      table.insert(CALLS.rain_excite, {t = T, v = a[1]})
     end
   end
 end})
 
-_woodland_mods = {}
+_canopy_mods = {}
 function wl(name)
-  local m = _woodland_mods[name]
+  local m = _canopy_mods[name]
   if m == nil then
     m = dofile(ROOT .. "/lib/" .. name .. ".lua")
-    _woodland_mods[name] = m
+    _canopy_mods[name] = m
   end
   return m
 end
@@ -115,7 +123,7 @@ function fresh(seed)
   math.randomseed(seed or 1)
   T = 0
   CALLS = fresh_calls()
-  _woodland_mods = {}
+  _canopy_mods = {}
   local M = {}
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "heartwood", "grove", "climate", "weave",
