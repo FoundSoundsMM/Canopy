@@ -178,12 +178,7 @@ function dispatch.on_pulse(source_id, target_id, edge, weight)
   local target = topology.get(target_id)
   if not target then return end
 
-  local key = target.type
-  if key == "voice" then
-    local source = topology.get(source_id)
-    key = "voice<-" .. (source and source.type or "?")
-  end
-  local handler = HANDLERS[key]
+  local handler = HANDLERS[target.type]
   if handler then
     handler(source_id, target_id, edge, weight)
   end
@@ -211,6 +206,40 @@ local function h_to_voice_spec(h, voice, gain)
     dst = bridge.bus("mod_in", voice.index - 1),
     gain = gain,
   }
+end
+
+-- a voice <-> an E cell carries two different meanings at once, one per
+-- direction -- not the same transformation mirrored both ways the way
+-- voice<->voice or H<->H are, so each half gets its own one-way gate. a
+-- one-way cable a->b only sends from a (§3): if the voice is `a`, only its
+-- own colouring of the exciter applies; if the exciter is `a`, only its
+-- feed into the voice's mod path does.
+local function voice_to_e_specs(voice, e, edge, out)
+  if (not edge.oneway) or edge.a == voice.id then
+    table.insert(out, {
+      kind = "ak", src = bridge.bus("voice_out", voice.index - 1),
+      dst = bridge.bus("colour_mod", e.index), gain = edge.gain,
+    })
+  end
+  if (not edge.oneway) or edge.a == e.id then
+    table.insert(out, e_to_voice_spec(e, voice, edge.gain))
+  end
+end
+
+-- a voice <-> an H node, same shape as voice_to_e_specs above: the voice
+-- pouring into the wood and the lattice returning into the voice are two
+-- different specs, gated independently by which side a one-way cable starts
+-- from.
+local function voice_to_h_specs(voice, h, edge, out)
+  if (not edge.oneway) or edge.a == voice.id then
+    table.insert(out, {
+      kind = "aa", src = bridge.bus("voice_out", voice.index - 1),
+      dst = bridge.bus("heart_in", h.index), gain = edge.gain,
+    })
+  end
+  if (not edge.oneway) or edge.a == h.id then
+    table.insert(out, h_to_voice_spec(h, voice, edge.gain))
+  end
 end
 
 -- an H<->H cable is a second path between two points that already sit in one
@@ -321,19 +350,13 @@ local function specs_for(edge)
 
   x, y = ordered("voice", "E")
   if x then
-    table.insert(out, {
-      kind = "ak", src = bridge.bus("voice_out", x.index - 1),
-      dst = bridge.bus("colour_mod", y.index), gain = edge.gain,
-    })
+    voice_to_e_specs(x, y, edge, out)
     return out
   end
 
   x, y = ordered("voice", "H")
   if x then
-    table.insert(out, {
-      kind = "aa", src = bridge.bus("voice_out", x.index - 1),
-      dst = bridge.bus("heart_in", y.index), gain = edge.gain,
-    })
+    voice_to_h_specs(x, y, edge, out)
     return out
   end
 
@@ -350,21 +373,9 @@ local function specs_for(edge)
     return out
   end
 
-  x, y = ordered("E", "voice")
-  if x then
-    table.insert(out, e_to_voice_spec(x, y, edge.gain))
-    return out
-  end
-
   x, y = ordered("E", "H")
   if x then
     e_to_h_specs(x, y, edge, out)
-    return out
-  end
-
-  x, y = ordered("H", "voice")
-  if x then
-    table.insert(out, h_to_voice_spec(x, y, edge.gain))
     return out
   end
 

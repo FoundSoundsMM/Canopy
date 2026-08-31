@@ -11,19 +11,12 @@
 -- more -- the far end of a 4-node chain is simply its last node.
 --
 -- NOTE: the "visible arrival" tests below cable H nodes to GVOICE cells
--- rather than to voices, as the original (pre-rewrite) test did. that is a
--- deliberate workaround, not a style choice: dispatch.lua's HANDLERS table
--- has entries for "voice<-D", "voice<-R", "voice<-TM", "voice<-GVOICE",
--- "voice<-C", "voice<-SEQ" and "voice<-voice", but no "voice<-H" -- so a
--- pulse emerging from the lattice directly onto a voice's single point is
--- silently dropped by dispatch.on_pulse, contradicting the file's own header
--- comment ("a voice ... covers everything a pulse can land on"). confirmed
--- directly: dispatch.on_pulse("h.taproot", "oak", {gain=1}, 1) produces zero
--- CALLS.strike, while the same call against a GVOICE cell strikes it. this
--- looks like a genuine missing-handler bug; see the final report rather than
--- this file for the fix, which is out of scope for a test-only pass. GVOICE
--- cells give the same "a distinct, indexed, forced strike" signal a voice
--- would have, so they stand in cleanly everywhere this file needs one.
+-- rather than to voices. that started as a workaround for a genuine
+-- dispatch.lua bug (a missing "voice<-H" pulse handler, since fixed --
+-- dispatch.lua now keys `on_pulse` by target type alone, so every source
+-- type reaches a voice the same way) but is kept here as a style choice:
+-- GVOICE cells give the same "a distinct, indexed, forced strike" signal a
+-- voice would have, with a smaller PARAMS surface to fresh() through.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -190,19 +183,8 @@ do
         tostring(last.index) .. " " .. tostring(last.v))
 end
 
-print("\n-- E -> H and H -> a voice resolve to the lattice buses --")
+print("\n-- E -> H and H <-> a voice resolve to the lattice buses --")
 do
-  -- NOTE: a second, distinct shadowing bug from the one above, this time in
-  -- the *continuous* half. dispatch.lua's specs_for checks `ordered("voice",
-  -- "H")` (the voice's own audio feeding INTO the lattice, kind "aa" into
-  -- heart_in) before it ever reaches `ordered("H", "voice")`
-  -- (h_to_voice_spec, the lattice's emergence tapped OUT into the voice's mod
-  -- path) -- and since ordered() matches a voice/H pair the same way
-  -- regardless of which side the cable was drawn from, the "H","voice"
-  -- branch and h_to_voice_spec are unreachable dead code, the same shape
-  -- test/exciter.lua flags for E<->voice. this test asserts the actual
-  -- (shadowed) behaviour; see the final report for the flagged
-  -- lib/dispatch.lua issue.
   local M = fresh(1)
   local BRACKEN = "e.bracken"
   local bracken, mycel, oak = M.topology.get(BRACKEN), M.topology.get(MYCEL), M.topology.get("oak")
@@ -221,15 +203,27 @@ do
         back and back.src == M.bridge.bus("heart_out", mycel.index)
         and back.dst == M.bridge.bus("colour_mod", bracken.index))
 
+  -- a voice<->H cable carries two different meanings at once, one per
+  -- direction: the voice pours into the lattice, and the lattice's
+  -- emergence returns into the voice's mod path -- both specs exist for
+  -- one ordinary (non-oneway) cable, the same shape voice<->E carries.
   M.patch.add(MYCEL, "oak", 0.4)
-  local tap = CALLS.patch_add[#CALLS.patch_add]
-  check("the voice<->H pair resolves to the (shadowed) voice-feeds-lattice spec",
-        tap.kind == "aa" and tap.src == M.bridge.bus("voice_out", oak.index - 1)
-        and tap.dst == M.bridge.bus("heart_in", mycel.index), tostring(tap.dst))
+  local before = #CALLS.patch_add
+  check("two more synths for the voice<->H cable", before == 4, tostring(before))
+  local pour, emerge
+  for i = 3, 4 do
+    local c = CALLS.patch_add[i]
+    if c.dst == M.bridge.bus("heart_in", mycel.index) then pour = c
+    elseif c.dst == M.bridge.bus("mod_in", oak.index - 1) then emerge = c end
+  end
+  check("voice pours into the lattice",
+        pour and pour.src == M.bridge.bus("voice_out", oak.index - 1))
+  check("the lattice's emergence reaches the voice's mod path",
+        emerge and emerge.src == M.bridge.bus("heart_out", mycel.index))
 
   M.patch.remove(MYCEL, "oak")
   M.patch.remove(BRACKEN, MYCEL)
-  check("all freed on remove", #CALLS.patch_free == 3, #CALLS.patch_free)
+  check("all freed on remove", #CALLS.patch_free == 4, #CALLS.patch_free)
 end
 
 print("\n-- D -> H -> D closes a loop without running away --")
@@ -244,7 +238,7 @@ do
   M.patch.add(GABRIEL, TAPROOT, 1.0)      -- D -> H injection
   M.patch.add(WYRD, SPRIGGAN, 1.0)        -- H -> D pull
   M.patch.add(SPRIGGAN, LEY, 1.0)         -- D -> H re-injection, closing the loop
-  M.patch.add(MYCEL, YAFFLE, 0.8)         -- GVOICE tap (voice<-H is unreachable, see above)
+  M.patch.add(MYCEL, YAFFLE, 0.8)         -- GVOICE tap, visible strike
   M.patch.add(TAPROOT, KNAP, 0.8)
   M.patch.add(LEY, "e.bracken", 0.8)
 

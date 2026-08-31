@@ -193,60 +193,80 @@ drives the scheduler on a virtual clock, so everything below is checkable
 on a laptop against the stubbed `engine.*` call log — there is no SC here
 to actually render audio.
 
-- `rhythm.lua` — every gait produces pulses, rooted gaits lock to the
-  transport exactly, euclidean and figure play the counts they claim,
-  Kuramoto locking at positive and negative gain, Still, and a densely
-  cross-patched graph (now including a voice-out loop) staying bounded.
-- `weave.lua` — every one of the twenty rules emits, divide/mult/mask
-  produce the exact counts they promise, sift gates on weight, accent
-  reshapes without dropping, hocket round-robins its cables without ever
-  going back out of the one the pulse came in on, delay is musical rather
-  than millisecond, a chain of the multiplying rules with a voice-out loop
-  in it stays bounded, and swapping a rule resets what the old one counted.
-- `climate.lua` — a cabled climate moves the far cell's effective knob and
-  not its setting, severing restores it exactly, E2 still works underneath,
-  two climates average rather than race, every shape moves and stays in
-  range, a pulse landing on a climate does nothing to it (see the C handler
-  in `dispatch.lua` for why that matters), and Still freezes it.
+- `rhythm.lua` — every gait produces pulses (including Skriker's new
+  `swarm`), rooted gaits lock to the transport exactly, euclidean and figure
+  play the counts they claim, Kuramoto locking at positive and negative
+  gain, Still, and a densely cross-patched graph (including a voice-out
+  loop) staying bounded.
+- `weave.lua` — every one of the six surviving rules emits, divide/mult/mask
+  produce the exact counts they promise (still reachable by cycling even
+  though nothing defaults to them any more), sift gates on weight, accent
+  reshapes without dropping, hocket round-robins its cables, delay is
+  musical rather than millisecond, a chain of the multiplying rules with a
+  voice loop in it stays bounded.
+- `clockcell.lua` — a Clock cell fires at the expected multiple/division of
+  the master clock, Ratio changes take effect, it never reacts to an
+  incoming pulse (a pure source, same as Climate always was), and it
+  freezes under Still.
+- `sequencer.lua` — Q4/Q6 lane registration and driver flags, tap-toggling a
+  step affects only that step, a pulse on a non-driver step fires it
+  directly regardless of the playhead, a pulse on the driver advances the
+  playhead and fires whichever step it lands on only if that step is
+  active, and a SEQ↔SEQ cable loop stays bounded the same way a TM↔TM one
+  does.
 - `groove.lua` — the Swing/Scatter groove: divisions, lock, Swing ramping in
   and landing off-beats late without moving the grid, bursts triggered on the
   beat, Scatter letting go independently of Swing, and the grid following the
   transport.
-- `decay.lua` — every voice starts on its own ring time, the knob moves it
-  in seconds, a socket hands the gesture to its voice, an exciter gets the
-  same knob as a ratio, and cells with no sound of their own store nothing.
-- `exciter.lua` — lazy alloc/off, pulse-cable gating, Colour forwarding,
-  and the patch matrix resolving cables to the right SC bus numbers.
-- `heartwood.lua` — a pulse injected at one node emerges from the others
-  later and quieter, conductance spanning "dies within one hop" to
-  "circulates", H↔H shortcuts beating the ring, a D→H→D loop staying
-  bounded, and Still freezing what is in flight.
-- `grove.lua` — a cabled field retunes the voice *before* the strike, Range
-  bounds it, snap lands on scale tones, a pulse steps a field with nothing
-  struck, F↔F converges at positive gain, severing hands the voice back its
-  fundamental, and a bare voice still never plays the same pitch twice.
-- `voice.lua` — the four sockets and the dark corners of a cluster, the
-  sound page pushing all nine at init, Tune as a real transposition, Body
-  and Damp sweeping around each voice's own baseline, the P socket's depth,
-  the O socket answering with a pulse on every strike and resolving to an
-  audio tap, and the refractory bounding a self-loop.
+- `decay.lua` — every voice decays against its own id directly (no more
+  socket to forward through), an exciter gets the same knob as a ratio, and
+  cells with no sound of their own store nothing.
+- `exciter.lua` — lazy alloc/off, pulse-cable gating, Colour forwarding, and
+  the patch matrix: a voice↔exciter cable resolves to *both* directions'
+  spec (the exciter driving the voice's mod path, and the voice colouring
+  the exciter) on one ordinary cable, and to only the relevant half on a
+  one-way one.
+- `heartwood.lua` — trimmed to the 4-node chain (`taproot`–`mycel`–`wyrd`–
+  `ley`): a pulse injected at one end emerges from the others later and
+  quieter, conductance spanning "dies within one hop" to "circulates", an
+  H↔H shortcut closing a loop a bare chain can't, a T→H→T loop staying
+  bounded, and the continuous matrix resolving a voice↔H cable to both
+  directions at once, the same shape as voice↔exciter.
+- `grove.lua` — trimmed to the 4 surviving fields: a cabled field retunes
+  the voice *before* the strike, Range bounds it, snap lands on scale
+  tones, a pulse steps a field with nothing struck, F↔F converges at
+  positive gain, cabling straight to the voice's own point (no more P
+  socket) works, and a bare voice still never plays the same pitch twice.
+- `voice.lua` — the socket collapse: no more `.trig`/`.pitch`/`.mod`/`.out`
+  ids, every cell is a legal cable endpoint including a voice, the sound
+  page's three new rows (Hardness/Depth/Balance) push correctly, Tune as a
+  real transposition, Body and Damp sweeping around each voice's own
+  baseline, a voice answering with a pulse on every strike, and the
+  refractory bounding a self-loop.
+- `gvoice.lua` — the six percussion cells under their new `GVOICE` type and
+  `gv.*` ids, same six-parameter page and strike/answer mechanic as before
+  the rename.
+- `tm.lua` — the four Turing Machine cells at their new coordinates,
+  register stepping, Tap-gated answering pulse, and pitch feeding a voice
+  directly (no more P socket to route through).
 - `gparam.lua` — the global param page: E1 clamped at both ends, BPM's
   coarse/fine steps and clock/floor/ceiling clamping, Scale's one-entry-per-
-  flick detent and quantising `grove.hz` only once it isn't free, Drops
-  widening the per-strike spread, global Decay and Pitch reaching the engine
-  for every voice at once, and Rain/Excite forwarding to the engine.
+  flick detent, Drops widening the per-strike spread, global Decay and
+  Pitch reaching the engine for every voice at once, and Rain/Excite
+  forwarding to the engine.
 - `smoke.lua` — loads `Canopy.lua` itself and exercises every screen
-  view, the sound page, and every control.
+  view, the sound page, and every control against the new 72-cell panel.
 - `soak.lua` — the same, but against a *strict* norns stub: `screen`, `util`
   and `clock` expose only the functions norns actually has, so calling one it
   doesn't is an error rather than a silent no-op. Redraws from every state
-  (all 92 cells held one at a time, all 130 type pairs held in twos, the
-  global page with a live patch), 4000 random gestures with the scheduler
-  running, and the per-frame screen command and paint budgets. This is the
-  test that catches "the screen died but the grid still works".
-- `perf.lua` — what the 2 ms tick costs. Cheap on a dev machine, but the
-  CM3 is the budget that matters, so re-check it there if the scheduler
-  ever feels like the thing making the UI stutter.
+  (every cell held one at a time, every type pair held in twos, the
+  global page with a live patch), thousands of random gestures with the
+  scheduler running, and the per-frame screen command and paint budgets.
+  This is the test that catches "the screen died but the grid still works".
+- `perf.lua` — what the 2 ms tick costs, including the new Clock and
+  sequencer ticks. Cheap on a dev machine, but the CM3 is the budget that
+  matters, so re-check it there if the scheduler ever feels like the thing
+  making the UI stutter.
 
 ## SuperCollider toolchain (optional, for compile-checking off-device)
 

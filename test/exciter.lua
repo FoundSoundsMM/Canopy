@@ -63,33 +63,63 @@ end
 
 print("\n-- E <-> a voice, through the patch matrix --")
 do
-  -- NOTE: dispatch.lua's specs_for checks `ordered("voice", "E")` (the voice
-  -- colours the exciter, kind "ak") before it ever reaches `ordered("E",
-  -- "voice")` (e_to_voice_spec, kind "aa", the stream landing on the voice's
-  -- own point) -- and since ordered() matches a voice/E pair the same way
-  -- regardless of which side the cable was drawn from, the "E","voice" branch
-  -- and e_to_voice_spec are unreachable dead code. this test asserts the
-  -- actual (shadowed) behaviour rather than the one the file's own comments
-  -- describe; see the final report for the flagged lib/dispatch.lua issue.
+  -- a voice/E cable carries two different meanings at once, one per
+  -- direction: the exciter's stream drives the voice's mod path (kind
+  -- "aa"), and the voice's own audio colours the exciter (kind "ak") --
+  -- both specs exist for one ordinary (non-oneway) cable, the same way a
+  -- voice<->voice cable carries both directions' meaning on one wire.
   local M = fresh(1)
   local BRACKEN = "e.bracken"
   local bracken = M.topology.get(BRACKEN)
   local oak = M.topology.get("oak")
 
   M.patch.add(BRACKEN, "oak", 0.5)
-  local add = CALLS.patch_add[#CALLS.patch_add]
-  check("ak kind (voice colours the exciter, not the reverse)", add.kind == "ak", tostring(add.kind))
-  check("src is Oak's own voice-out bus", add.src == M.bridge.bus("voice_out", oak.index - 1))
-  check("dst is Bracken's colour-mod bus", add.dst == M.bridge.bus("colour_mod", bracken.index))
-  check("gain matches edge gain", add.gain == 0.5)
+  check("two patch synths for one E<->voice cable", #CALLS.patch_add == 2, tostring(#CALLS.patch_add))
+
+  local ak, aa
+  for _, add in ipairs(CALLS.patch_add) do
+    if add.kind == "ak" then ak = add elseif add.kind == "aa" then aa = add end
+  end
+  check("an ak spec exists (voice colours the exciter)", ak ~= nil)
+  check("its src is Oak's own voice-out bus", ak and ak.src == M.bridge.bus("voice_out", oak.index - 1))
+  check("its dst is Bracken's colour-mod bus", ak and ak.dst == M.bridge.bus("colour_mod", bracken.index))
+  check("an aa spec exists (the exciter drives the voice's mod path)", aa ~= nil)
+  check("its src is Bracken's own exciter bus", aa and aa.src == M.bridge.bus("exc", bracken.index))
+  check("its dst is Oak's own mod-path bus", aa and aa.dst == M.bridge.bus("mod_in", oak.index - 1))
+  check("both carry the edge's own gain", ak and aa and ak.gain == 0.5 and aa.gain == 0.5)
 
   local eid = M.patch.has(BRACKEN, "oak")
   M.patch.set_gain(eid, 0.9)
-  local g = CALLS.patch_gain[#CALLS.patch_gain]
-  check("gain update sent", g.id == add.id and g.gain == 0.9, g.id .. " " .. tostring(g.gain))
+  check("gain update sent for both", #CALLS.patch_gain == 2,
+        "got " .. #CALLS.patch_gain)
+  local all09 = true
+  for _, g in ipairs(CALLS.patch_gain) do if g.gain ~= 0.9 then all09 = false end end
+  check("both updates carry the new gain", all09)
 
   M.patch.remove(BRACKEN, "oak")
-  check("freed on remove", #CALLS.patch_free == 1 and CALLS.patch_free[1].id == add.id)
+  check("both freed on remove", #CALLS.patch_free == 2, tostring(#CALLS.patch_free))
+end
+
+print("\n-- E -> a voice only (one-way cable) --")
+do
+  -- a one-way cable a->b only sends from a (§3): only the exciter's own
+  -- half of the pairing should exist, not the voice's colouring half.
+  local M = fresh(1)
+  M.patch.add("e.bracken", "oak", 0.6, true)
+  check("only one patch synth for a one-way E->voice cable",
+        #CALLS.patch_add == 1, tostring(#CALLS.patch_add))
+  check("it is the aa spec (exciter feeding the voice)",
+        #CALLS.patch_add == 1 and CALLS.patch_add[1].kind == "aa")
+end
+
+print("\n-- voice -> E only (one-way cable) --")
+do
+  local M = fresh(1)
+  M.patch.add("oak", "e.bracken", 0.6, true)
+  check("only one patch synth for a one-way voice->E cable",
+        #CALLS.patch_add == 1, tostring(#CALLS.patch_add))
+  check("it is the ak spec (voice colouring the exciter)",
+        #CALLS.patch_add == 1 and CALLS.patch_add[1].kind == "ak")
 end
 
 print("\n-- E <-> E colour cross-modulation --")
