@@ -133,6 +133,38 @@ function bridge.voice_noise_q(voice_index, v)
   engine.voice_noise_q(voice_index, v)
 end
 
+-- §2.7b percussion cells: the same shape as the voice_* commands above, six
+-- knobs instead of eight -- a G cell has no sockets, so there is no glide,
+-- drift, choke, mod balance, tap level or FM to forward, only the strike and
+-- the sound page's own five.
+function bridge.g_strike(index, force)
+  engine.g_strike(index, force)
+end
+
+function bridge.g_pitch(index, hz)
+  engine.g_pitch(index, hz)
+end
+
+function bridge.g_decay(index, seconds)
+  engine.g_decay(index, seconds)
+end
+
+function bridge.g_tone(index, v)
+  engine.g_tone(index, v)
+end
+
+function bridge.g_punch(index, v)
+  engine.g_punch(index, v)
+end
+
+function bridge.g_drive(index, v)
+  engine.g_drive(index, v)
+end
+
+function bridge.g_amp(index, v)
+  engine.g_amp(index, v)
+end
+
 -- §2.4 exciter cells: lazy on/off, Colour (E2), the gated flag (has this S
 -- cell got an incoming pulse cable?), and the grain trigger itself.
 function bridge.exciter_on(index)

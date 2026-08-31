@@ -74,8 +74,10 @@ end
 -- cells have no sound to decay -- they make pulses, bend them, diffuse
 -- energy, choose pitches and change the weather -- and their E3-with-nothing-
 -- focused is deliberately inert rather than quietly storing a number nothing
--- reads.
-local DECAY_TYPES = {voice = true, node = true, S = true}
+-- reads. a G cell (§2.7b) is a sound of its own, same as a voice or an S
+-- cell -- it just has no separate sockets, so the gesture reaches its own id
+-- directly rather than by way of `cell.voice`.
+local DECAY_TYPES = {voice = true, node = true, S = true, G = true}
 
 function state.decay_target(cell)
   if not cell or not DECAY_TYPES[cell.type] then return nil end

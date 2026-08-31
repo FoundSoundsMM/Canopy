@@ -51,6 +51,14 @@ local DESC = {
   ["r.osier"]   = "mask -- a euclidean stencil laid over what arrives.",
   ["r.sedge"]   = "shift -- a skip pattern that rotates every cycle.",
 
+  -- percussion cells / G (§2.7b)
+  ["g.yaffle"]  = "ping -- a mid, woody knock. tap it: full sound page.",
+  ["g.knap"]    = "ping -- a dry, high crack, flint struck. tap it: full sound page.",
+  ["g.clapper"] = "ping -- a low wooden knock, the kick end. tap it: full sound page.",
+  ["g.scree"]   = "noise -- a bright scatter, the hihat end. tap it: full sound page.",
+  ["g.chaff"]   = "noise -- a dry mid rustle, snare-like. tap it: full sound page.",
+  ["g.rattle"]  = "noise -- a low shake, clap/rim-like. tap it: full sound page.",
+
   -- exciter cells / S (§2.4)
   ["s.bracken"]  = "dry rustle -- bandpassed white noise and crackle.",
   ["s.gorse"]    = "prickly high band, resonant, spiky.",

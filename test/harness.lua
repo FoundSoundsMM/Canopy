@@ -52,6 +52,8 @@ local function fresh_calls()
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
     rain_load = {}, rain_volume = {}, rain_excite = {},
+    g_strike = {}, g_pitch = {}, g_decay = {}, g_tone = {}, g_punch = {},
+    g_drive = {}, g_amp = {},
   }
 end
 CALLS = fresh_calls()
@@ -104,6 +106,20 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.rain_volume, {t = T, v = a[1]})
     elseif k == "rain_excite" then
       table.insert(CALLS.rain_excite, {t = T, v = a[1]})
+    elseif k == "g_strike" then
+      table.insert(CALLS.g_strike, {t = T, index = a[1], force = a[2]})
+    elseif k == "g_pitch" then
+      table.insert(CALLS.g_pitch, {t = T, index = a[1], hz = a[2]})
+    elseif k == "g_decay" then
+      table.insert(CALLS.g_decay, {t = T, index = a[1], secs = a[2]})
+    elseif k == "g_tone" then
+      table.insert(CALLS.g_tone, {t = T, index = a[1], v = a[2]})
+    elseif k == "g_punch" then
+      table.insert(CALLS.g_punch, {t = T, index = a[1], v = a[2]})
+    elseif k == "g_drive" then
+      table.insert(CALLS.g_drive, {t = T, index = a[1], v = a[2]})
+    elseif k == "g_amp" then
+      table.insert(CALLS.g_amp, {t = T, index = a[1], v = a[2]})
     end
   end
 end})
@@ -127,7 +143,8 @@ function fresh(seed)
   local M = {}
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "heartwood", "grove", "climate", "weave",
-                      "dispatch", "voice", "rambler", "exciter", "gparam"}) do
+                      "dispatch", "voice", "gvoice", "rambler", "exciter",
+                      "gparam"}) do
     M[n] = wl(n)
   end
   return M

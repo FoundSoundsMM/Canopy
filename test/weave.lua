@@ -7,7 +7,10 @@ arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
 local KNOCKER, HOB = "d.knocker", "d.hob"
-local TROD, GINNEL, SNICKET = "r.trod", "r.ginnel", "r.snicket"
+-- any two distinct R cells work here -- every test below sets its rule
+-- explicitly rather than relying on a default, and Trod/Ginnel gave up their
+-- coordinates to the re-cut's re-cut (docs/canopy-spec.md §2.7).
+local TROD, GINNEL, SNICKET = "r.holt", "r.coppice", "r.snicket"
 local BECK, LOAM = "s.beck", "s.loam"
 
 -- an S cell, not a voice, is what the tests count. a voice has a refractory

@@ -8,7 +8,9 @@ dofile(SP .. "/harness.lua")
 
 local OAK, ROWAN = "oak", "rowan"
 local KNOCKER, GABRIEL = "d.knocker", "d.gabriel"
-local GINNEL = "r.ginnel"
+-- Ginnel gave up its coordinates to the re-cut's re-cut (§2.7); any
+-- surviving R cell stands in fine here since the rule is set explicitly.
+local GINNEL = "r.coppice"
 local BECK = "s.beck"
 
 local function last(list, pred)

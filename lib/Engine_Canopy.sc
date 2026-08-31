@@ -35,8 +35,9 @@
 
 Engine_Canopy : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
-	var voiceBus, patchBus, excMeterBus, rainBus;
+	var voiceBus, patchBus, excMeterBus, rainBus, gBus;
 	var voiceSynths;
+	var gSynths;
 	var excSynths;
 	var patchSynths;
 	var heartSynth;
@@ -75,7 +76,16 @@ Engine_Canopy : CroneEngine {
 		\wl_exc_hail, \wl_exc_reed
 	];
 
-	classvar nVoices = 4, nExc = 20;
+	// §2.7b percussion cells -- simple drum voices, not the modal resonator
+	// bank above. `kind` per index matches topology.lua's G_CELLS order:
+	// \wl_g_ping (pinged resonant filter) for the first three, \wl_g_noise
+	// (enveloped filtered noise) for the last three.
+	classvar gDefs = #[
+		\wl_g_ping, \wl_g_ping, \wl_g_ping,
+		\wl_g_noise, \wl_g_noise, \wl_g_noise
+	];
+
+	classvar nVoices = 4, nExc = 20, nG = 6;
 
 	// offsets into the single `patchBus` block (§7.3's separate bus families
 	// collapsed into one allocation so the Lua side only needs to add an
@@ -103,6 +113,10 @@ Engine_Canopy : CroneEngine {
 
 		// one mono bus per voice (§7.3 "voice outputs")
 		voiceBus = Bus.audio(server, nVoices);
+		// one mono bus per percussion cell (§2.7b) -- always-on, mixed into
+		// \woodland_fx alongside the four voices, the same shape as voiceBus
+		// but its own allocation since nG != nVoices.
+		gBus = Bus.audio(server, nG);
 		// see the classvar block above for the six sub-ranges packed in here
 		patchBus = Bus.audio(server, patchTotal);
 		// §7.4 metering back-channel: one control-rate channel per exciter,
@@ -163,8 +177,17 @@ Engine_Canopy : CroneEngine {
 			// stereo loop, scaled down for headroom (the wav is a full-level
 			// recording, not a designed exciter burst) and by the knob
 			// itself. 0 (the default) is a no-op.
+			// squared, not linear: unlike the burst exciter, this is a
+			// *continuous* signal into the mode bank's Ringz below, so it
+			// sits there and rings up to Ringz's steady-state resonant gain
+			// (which grows with each mode's decay time) instead of just
+			// decaying after one brief hit like the burst exciter does. that
+			// makes this knob's low end far more sensitive than a linear
+			// multiply looks like it should be -- 0.03 already reads as a
+			// sustained, well-fed resonance, not a token amount. squaring
+			// buys back a usable quiet range without changing full-up.
 			var rainSig = (Mix.ar(In.ar(rainIn, 2)) * 0.5)
-				* rainExcite.clip(0, 1) * 0.7;
+				* rainExcite.clip(0, 1).squared * 0.7;
 			var totalExc = exc + (inject * 0.8) + rainSig;
 
 			// §8.5: amplitude-dependent pitch drop -- the "thunk" of a hard hit.
@@ -263,19 +286,76 @@ Engine_Canopy : CroneEngine {
 			Out.ar(tapOut, sig * tapLevel.clip(0, 1));
 		}).add;
 
+		// §2.7b percussion cells. much smaller than \woodland_voice -- a
+		// single ping or a single enveloped noise burst rather than a
+		// six-mode bank -- but the same six knobs either kind answers to:
+		// t_trig/force (the strike), freq (Pitch), decay (Decay, straight
+		// onto the envelope/ring time -- no frequency-dependent damping bank
+		// to interact with, unlike the corner voices), tone, punch, drive,
+		// amp.
+		//
+		// \wl_g_ping: a short noise click (its colour and length set by
+		// punch) rings a two-partial Ringz bank -- the fundamental at freq,
+		// plus a detuned, faster-decaying second partial mixed in by tone,
+		// which is what keeps a ping from reading as a pure sine.
+		SynthDef(\wl_g_ping, {
+			arg out=0, t_trig=0, force=0.6, freq=180, decay=0.28, tone=0.5,
+				punch=0.3, drive=0.2, amp=0.8;
+			var p = punch.clip(0, 1);
+			var clickDur = 0.0002 + (0.006 * (1 - p));
+			var click = EnvGen.ar(Env.perc(0.0002, clickDur), t_trig) * force;
+			var exc = (WhiteNoise.ar(1) * p) + (PinkNoise.ar(1) * (1 - p));
+			var burst = exc * click;
+			var d = decay.clip(0.01, 8);
+			var t = tone.clip(0, 1);
+			var ring = Ringz.ar(burst, freq.clip(20, 12000), d)
+				+ (Ringz.ar(burst, (freq * 2.756).clip(20, 18000), d * 0.4) * t * 0.5);
+			var driven = (ring * (1 + (drive.clip(0, 1) * 1.5))).tanh;
+			var sig = Limiter.ar(LeakDC.ar(driven), 0.95) * amp * 0.6;
+			Out.ar(out, sig);
+		}).add;
+
+		// \wl_g_noise: an envelope (attack shaped by punch, length by decay)
+		// gates a band of noise whose colour (brown<->white) and bandwidth
+		// tone crossfades -- narrower and browner at tone=0, wider and
+		// whiter at tone=1 -- centred on freq.
+		SynthDef(\wl_g_noise, {
+			arg out=0, t_trig=0, force=0.6, freq=1500, decay=0.15, tone=0.5,
+				punch=0.3, drive=0.2, amp=0.8;
+			var t = tone.clip(0, 1);
+			var atk = 0.0004 + (0.012 * (1 - punch.clip(0, 1)));
+			var env = EnvGen.ar(Env.perc(atk, decay.clip(0.01, 4)), t_trig) * force;
+			var noiseMix = (WhiteNoise.ar(1) * t) + (BrownNoise.ar(1) * (1 - t));
+			var band = BPF.ar(noiseMix, freq.clip(20, 18000), 0.15 + (0.45 * (1 - t)));
+			var burst = band * env;
+			var driven = (burst * (1 + (drive.clip(0, 1) * 1.5))).tanh;
+			var sig = Limiter.ar(LeakDC.ar(driven), 0.95) * amp * 0.6;
+			Out.ar(out, sig);
+		}).add;
+
 		// build phase 7: no reverb, no compressor. just the four voices panned
 		// and summed, the rain ambience's own dry level added in alongside
-		// them, and master level on top -- a plain, dry mix.
+		// them, and master level on top -- a plain, dry mix. build phase
+		// 6's re-cut's re-cut adds the six percussion cells, panned and
+		// summed the same way.
 		SynthDef(\woodland_fx, {
-			arg busIn=0, out=0, level=0.8, rainIn=0, rainVol=0;
+			arg busIn=0, out=0, level=0.8, rainIn=0, rainVol=0, gIn=0;
 			var voices = In.ar(busIn, 4);
+			var gVoices = In.ar(gIn, 6);
+			var gPan = [-0.5, -0.2, 0.1, -0.1, 0.2, 0.5];
+			var gDry = Mix.ar(Array.fill(6, { |i| Pan2.ar(gVoices[i], gPan[i]) }));
 			// fixed stereo placement, oak/rowan (1, 4) slightly left, hazel/alder
 			// (2, 3) slightly right -- a small spread so the four voices aren't
 			// stacked in the centre.
 			var panPos = [-0.25, 0.25, 0.25, -0.25];
 			var dry = Mix.ar(Array.fill(4, { |i| Pan2.ar(voices[i], panPos[i]) }));
-			var rainDry = In.ar(rainIn, 2) * rainVol.clip(0, 1);
-			var sig = (dry + rainDry) * level;
+			// rainVol gets the same two corrections as rain_excite above:
+			// squared for a usable low end, and the 0.35 headroom factor
+			// every voice's own output already carries (Limiter... * amp *
+			// 0.35) so the full-level Rain.wav doesn't sit hotter in the mix
+			// than the voices at the same knob position.
+			var rainDry = In.ar(rainIn, 2) * rainVol.clip(0, 1).squared * 0.35;
+			var sig = (dry + gDry + rainDry) * level;
 			Out.ar(out, sig);
 		}).add;
 
@@ -694,6 +774,16 @@ Engine_Canopy : CroneEngine {
 			], gVoice);
 		});
 
+		// §2.7b: always-on like the four corner voices, not lazily allocated
+		// like the exciters -- these are drums, struck directly, not streams
+		// that only exist while cabled. bus routing only; gvoice.lua's init()
+		// pushes every cell's real freq/decay/tone/punch/drive/amp right
+		// after this, the same way voice.lua's init() does for voiceSynths.
+		gSynths = Array.newClear(nG);
+		gDefs.do({ |def, i|
+			gSynths[i] = Synth.new(def, [\out, gBus.index + i], gVoice);
+		});
+
 		excSynths = Array.newClear(nExc);
 		patchSynths = Dictionary.new;
 
@@ -712,7 +802,8 @@ Engine_Canopy : CroneEngine {
 		fxSynth = Synth.new(\woodland_fx, [
 			\busIn, voiceBus.index,
 			\out, context.out_b.index,
-			\rainIn, rainBus.index
+			\rainIn, rainBus.index,
+			\gIn, gBus.index
 		], gFx);
 
 		// gTap: after gVoice (so the exciter meters below share the group
@@ -878,6 +969,48 @@ Engine_Canopy : CroneEngine {
 			if (v >= 0 and: { v < nVoices }) { voiceSynths[v].set(\exciteQ, msg[2]) };
 		});
 
+		// §2.7b percussion cells' commands -- the same shape as the voice_*
+		// ones above, six knobs instead of eight and no separate glide/drift/
+		// choke/mod/tap/FM machinery: a G cell has no sockets to be pitched
+		// by a field, chosen by a stream, or tapped by another cable.
+
+		// g_strike(index, force) -- the cell's own trigger; there is no
+		// separate T socket to send this through.
+		this.addCommand("g_strike", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nG }) { gSynths[i].set(\force, msg[2], \t_trig, 1) };
+		});
+
+		this.addCommand("g_pitch", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nG }) { gSynths[i].set(\freq, msg[2]) };
+		});
+
+		this.addCommand("g_decay", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nG }) { gSynths[i].set(\decay, msg[2].clip(0.01, 8)) };
+		});
+
+		this.addCommand("g_tone", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nG }) { gSynths[i].set(\tone, msg[2]) };
+		});
+
+		this.addCommand("g_punch", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nG }) { gSynths[i].set(\punch, msg[2]) };
+		});
+
+		this.addCommand("g_drive", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nG }) { gSynths[i].set(\drive, msg[2]) };
+		});
+
+		this.addCommand("g_amp", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nG }) { gSynths[i].set(\amp, msg[2]) };
+		});
+
 		// exciter_on/off(index) -- §2.4 lazy allocation: an S cell only runs
 		// while it has at least one cable. with twenty of them that is no
 		// longer a nicety -- twenty always-on noise sources would be most of
@@ -1023,6 +1156,7 @@ Engine_Canopy : CroneEngine {
 
 	free {
 		voiceSynths.do({ |s| if (s.notNil) { s.free } });
+		gSynths.do({ |s| if (s.notNil) { s.free } });
 		excSynths.do({ |s| if (s.notNil) { s.free } });
 		patchSynths.do({ |s| if (s.notNil) { s.free } });
 		if (heartSynth.notNil) { heartSynth.free };
@@ -1031,6 +1165,7 @@ Engine_Canopy : CroneEngine {
 		if (rainSynth.notNil) { rainSynth.free };
 		if (rainBuf.notNil) { rainBuf.free };
 		voiceBus.free;
+		gBus.free;
 		patchBus.free;
 		excMeterBus.free;
 		rainBus.free;

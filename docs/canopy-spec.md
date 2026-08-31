@@ -50,16 +50,20 @@ Coordinates are `(x, y)`, x = column 1..16, y = row 1..8, matching `g.key(x,y,z)
  4    C   ·   C   F   H   ·   D   D   D   D   ·   H   F   C   ·   C
  5    C   ·   C   F   H   ·   D   D   D   D   ·   H   F   C   ·   C
  6    ·   T   ·   F   H   ·   ·   ·   ·   ·   ·   H   F   ·   T   ·
- 7    P   V   M   R   R   R   R   R   R   R   R   R   R   P   V   M
+ 7    P   V   M   R   R   G   G   G   G   G   G   R   R   P   V   M
  8    ·   O   ·   S   S   S   S   S   S   S   S   S   S   ·   O   ·
 
  V = voice        T = trigger in   P = pitch in   M = mod in   O = out
- D = pulse cell   R = weave cell   S = exciter    H = heartwood
- F = pitch field  C = climate      · = unregistered coordinate, dark and inert
+ D = pulse cell   R = weave cell   G = percussion  S = exciter
+ H = heartwood    F = pitch field  C = climate
+ · = unregistered coordinate, dark and inert
 ```
 
-The whole figure is 180-degree rotationally symmetric about the centre: every
-cell has a counterpart at `(17-x, 9-y)`.
+The panel was close to 180-degree rotationally symmetric about the centre
+before the re-cut's re-cut (§2.7/§2.7b); the six G cells in the middle of the
+bottom weave row broke that, on purpose — nothing reads the `counterpart`
+field programmatically, it was always documentation rather than a constraint,
+and a symmetric panel was never the point, a legible one was.
 
 **The gaps are load-bearing.** A `·` is not a dim cell or a shift layer — the
 coordinate is not registered at all, so `topology.at()` returns nil and the key
@@ -73,8 +77,8 @@ does nothing. Three of them do real work:
   and right edges break into a voice cluster, two climate cells and a voice
   cluster rather than one continuous column.
 
-**Cell counts.** 4 voices + 16 sockets + 8 D + 20 R + 20 S + 8 H + 8 F + 8 C
-= 92 live cells; 36 dark.
+**Cell counts.** 4 voices + 16 sockets + 8 D + 14 R + 6 G + 20 S + 8 H + 8 F
++ 8 C = 92 live cells; 36 dark.
 
 ### 2.1 Voices (4)
 
@@ -333,43 +337,59 @@ wood and starts sounding out of tune. There is a separate per-strike detune in
 `grove.on_strike`, scaled by the global **Drops** macro (§4.1) rather than by
 this drift.
 
-### 2.7 The weave — R (20)
+### 2.7 The weave — R (14)
 
 A D cell decides *when* something happens. An R cell decides **what happens to
 a pulse on its way somewhere**. This is the half of a drum machine that is not
 the drums, and before the re-cut the panel had almost none of it: three
 reactive gaits buried among ten pulse-makers.
 
-Twenty cells, two rows of ten, one either side of the core, so nothing is more
-than a couple of cables from a transform. Like a gait, each has one knob (E2)
-meaning whatever the rule says it means, and `K1 + E2` swaps the rule. Unlike a
-gait, an R cell has no phase — it is silent until something arrives.
+Fourteen cells now, not twenty — the re-cut's re-cut (build phase 6c, §2.7b)
+gave six of the bottom row's coordinates to a new cell type, and reshuffled
+which rules keep a top-row seat. Like a gait, each still has one knob (E2)
+meaning whatever the rule says it means, and `K1 + E2` swaps the rule; unlike a
+gait, an R cell has no phase — it is silent until something arrives. Every rule
+below is still reachable by `K1 + E2` on any R cell regardless of which cell
+defaults to it — dropping a cell's default did not drop the rule.
 
 | Cell | Name | Default rule | | Cell | Name | Default rule |
 |------|------|------|---|------|------|------|
-| (4,2)  | Trod    | divide — every Nth pulse passes | | (4,7)  | Holt    | blur — a human amount of lateness |
-| (5,2)  | Ginnel  | mult — one in, a ratchet out | | (5,7)  | Coppice | latch — a gate that flips every N |
-| (6,2)  | Snicket | delay — one copy, a musical interval late | | (6,7)  | Spinney | fill — every Nth arrival answers with a flurry |
-| (7,2)  | Twitten | echo — a decaying tail of repeats | | (7,7)  | Thicket | rest — now and then it swallows a run |
-| (8,2)  | Bostal  | chance — a coin at the gate | | (8,7)  | Bramble | flam — a grace note ahead of the beat |
-| (9,2)  | Drove   | accent — a cycling weight contour | | (9,7)  | Tangle  | ghost — a quiet shadow behind it |
-| (10,2) | Sneck   | sift — only pulses over a weight threshold | | (10,7) | Briar   | roll — an accelerating run out of one pulse |
-| (11,2) | Lych    | meet — fires when two inputs land together | | (11,7) | Withy   | swell — weight climbs across hits, then resets |
-| (12,2) | Stile   | hocket — each pulse down a different cable | | (12,7) | Osier   | mask — a euclidean stencil over what arrives |
-| (13,2) | Weir    | swing — holds every other arrival back | | (13,7) | Sedge   | shift — a skip pattern that rotates each cycle |
+| (4,2)  | Thicket | rest — now and then it swallows a run | | (4,7)  | Holt    | blur — a human amount of lateness |
+| (5,2)  | Briar   | roll — an accelerating run out of one pulse | | (5,7)  | Coppice | latch — a gate that flips every N |
+| (6,2)  | Snicket | delay — one copy, a musical interval late | | (12,7) | Osier   | mask — a euclidean stencil over what arrives |
+| (7,2)  | Twitten | echo — a decaying tail of repeats | | (13,7) | Sedge   | shift — a skip pattern that rotates each cycle |
+| (8,2)  | Tangle  | ghost — a quiet shadow behind it | | | | |
+| (9,2)  | Drove   | accent — a cycling weight contour | | | | |
+| (10,2) | Sneck   | sift — only pulses over a weight threshold | | | | |
+| (11,2) | Lych    | meet — fires when two inputs land together | | | | |
+| (12,2) | Stile   | hocket — each pulse down a different cable | | | | |
+| (13,2) | Weir    | swing — holds every other arrival back | | | | |
 
-Three of these deserve their reasons written down:
+Six cells (x=6..11 of row 7 — Trod, Ginnel, Bostal, Spinney, Bramble and Withy
+in the pre-re-cut's-re-cut map) gave up their coordinates entirely: three to
+Thicket/Briar/Tangle moving up to the top row, three to the new G cells
+between Holt/Coppice and Osier/Sedge (§2.7b). The top row keeps the two rules
+the panel's own history singles out below (Hocket, Meet) plus the two the prose
+under this table already calls the most useful (Sift, and Accent alongside
+it), and pulls up the three that read best against a kit: a rest, a roll, a
+ghost.
+
+Four of these deserve their reasons written down:
 
 - **Hocket** is the one that turns four voices into a kit rather than four
   voices. One line in, N lines out, none of them playing the same beat.
 - **Sift** placed after Accent or Swell pulls one line out of a busy patch:
   the loud hits go one way, everything goes the other.
 - **Meet** is the only rule that needs two cables in. It is a genuine AND.
+- **Ghost** and **Briar** are a shadow and a run out of one pulse — placed
+  next to Hocket and Meet because they read as immediately different things
+  on a kit, which is the same reason **Thicket**'s rest earned a seat: a hole
+  in a part is as much a part of the part as a hit is.
 
-**Delay is musical; blur is not.** Snicket, Weir and Spinney measure themselves
-in beats, so they stay in time when the tempo moves; Twitten, Holt, Bramble,
-Tangle and Briar measure themselves in milliseconds, because smearing across
-the grid is the whole point of them.
+**Delay is musical; blur is not.** Snicket and Weir measure themselves in
+beats, so they stay in time when the tempo moves; Twitten, Holt, Tangle and
+Briar measure themselves in milliseconds, because smearing across the grid is
+the whole point of them.
 
 **What the weave emits is not re-quantised.** Swing/Scatter (§4.1) place a *gait's*
 emission on a grid line. A pulse coming out of an R cell is derived from one
@@ -382,6 +402,50 @@ excluding it is the same rule the heartwood applies to its injection source,
 and for the same reason — that is not coupling, it is doubling. A D cell passes
 no such exclusion: a pulse-maker answering its neighbour *is* the coupling
 (§2.3).
+
+### 2.7b Percussion cells — G (6)
+
+Build phase 6c — the re-cut's re-cut. The weave's bottom row gave up its
+middle six coordinates (x=6..11 of row 7, between Holt/Coppice and
+Osier/Sedge) to a small, plain kind of voice: not the six-mode resonator bank
+the four corners run, just a single pinged resonant filter or a single
+enveloped noise burst, struck directly and shaped by a six-parameter sound
+page of its own (tap the cell to open it, same gesture as §5.5).
+
+| Cell | Name | Kind | Character |
+|------|------|------|-----------|
+| (6,7)  | Yaffle  | ping  | mid, woody knock — a woodpecker's rap |
+| (7,7)  | Knap    | ping  | dry, high crack — flint struck |
+| (8,7)  | Clapper | ping  | low wooden knock — the kick end |
+| (9,7)  | Scree   | noise | bright scatter — the hihat end |
+| (10,7) | Chaff   | noise | dry mid rustle — snare-like |
+| (11,7) | Rattle  | noise | low shake — clap/rim-like |
+
+**A G cell is itself the cable endpoint.** There is no room on a single grid
+row for a separate T/P/M/O cluster the way a corner voice gets, so the cell
+does double duty: an incoming pulse strikes it directly (force = edge gain ×
+weight, the same as a voice's T socket, and under the same 28 ms refractory),
+and — mirroring the corner voices' O socket — it answers with a pulse of its
+own a tick later, excluding the cable it arrived on, so it can still sit in a
+chain the way the R cell it replaced did.
+
+Six knobs, the same E1-pick/E2-E3-nudge sound page as a voice's, just smaller
+— there is no separate socket for a field to reach, so nothing here parallels
+Bend, Body, Damp, Bright or Strike position:
+
+| Row | What it is | Range |
+|-----|-----------|-------|
+| Pitch | transposition off the cell's own root/cutoff | ±2 octaves |
+| Decay | ring (ping) or envelope (noise) time | ×0.25 .. ×4 of the cell's default |
+| Tone | ping: a detuned second partial mixed in; noise: brown ↔ white colour and bandwidth | 0..1 |
+| Punch | attack/transient character — harder and shorter at 1 | 0..1 |
+| Drive | saturation into the tanh | 0..1 |
+| Level | the cell's own amplitude | 0..1 |
+
+A G cell has no single character knob for E2-while-held or a climate cable to
+walk (same as a voice cell); its Decay does answer the global Decay macro
+(§4.1) alongside the four corner voices, and its output is mixed into the same
+dry bus at the same master level.
 
 ### 2.8 Climate — C (8)
 
@@ -524,6 +588,7 @@ Every Regrow plays.
 | Cell type | E2 = | Range |
 |-----------|------|-------|
 | Voice | — the voice has nine parameters, not one; see the sound page (§5.5) | — |
+| G cell | — same idea, six parameters; see its sound page (§2.7b) | — |
 | T socket | strike hardness (mallet) | 0..1 |
 | P socket | **depth** — how far the cabled fields move this voice | 0..2 |
 | M socket | **balance** — inject into the resonator ↔ bend the body | 0..1 |
@@ -547,6 +612,7 @@ is; the knob is symmetrical around it.
 |-----------|------|-------|
 | Voice | resonator ring time, in seconds | ×0.25 .. ×4 of the voice's default |
 | Voice socket | its voice's ring time — a socket is part of the voice, not a sound of its own | as above |
+| G cell | ring (ping) or envelope (noise) time | ×0.25 .. ×4 of the cell's default |
 | S cell | a ratio on the exciter's grain envelope and on whatever tail its recipe has | ×0.35 .. ×2.8 |
 | D / R / H / F / C | nothing — these have no sound of their own, and their row already carries their gait / rule / conductance / field / weather readout | — |
 
@@ -565,6 +631,7 @@ Decay row on the sound page (§5.5) move the same store.
 | Voice socket | 2 unpatched, 6 patched | flash on a Lua-known pulse arriving (a strike, a choke, a pitch re-roll, the O socket answering), decay ~120 ms, weighted by force/depth |
 | D | 3 | flash 15 on pulse, decay ~120 ms; base rises with coupling strength |
 | R | 2 | base rises with how much is cabled through it; flashes on the way *out*, not the way in — what you want to see is what it decided. A dimmer second flash on arrival, so a cell swallowing everything still shows something reaching it |
+| G | 2 unpatched, 4 patched | 10 while its sound page is open, same idea as a voice's; flash on being struck, decay ~120 ms, weighted by force — its own strike and its sound-page indicator share the one cell (§2.7b) |
 | S | 3 unpatched, 5 patched | flash on a grain firing, decay ~120 ms, weighted by amp; continuous stream-amplitude shimmer still needs the metering back-channel (§7.4) |
 | H | 2 | local lattice energy — signals are visibly seen spreading |
 | F | 2 | where the field currently sits, so a rising line climbs the cell; flash on each step |
@@ -735,6 +802,7 @@ four sockets are *not* interchangeable.
 | **F** cell | step the field to a new degree |
 | **H** cell | enter the lattice and diffuse |
 | **C** cell | nothing, deliberately — see §2.8 |
+| **G** cell | strike the drum directly (same shape as T, above), subject to the same 28 ms refractory — see §2.7b |
 
 **Streams** (live SC synths for as long as the cable exists):
 
@@ -773,6 +841,12 @@ Notes on the awkward pairs:
   stream, so its whole column is one-way and nothing in it can feed back.
 - **C is a source only**, for the reason in §2.8, which makes the same true of
   the climate.
+- **G behaves as its own pulse source**, the same as an R cell — anything
+  cabled to a G cell's answering pulse sees exactly what an R cell's output
+  would give it (§2.7b), because there is no T/O split to route through.
+  Climate cannot reach it (no single knob), and a G cell is not a target for
+  a field either (no P socket) — both cables are legal to draw and mean
+  nothing, the same as `node|F`, above.
 
 ---
 
@@ -790,19 +864,20 @@ Canopy/
     dispatch.lua            -- the §6 type-interaction matrix
     rambler.lua             -- D-cell gaits, the phase-coupling scheduler, and
                                the shared pulse bus everything emits through
-    weave.lua               -- the twenty R-cell pulse transforms
+    weave.lua               -- the fourteen R-cell pulse transforms
     climate.lua             -- the eight C-cell slow modulators
     quantise.lua            -- the groove: Swing/Scatter place a gait's emission
     exciter.lua             -- S-cell control layer (audio side lives in SC)
     heartwood.lua           -- diffusion lattice
     grove.lua               -- pitch fields: modes, coupling, voice retuning
     voice.lua               -- voice sockets + the nine-parameter sound page
+    gvoice.lua              -- the six G-cell drums + their six-parameter page
     gparam.lua              -- the nine-parameter global page (§4.1, §5.2)
     gridui.lua              -- grid render + hold/tap state machine
     screenui.lua            -- global param / cell / edge / voice views
     bridge.lua              -- engine command wrapper, throttling, meter cache
-  lib/Engine_Canopy.sc      -- SC: modal voices, exciters, patch matrix,
-                               heartwood, the always-on rain ambience
+  lib/Engine_Canopy.sc      -- SC: modal voices, G-cell drums, exciters, patch
+                               matrix, heartwood, the always-on rain ambience
   audio/Rain.wav            -- the rain ambience's source loop
   README.md
 ```
@@ -846,6 +921,9 @@ the transport exactly rather than approximately.)
 groups:  gSrc -> gPatch -> gVoice -> gTap -> gFx
 
 voiceBus        4  voice outputs (panned, summed, and mixed with rainBus in gFx)
+gBus            6  G-cell drum outputs (§2.7b), panned and summed into gFx the
+                   same way voiceBus is -- its own allocation since 6 != 4,
+                   not a sub-range of anything above
 rainBus         2  the always-on rain ambience (§4.1 Rain/Excite), written once
                    in gSrc by \wl_rain -- silent until rain_load's buffer is
                    ready. read directly (plain In.ar, not InFeedback) by every
@@ -1007,6 +1085,22 @@ ones did, and the two that were cut (Ash's hollow tube and Yew's drone) are
 reachable from what is left: Alder took the odd-only ratio set, and Oak at the
 bottom of Tune with Decay at the top is the churchyard.
 
+**G-cell defaults.** Same idea, one number smaller: `topology.lua`'s G_CELLS
+table carries `root` (Hz, or a noise cell's cutoff) and `decay`, which
+`gvoice.lua`'s Pitch/Decay knobs sweep around, same as the voice table above.
+The engine side only needs to know each index's *kind* (`gDefs`, matching
+G_CELLS' order) — the real numbers are pushed once at init by `gvoice.init()`
+rather than duplicated into the SC source.
+
+| Cell | Kind | Root/cutoff | Decay |
+|------|------|--------------|-------|
+| Yaffle  | ping  | 180 Hz  | 0.28 s |
+| Knap    | ping  | 620 Hz  | 0.09 s |
+| Clapper | ping  | 95 Hz   | 0.40 s |
+| Scree   | noise | 4200 Hz | 0.06 s |
+| Chaff   | noise | 1500 Hz | 0.16 s |
+| Rattle  | noise | 750 Hz  | 0.22 s |
+
 **Engine commands:**
 
 ```
@@ -1021,6 +1115,10 @@ voice_choke(voice, depth, time)
 voice_mod(voice, balance)       voice_tap(voice, level)
 voice_fm(voice, ratio, depth)
 voice_noise_tune(voice, v)      voice_noise_q(voice, v)
+g_strike(i, force)              g_pitch(i, hz)
+g_decay(i, seconds)             g_tone(i, v)
+g_punch(i, v)                   g_drive(i, v)
+g_amp(i, v)
 exciter_on(i)                   exciter_off(i)
 exciter_colour(i, v)            exciter_decay(i, scale)
 exciter_gated(i, flag)          exciter_gate(i, dur, amp)
@@ -1036,11 +1134,16 @@ rain_excite(v)
 `voice_grain` is gone; `voice_sap`/`voice_sway`/`voice_moss` collapsed into
 `voice_mod`; `voice_structure` and `voice_tap` are new. `canopy`/`compressor`
 are gone with build phase 7; `rain_load`/`rain_volume`/`rain_excite` are new.
+`g_*` is build phase 6c's re-cut of the re-cut (§2.7b) — six knobs, no
+glide/drift/choke/mod/tap/FM, because a G cell has no sockets for any of
+those to mean something on.
 
-**CPU budget.** 4 voices x 6 modes = 24 resonators, plus up to 20 exciters
-(lazily allocated, so in practice a handful), ~64 patch synths, the eight-node
-heartwood delay network, and one stereo sample loop (`\wl_rain` -- no reverb
-any more). Fewer voices than before pays for the larger exciter bank.
+**CPU budget.** 4 voices x 6 modes = 24 resonators, plus 6 always-on G cells
+(one Ringz-pair or one BPF each, far cheaper than a voice) and up to 20
+exciters (lazily allocated, so in practice a handful), ~64 patch synths, the
+eight-node heartwood delay network, and one stereo sample loop (`\wl_rain` --
+no reverb any more). Fewer voices than before pays for the larger exciter
+bank.
 Mitigations: the mode-count knob (`voice_modes`), lazy exciter allocation, and
 the fact that an unpatched cell costs nothing at all.
 
@@ -1092,6 +1195,15 @@ Each phase ends in something testable on the device.
    list. Scale is narrowed to pentatonic only (§4.1). Like 6b, this is a
    control-surface and naming rework rather than a phase that depended on 7/8
    below existing first — renumbered ahead of them for that reason.
+6c. **The re-cut's re-cut.** Six of the weave's twenty R cells become G
+   cells (§2.7b) — small, plain drum voices, not the modal resonator bank
+   the four corners run: three pinged resonant filters, three enveloped
+   noise bursts, each with its own six-parameter sound page. The top weave
+   row is reshuffled to keep the rules the panel's own history and this
+   phase judge coolest (§2.7); the six that lost their default seat are
+   still reachable by `K1 + E2`. Out of build order for the same reason as
+   5b/5c/6b: a control-surface and instrument-shape change, not something
+   that depended on 7/8/9 existing first.
 8. **Life.** Metering back-channel → grid and screen animation. Narrower than
    it was: see §7.4.
 9. **Persistence and polish.** PARAMS, PSET + graph save/load, clock sync,

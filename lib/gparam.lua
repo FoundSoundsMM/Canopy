@@ -49,6 +49,18 @@ local function voices()
   return ids
 end
 
+-- the global Decay macro (below) reaches the six G cells too -- gvoice.lua's
+-- decay_seconds() already folds voice.decay_mult_ratio() in, same as
+-- voice.lua's own does, so this is the only other place that needs to know
+-- they exist as well as the four corner voices.
+local function sounding_cells()
+  local ids = {}
+  for id, cell in topology.each() do
+    if cell.type == "voice" or cell.type == "G" then table.insert(ids, id) end
+  end
+  return ids
+end
+
 -- the nine, in E1 order ------------------------------------------------------
 -- `frac` is the screen's bar position, 0..1, kept separate from `get` since
 -- bpm/scale/pitch don't store in 0..1 themselves.
@@ -129,9 +141,9 @@ gparam.PARAMS = {
     text = function() return string.format("x%.2f", wl("voice").decay_mult_ratio()) end,
     frac = function() return state.global.decay_mult or 0.5 end,
     push = function()
-      -- reuse voice.lua's own listener rather than duplicating its
-      -- bridge.voice_decay call here.
-      for _, id in ipairs(voices()) do state.notify_decay_change(id) end
+      -- reuse voice.lua's/gvoice.lua's own listeners rather than duplicating
+      -- their bridge.voice_decay/g_decay calls here.
+      for _, id in ipairs(sounding_cells()) do state.notify_decay_change(id) end
     end,
   },
   {

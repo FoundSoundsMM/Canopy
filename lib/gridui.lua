@@ -92,10 +92,11 @@ end
 -- a tap on one cell with nothing else held ---------------------------------
 
 function gridui.on_tap(id, cell, keystate)
-  if cell.type == "voice" then
-    -- §5.5: the screen becomes this voice's sound page, and tapping it again
-    -- puts the screen back where it was. K1 is ignored here -- there is no
-    -- second gesture on a voice cell to be ambiguous against.
+  if cell.type == "voice" or cell.type == "G" then
+    -- §5.5 (and §2.7b for the six percussion cells): the screen becomes this
+    -- cell's sound page, and tapping it again puts the screen back where it
+    -- was. K1 is ignored here -- there is no second gesture on a voice or G
+    -- cell to be ambiguous against.
     if state.voice_edit == id then
       state.voice_edit = nil
       state.set_event(cell.name .. ": closed", 1.2)
@@ -244,6 +245,12 @@ function gridui.brightness(id, cell)
     return rambler.level(id, 3)
   elseif cell.type == "R" then
     return weave.level(id, 2)
+  elseif cell.type == "G" then
+    -- §2.7b: the sound-page indicator a voice cell gets (5 idle / 12 open),
+    -- plus a strike flash on top -- a G cell has no separate socket to carry
+    -- that the way a voice's T does, so it carries its own.
+    local base = (state.voice_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
+    return state.flash_level(id, base)
   elseif cell.type == "S" then
     local base = patch.degree(id) > 0 and 5 or 3
     return state.flash_level(id, base)

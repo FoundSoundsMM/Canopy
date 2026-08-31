@@ -136,6 +136,29 @@ end
 -- patch that means nothing, not an error.
 HANDLERS["node:out"] = function() end
 
+-- -> G: §2.7b. a G cell has no separate T socket -- the cell itself is the
+-- trigger -- so this is node:trig's strike, refractory and all, collapsed
+-- onto one id. it also answers out of that same id, a tick later and
+-- excluding the cable it arrived on, exactly the way a voice's O socket
+-- answers out of a different one: that is what lets a G cell still sit in a
+-- chain the way the R cell it replaced did.
+HANDLERS["G"] = function(source_id, target_id, edge, weight)
+  local cell = topology.get(target_id)
+  local now = util.time()
+  local since = now - (last_strike[target_id] or -1)
+  if since >= 0 and since < VOICE_REFRACTORY then return end
+  last_strike[target_id] = now
+
+  local force = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
+  local wForce = wobble(force, 0.04, 0, 1)
+  bridge.g_strike(cell.index - 1, wForce)
+  state.flash(target_id, wForce)
+
+  if patch.degree(target_id) > 1 then
+    wl("rambler").post_source(target_id, wForce, source_id)
+  end
+end
+
 local DEFAULT_GATE_DUR = 0.15
 
 -- -> S: "an S cell is continuous until a pulse is cabled into it. a pulse

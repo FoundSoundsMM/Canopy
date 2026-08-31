@@ -7,7 +7,8 @@
 -- hold a cell, tap another: patch them together.
 -- hold a cell, tap a connected one: unpatch them.
 -- hold two cells together: read/set that edge's gain on E3.
--- tap a voice cell: edit its sound. tap it again: back to the patch.
+-- tap a voice or a percussion (G) cell: edit its sound. tap it again: back
+-- to the patch.
 -- K1 + tap a D cell: root it to the clock, or set it wild.
 -- K1 + tap an F cell: snap its field to the scale, or set it free.
 -- hold a D/R/F/C cell, K1+E2: swap its gait / rule / mode / shape.
@@ -43,6 +44,12 @@
 -- Scatter, freeing "Rain" for something literal: an always-on loop of a real
 -- rain recording, with its own dry level (Rain) and how much it excites the
 -- four resonators (Excite). Scale is pentatonic-only now, shorthand "Pent".
+-- the re-cut's re-cut: six of the bottom weave row's R cells become G cells
+-- (lib/gvoice.lua) -- small, plain drum voices (three pinged resonant
+-- filters, three noise-with-decay) with a six-parameter sound page of their
+-- own, same shape as a voice's. the top weave row is reshuffled to keep the
+-- coolest rules; the six it gave up are still reachable by K1+E2, just no
+-- longer anyone's default cell (docs/canopy-spec.md §2.7/§2.7b).
 
 engine.name = "Canopy"
 
@@ -70,6 +77,7 @@ local gridui   = wl("gridui")
 local screenui = wl("screenui")
 local bridge   = wl("bridge")
 local voice    = wl("voice")
+local gvoice   = wl("gvoice")
 local gparam   = wl("gparam")
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
@@ -361,12 +369,15 @@ function enc(n, d)
   if gridui.on_norns_enc(n, d, keystate) then return end
 
   if state.voice_edit then
+    -- §2.7b: a G cell's sound page is the same shape, a smaller PARAMS list.
+    local cell = topology.get(state.voice_edit)
+    local pm = (cell and cell.type == "G") and gvoice or voice
     if n == 1 then
       state.vparam_focus = util.clamp((state.vparam_focus or 1) + d,
-                                      1, voice.PARAM_COUNT)
+                                      1, pm.PARAM_COUNT)
     else
-      local p = voice.nudge(state.voice_edit, state.vparam_focus or 1,
-                            d * ((n == 2) and VP_COARSE or VP_FINE))
+      local p = pm.nudge(state.voice_edit, state.vparam_focus or 1,
+                         d * ((n == 2) and VP_COARSE or VP_FINE))
       state.set_event(p.label .. " " .. p.text(state.voice_edit), 0.5)
     end
     return
@@ -407,6 +418,7 @@ function init()
   grid_metro:start()
 
   voice.init()
+  gvoice.init()
   heartwood.init()
   grove.init()
   gparam.init() -- adopts the clock's tempo, pushes the other eight (§5.2)

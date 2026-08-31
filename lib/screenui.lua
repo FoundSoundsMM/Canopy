@@ -23,6 +23,7 @@ local heartwood = wl("heartwood")
 local grove     = wl("grove")
 local climate   = wl("climate")
 local voice     = wl("voice")
+local gvoice    = wl("gvoice")
 local gparam    = wl("gparam")
 local exciter   = wl("exciter")
 
@@ -97,6 +98,9 @@ end
 
 function screenui.draw_voice(id, live)
   local cell = topology.get(id)
+  -- §2.7b: a G cell's sound page is the same shape as a voice's (draw_cell
+  -- routes both here), just a different, smaller PARAMS list.
+  local pm = (cell.type == "G") and gvoice or voice
   screen.level(15)
   screen.move(2, 8)
   screen.text(cell.name)
@@ -109,8 +113,8 @@ function screenui.draw_voice(id, live)
   screen.line(126, 11)
   screen.stroke()
 
-  local focus = util.clamp(state.vparam_focus or 1, 1, voice.PARAM_COUNT)
-  draw_param_list(voice.PARAMS, focus,
+  local focus = util.clamp(state.vparam_focus or 1, 1, pm.PARAM_COUNT)
+  draw_param_list(pm.PARAMS, focus,
                   function(p) return p.text(id) end,
                   function(p) return p.get(id) end,
                   live and "E1 pick  E2/E3 coarse/fine" or "tap the cell to edit")
@@ -143,7 +147,7 @@ end
 
 function screenui.draw_cell(id)
   local cell = topology.get(id)
-  if cell.type == "voice" then
+  if cell.type == "voice" or cell.type == "G" then
     screenui.draw_voice(id, state.voice_edit == id)
     return
   end
@@ -350,6 +354,16 @@ local INTERACTION_DESC = {
   ["H|C"] = "the weather walks this node's conductance",
   ["F|C"] = "the weather walks this field's Range",
   ["C|C"] = "one weather sets how fast the other turns",
+  -- §2.7b: a G cell has no sockets, so it is struck directly and answers
+  -- with its own pulse out, the same shape as an R cell's transform.
+  ["node|G"] = "an out socket strikes the drum; T/P/M send it nothing",
+  ["D|G"] = "the pulse strikes the drum, which answers with a pulse of its own",
+  ["R|G"] = "the transformed pulse strikes the drum, which answers in turn",
+  ["S|G"] = "the drum's answering pulse fires the grain",
+  ["H|G"] = "a pulse out of the lattice strikes the drum, which answers into the lattice",
+  ["F|G"] = "the drum's answering pulse steps the field",
+  ["C|G"] = "no meaning: a G cell has no single knob for the weather to walk",
+  ["G|G"] = "one drum's answering pulse strikes the next",
 }
 
 local function interaction_text(ta, tb)

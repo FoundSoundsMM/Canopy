@@ -16,7 +16,7 @@
 --  4    C   .   C   F   H   .   D   D   D   D   .   H   F   C   .   C
 --  5    C   .   C   F   H   .   D   D   D   D   .   H   F   C   .   C
 --  6    .   T   .   F   H   .   .   .   .   .   .   H   F   .   T   .
---  7    P   V   M   R   R   R   R   R   R   R   R   R   R   P   V   M
+--  7    P   V   M   R   R   G   G   G   G   G   G   R   R   P   V   M
 --  8    .   O   .   S   S   S   S   S   S   S   S   S   S   .   O   .
 --
 --   V  the voice itself -- not a socket. tap it to edit its sound (§5.5).
@@ -25,7 +25,9 @@
 --   M  mod in           a stream bends it; a pulse chokes it
 --   O  out              its audio tap, and a pulse every time it is struck
 --   D  pulse-makers (8) free-running gaits (§2.3)
---   R  the weave (20)   pulse transforms -- what happens *between* cells
+--   R  the weave (14)   pulse transforms -- what happens *between* cells
+--   G  percussion (6)   small drum voices, in the middle of the bottom weave
+--                        row -- a cell in its own right, not a socket (§2.7b)
 --   S  exciters (20)    the noise sources (§2.4)
 --   F  fields (8)       wandering pitch (§2.6, was "P" before the re-cut)
 --   H  heartwood (8)    the diffusion lattice (§2.5)
@@ -121,19 +123,27 @@ for _, d in ipairs(D_CELLS) do
   })
 end
 
--- 2.7 the weave -- R (20) --------------------------------------------------
+-- 2.7 the weave -- R (14) --------------------------------------------------
 -- rule keys match weave.lua. a D cell decides *when* something happens; an R
 -- cell decides what happens to a pulse on its way somewhere -- divided,
--- delayed, doubled, accented, dropped, swung, thinned. two rows of ten, one
--- either side of the core, so nothing is more than a couple of cables from a
+-- delayed, doubled, accented, dropped, swung, thinned. two rows either side
+-- of the core -- ten across the top, four plus the six G cells across the
+-- bottom (§2.7b) -- so nothing is more than a couple of cables from a
 -- transform.
 
+-- the re-cut's re-cut: Spinney, Bramble, Withy (bottom) and Trod, Ginnel,
+-- Bostal (top) gave up their coordinates to the six new G cells and to
+-- Thicket/Briar/Tangle moving up to join Hocket and Lych on the top row --
+-- see docs/canopy-spec.md §2.7. every one of those six rules is still
+-- reachable by K1+E2 rule-cycling on any R cell; only the *default* seat
+-- changed. ids are unchanged throughout, so a saved patch referencing
+-- "r.thicket" still resolves -- it just lights up somewhere else now.
 local R_CELLS = {
-  {id = "trod",    x = 4,  y = 2, rule = "divide"},
-  {id = "ginnel",  x = 5,  y = 2, rule = "mult"},
+  {id = "thicket", x = 4,  y = 2, rule = "rest"},
+  {id = "briar",   x = 5,  y = 2, rule = "roll"},
   {id = "snicket", x = 6,  y = 2, rule = "delay"},
   {id = "twitten", x = 7,  y = 2, rule = "echo"},
-  {id = "bostal",  x = 8,  y = 2, rule = "chance"},
+  {id = "tangle",  x = 8,  y = 2, rule = "ghost"},
   {id = "drove",   x = 9,  y = 2, rule = "accent"},
   {id = "sneck",   x = 10, y = 2, rule = "sift"},
   {id = "lych",    x = 11, y = 2, rule = "meet"},
@@ -141,12 +151,6 @@ local R_CELLS = {
   {id = "weir",    x = 13, y = 2, rule = "swing"},
   {id = "holt",    x = 4,  y = 7, rule = "blur"},
   {id = "coppice", x = 5,  y = 7, rule = "latch"},
-  {id = "spinney", x = 6,  y = 7, rule = "fill"},
-  {id = "thicket", x = 7,  y = 7, rule = "rest"},
-  {id = "bramble", x = 8,  y = 7, rule = "flam"},
-  {id = "tangle",  x = 9,  y = 7, rule = "ghost"},
-  {id = "briar",   x = 10, y = 7, rule = "roll"},
-  {id = "withy",   x = 11, y = 7, rule = "swell"},
   {id = "osier",   x = 12, y = 7, rule = "mask"},
   {id = "sedge",   x = 13, y = 7, rule = "shift"},
 }
@@ -163,6 +167,35 @@ for _, r in ipairs(R_CELLS) do
       return r.id
     end)(),
   })
+end
+
+-- 2.7b percussion cells -- G (6) --------------------------------------------
+-- the six cells the re-cut's re-cut freed up in the middle of the bottom
+-- weave row. not a transform like the other twenty -- a small drum voice in
+-- its own right, in the shape of the four corner voices (tap opens/closes a
+-- parameter page, §5.5) but with no room on a single grid row for a separate
+-- T/P/M/O cluster: the cell itself is the trigger, and -- mirroring the
+-- corner voices' O socket -- it answers with its own outgoing pulse a tick
+-- after being struck, so it still sits in a chain the way the R cell it
+-- replaced did. `kind` picks the SC recipe (gvoice.lua and Engine_Canopy.sc's
+-- `gDefs` both switch on it); `root`/`decay` are its Hz-ish base and its
+-- default ring/envelope time, the same two numbers voice.lua's VOICES table
+-- carries for the four corner voices, and for the same reason -- the sound
+-- page's Pitch/Decay knobs sweep around them.
+local G_CELLS = {
+  {id = "yaffle",  x = 6,  y = 7, kind = "ping",  root = 180,  decay = 0.28},
+  {id = "knap",    x = 7,  y = 7, kind = "ping",  root = 620,  decay = 0.09},
+  {id = "clapper", x = 8,  y = 7, kind = "ping",  root = 95,   decay = 0.40},
+  {id = "scree",   x = 9,  y = 7, kind = "noise", root = 4200, decay = 0.06},
+  {id = "chaff",   x = 10, y = 7, kind = "noise", root = 1500, decay = 0.16},
+  {id = "rattle",  x = 11, y = 7, kind = "noise", root = 750,  decay = 0.22},
+}
+
+for i, gc in ipairs(G_CELLS) do
+  local id = "g." .. gc.id
+  local name = gc.id:sub(1, 1):upper() .. gc.id:sub(2)
+  reg("G", id, name, {{gc.x, gc.y}},
+      {kind = gc.kind, index = i, root = gc.root, decay = gc.decay})
 end
 
 -- 2.4 exciter cells -- S (20) ----------------------------------------------

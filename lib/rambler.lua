@@ -371,13 +371,17 @@ function rambler.inject(id, w, src, sign)
 end
 
 -- an emission from a cell that is not a pulse cell and therefore has no
--- record here -- today, a voice's O socket the moment it is struck. queued
--- rather than walked immediately, because the strike that caused it is
--- itself downstream of a pulse, and a voice cabled back round to its own
--- trigger has to cost a tick per lap like everything else does.
-function rambler.post_source(id, w)
+-- record here -- a voice's O socket the moment it is struck, or (§2.7b) a G
+-- cell answering its own strike. queued rather than walked immediately,
+-- because the strike that caused it is itself downstream of a pulse, and a
+-- cell cabled back round to its own trigger has to cost a tick per lap like
+-- everything else does. `except` is the cable the triggering pulse arrived
+-- on, if any -- a G cell needs it so it does not send its answer straight
+-- back down its own input (the same rule weave.out and heartwood.inject
+-- apply); a voice's O socket has no such cable, so it is simply omitted.
+function rambler.post_source(id, w, except)
   if #sources >= MAX_SCHEDULED then return end
-  table.insert(sources, {id = id, w = util.clamp(w or 1, 0, 1)})
+  table.insert(sources, {id = id, w = util.clamp(w or 1, 0, 1), except = except})
 end
 
 -- the one door every pulse leaves by.
@@ -619,7 +623,9 @@ function rambler.tick()
   if #sources > 0 then
     local pending = sources
     sources = {}
-    for _, msg in ipairs(pending) do rambler.emit_from(msg.id, msg.w) end
+    for _, msg in ipairs(pending) do
+      rambler.emit_from(msg.id, msg.w, nil, msg.except)
+    end
   end
 
   -- 4. sample every phase, then advance.

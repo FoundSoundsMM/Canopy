@@ -144,11 +144,16 @@ do
   M.state.global.decay_mult = 0.5
 
   -- the push side: nudging it re-pushes every voice via the existing
-  -- decay-change listener rather than a duplicate bridge call.
+  -- decay-change listener rather than a duplicate bridge call -- and, since
+  -- the re-cut's re-cut, every G cell too (§2.7b).
+  M.gvoice.init()
   CALLS.voice_decay = {}
+  CALLS.g_decay = {}
   M.gparam.nudge(6, 10, true)
   check("decay push reached the engine for all four voices",
         #CALLS.voice_decay >= 4, "#" .. #CALLS.voice_decay)
+  check("and for all six G cells",
+        #CALLS.g_decay >= 6, "#" .. #CALLS.g_decay)
 end
 
 print("\n-- global Pitch transposes every voice, and pushes immediately --")

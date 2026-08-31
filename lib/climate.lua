@@ -193,10 +193,11 @@ local function rebuild_links()
       local other_id = patch.other(edge, f.id)
       local other = topology.get(other_id)
       -- a one-way cable a->b only sends from a (§3), the rule every other
-      -- source on the panel uses. a voice cell has no single knob to move --
-      -- it has the eight-parameter page instead -- so it is not a target.
+      -- source on the panel uses. a voice or G cell has no single knob to
+      -- move -- it has its own parameter page instead -- so neither is a
+      -- target.
       local can_send = (not edge.oneway) or (edge.a == f.id)
-      if other and can_send and other.type ~= "voice" then
+      if other and can_send and other.type ~= "voice" and other.type ~= "G" then
         targets[other_id] = targets[other_id] or {}
         table.insert(targets[other_id], {f = f, gain = edge.gain})
       end
