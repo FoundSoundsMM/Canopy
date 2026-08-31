@@ -1,5 +1,5 @@
 -- screenui.lua
--- network / meters / cell / edge / voice views. (§5.2-5.5)
+-- global param / cell / edge / voice views. (§5.2-5.5)
 --
 -- the lexicon pages are gone. they were a manual you had to leave the patch
 -- to read, and everything worth reading off them -- what a cell's one knob
@@ -7,6 +7,11 @@
 -- cell and edge views, at the moment you are holding the thing it is about.
 -- what replaces them is §5.5: tap a voice cell and the screen becomes that
 -- voice's eight-parameter sound page.
+--
+-- the network view -- the patch drawn as a lit map with dotted cable "wires"
+-- -- is gone too, replaced by §5.2's global param page: the same E1-select,
+-- E2/E3-nudge shape as the sound page, for the nine macros that reach every
+-- voice at once (lib/gparam.lua) rather than one.
 
 local topology  = wl("topology")
 local patch     = wl("patch")
@@ -17,218 +22,11 @@ local weave     = wl("weave")
 local heartwood = wl("heartwood")
 local grove     = wl("grove")
 local climate   = wl("climate")
-local quantise  = wl("quantise")
 local voice     = wl("voice")
+local gparam    = wl("gparam")
 local exciter   = wl("exciter")
 
 local screenui = {}
-
--- §5.2: full 16x8 map at 7px pitch, 112x56, centred on a 128x64 screen.
-local PITCH = 7
-local OX = (128 - topology.GRID_W * PITCH) / 2
-local OY = (64 - topology.GRID_H * PITCH) / 2
-
-local function cell_xy(x, y)
-  return OX + (x - 1) * PITCH + PITCH / 2, OY + (y - 1) * PITCH + PITCH / 2
-end
-
--- batching -------------------------------------------------------------------
---
--- everything on the network view is a dot at a brightness, and there are a lot
--- of them: 92 cells, up to a few hundred cable dots, and up to 48 pulse dots.
--- drawn one at a time -- level, shape, fill, level, shape, fill -- that is
--- ~600 screen commands a frame, and about 120 of them are cairo *paint* calls,
--- which is what actually costs. At 15 fps that fills matron's screen queue
--- faster than it drains, and a full queue blocks the Lua thread: the screen
--- stops updating and the front panel stops responding while the grid, on its
--- own callback, carries on -- which is exactly what it looks like from the
--- outside.
---
--- so points are bucketed by brightness and painted once per distinct level:
--- the same picture in ~12 paint calls instead of ~120.
---
--- the bucket tables are reused across frames. rebuilding sixteen of them at
--- 15 fps is pointless garbage on a CM3, and this is the hot path.
-
-local bucket = {}
-for i = 0, 15 do bucket[i] = {n = 0} end
-
-local function plot(lvl, x, y)
-  lvl = math.floor(lvl)
-  if lvl < 1 then return end          -- level 0 paints nothing
-  if lvl > 15 then lvl = 15 end
-  local b = bucket[lvl]
-  local n = b.n
-  b[n + 1] = math.floor(x)
-  b[n + 2] = math.floor(y)
-  b.n = n + 2
-end
-
--- `w`/`h` nil draws single pixels; otherwise a rect of that size centred on
--- the plotted point. empties the buckets as it goes.
-local function flush(w, h)
-  for lvl = 15, 1, -1 do
-    local b = bucket[lvl]
-    local n = b.n
-    if n > 0 then
-      screen.level(lvl)
-      if w then
-        local ox, oy = w / 2, h / 2
-        for i = 1, n, 2 do screen.rect(b[i] - ox, b[i + 1] - oy, w, h) end
-      else
-        for i = 1, n, 2 do screen.pixel(b[i], b[i + 1]) end
-      end
-      screen.fill()
-      b.n = 0
-    end
-  end
-end
-
--- network view --------------------------------------------------------------
-
--- cables are drawn dim and dotted. at full brightness and solid, a patch of
--- twenty cables is a ball of wool: the lines are the least important thing on
--- this screen and they were shouting over the cells, the pulse dots and each
--- other. dotted also gives negative gain somewhere to live that isn't a
--- second line style competing for the same ink -- an inverting cable is drawn
--- with the dots twice as far apart, so you read it as a thinner connection
--- rather than a different kind of drawing.
-local CABLE_MAX_LEVEL = 5
-local DOT_SPACING = 4.0
-local DOT_SPACING_NEG = 7.0
-local ONEWAY_LEVEL = 8
-
--- the total number of cable dots is budgeted rather than left to the patch:
--- 64 cables at one dot every four pixels is over a thousand, and the whole
--- point of drawing them dim is that they are the least important thing here.
--- a big patch gets fewer dots per cable, which also reads better -- a wall of
--- dots is no more legible than a wall of lines was.
-local DOT_BUDGET = 320
-
-local function draw_cables()
-  local cables = patch.count()
-  if cables == 0 then return end
-  local per_cable = util.clamp(math.floor(DOT_BUDGET / cables), 3, 14)
-
-  for _, edge in pairs(patch.edges) do
-    local ca, cb = topology.get(edge.a), topology.get(edge.b)
-    if ca and cb then
-      local ax, ay = cell_xy(ca.coords[1][1], ca.coords[1][2])
-      local bx, by = cell_xy(cb.coords[1][1], cb.coords[1][2])
-      local dx, dy = bx - ax, by - ay
-      local dist = math.sqrt(dx * dx + dy * dy)
-      local spacing = (edge.gain < 0) and DOT_SPACING_NEG or DOT_SPACING
-      -- the dots stay evenly spaced *within* a cable; a long one just spreads
-      -- its allowance further apart rather than getting a denser line.
-      local n = util.clamp(math.floor(dist / spacing), 2, per_cable)
-      local lvl = 1 + math.floor(math.abs(edge.gain) * (CABLE_MAX_LEVEL - 1))
-      -- the endpoints themselves are left alone: the cell's own dot is
-      -- supposed to be the brightest thing at that coordinate.
-      for i = 1, n - 1 do
-        local t = i / n
-        plot(lvl, ax + dx * t, ay + dy * t)
-      end
-      if edge.oneway then
-        -- one brighter dot three quarters of the way along: enough to read
-        -- the direction, not enough to become an arrow made of five pixels.
-        plot(ONEWAY_LEVEL, ax + dx * 0.72, ay + dy * 0.72)
-      end
-    end
-  end
-  flush()
-end
-
--- the meters view's bar height is a function of its level, so it gets its own
--- flush rather than the shared one.
-local function flush_meters()
-  for lvl = 15, 1, -1 do
-    local b = bucket[lvl]
-    local n = b.n
-    if n > 0 then
-      screen.level(lvl)
-      local h = 1 + math.floor((lvl / 15) * 4)
-      for i = 1, n, 2 do screen.rect(b[i] - 2, b[i + 1] + 2 - h, 4, h) end
-      screen.fill()
-      b.n = 0
-    end
-  end
-end
-
-local function draw_cells(meters_mode)
-  -- voices are squares and everything else is a dot, so they are two passes;
-  -- within each pass every cell at the same brightness is painted together.
-  for id, cell in topology.each() do
-    if cell.type ~= "voice" then
-      for _, c in ipairs(cell.coords) do
-        local x, y = cell_xy(c[1], c[2])
-        if meters_mode then
-          -- real meter data arrives with bridge.lua (§7.4); idle brightness
-          -- stands in for now
-          plot(patch.degree(id) > 0 and 8 or 3, x, y)
-        else
-          plot(state.is_held(id) and 15 or 4, x, y)
-        end
-      end
-    end
-  end
-  if meters_mode then flush_meters() else flush() end
-
-  for id, cell in topology.each() do
-    if cell.type == "voice" then
-      for _, c in ipairs(cell.coords) do
-        local x, y = cell_xy(c[1], c[2])
-        plot(meters_mode and 4 or (state.is_held(id) and 15 or 8), x, y)
-      end
-    end
-  end
-  flush(4, 4)
-end
-
--- §5.2 "pulses render as a dot travelling the line". rambler.trails is a
--- short capped ring of recent emissions; each is drawn at however far along
--- its cable it has got by now. these stay bright: now that the cables
--- themselves are dim, the travelling dots are what the network view is for.
-local function draw_trails()
-  local now = util.time()
-  local any = false
-  for _, tr in ipairs(rambler.trails) do
-    local age = now - tr.t
-    if age >= 0 and age < rambler.TRAIL_LIFE then
-      local ca, cb = topology.get(tr.from), topology.get(tr.to)
-      if ca and cb then
-        local ax, ay = cell_xy(ca.coords[1][1], ca.coords[1][2])
-        local bx, by = cell_xy(cb.coords[1][1], cb.coords[1][2])
-        local f = age / rambler.TRAIL_LIFE
-        plot(15, ax + (bx - ax) * f, ay + (by - ay) * f)
-        any = true
-      end
-    end
-  end
-  if any then flush(2, 2) end
-end
-
-function screenui.draw_network()
-  draw_cables()
-  draw_cells(false)
-  draw_trails()
-  screen.level(15)
-  screen.move(2, 62)
-  screen.text(string.sub(state.last_event or "", 1, 18))
-  -- Weather (E2) is the groove knob and E3 is the transport, so the corner
-  -- reads out both: the tempo everything quantises against, and a four-letter
-  -- tag for where on the sweep Weather has it (lock / swNN / lsNN / rain).
-  screen.level(3)
-  screen.move(127, 62)
-  screen.text_right(string.format("%.0f %s", state.global.bpm or 120,
-                                  quantise.tag()))
-end
-
-function screenui.draw_meters()
-  draw_cells(true)
-  screen.level(4)
-  screen.move(2, 62)
-  screen.text("meters \xE2\x80\x94 back-channel is phase 7")
-end
 
 -- shared widgets --------------------------------------------------------------
 
@@ -260,17 +58,42 @@ local function wrap(str, max_chars)
   return lines
 end
 
--- §5.5 voice page ---------------------------------------------------------------
--- nine parameters, two columns -- five in the first (Tune and Bend are both
--- pitch, so they sit together), four in the second. E1 walks them, E2 moves
--- the one under the cursor coarsely and E3 finely. reached by tapping the
--- voice cell (which keeps it open and gives it the encoders) or by holding
--- it (which shows the same page for as long as you hold, without taking the
--- encoders off the patch).
+-- nine-parameter list page -----------------------------------------------------
+-- shared by §5.2 (global) and §5.5 (voice): two columns, five rows in the
+-- first (nine params split 5+4), the focused row lit. `text_fn`/`frac_fn`
+-- take a param and return its printable value / 0..1 bar position -- the two
+-- callers differ only in whether those close over a voice id.
 
-local VP_ROWS = 5
-local VP_COL_X = {2, 66}
-local VP_COL_W = 60
+local PL_ROWS = 5
+local PL_COL_X = {2, 66}
+local PL_COL_W = 60
+
+local function draw_param_list(params, focus, text_fn, frac_fn, hint)
+  for i, p in ipairs(params) do
+    local col = (i <= PL_ROWS) and 1 or 2
+    local row = ((i - 1) % PL_ROWS)
+    local x = PL_COL_X[col]
+    -- 8px rows starting at 20: the fifth bar ends at 56, which still leaves
+    -- the hint line at 63 its own space on a 64px panel.
+    local y = 20 + row * 8
+    local on = (i == focus)
+    screen.level(on and 15 or 6)
+    screen.move(x, y)
+    screen.text(p.label)
+    screen.move(x + PL_COL_W, y)
+    screen.text_right(text_fn(p))
+    bar(x, y + 2, PL_COL_W, 2, frac_fn(p), on and 12 or 4)
+  end
+
+  screen.level(2)
+  screen.move(2, 63)
+  screen.text(hint)
+end
+
+-- §5.5 voice page ---------------------------------------------------------------
+-- reached by tapping a voice cell (which keeps it open and gives it the
+-- encoders) or by holding it (which shows the same page for as long as you
+-- hold, without taking the encoders off the patch).
 
 function screenui.draw_voice(id, live)
   local cell = topology.get(id)
@@ -287,25 +110,36 @@ function screenui.draw_voice(id, live)
   screen.stroke()
 
   local focus = util.clamp(state.vparam_focus or 1, 1, voice.PARAM_COUNT)
-  for i, p in ipairs(voice.PARAMS) do
-    local col = (i <= VP_ROWS) and 1 or 2
-    local row = ((i - 1) % VP_ROWS)
-    local x = VP_COL_X[col]
-    -- 8px rows starting at 20: the fifth bar ends at 56, which still leaves
-    -- the hint line at 63 its own space on a 64px panel.
-    local y = 20 + row * 8
-    local on = (i == focus)
-    screen.level(on and 15 or 6)
-    screen.move(x, y)
-    screen.text(p.label)
-    screen.move(x + VP_COL_W, y)
-    screen.text_right(p.text(id))
-    bar(x, y + 2, VP_COL_W, 2, p.get(id), on and 12 or 4)
-  end
+  draw_param_list(voice.PARAMS, focus,
+                  function(p) return p.text(id) end,
+                  function(p) return p.get(id) end,
+                  live and "E1 pick  E2/E3 coarse/fine" or "tap the cell to edit")
+end
 
-  screen.level(2)
-  screen.move(2, 63)
-  screen.text(live and "E1 pick  E2/E3 coarse/fine" or "tap the cell to edit")
+-- §5.2 global param page (nothing held, no voice page open) -------------------
+-- what replaced the network view: E1 walks gparam.PARAMS, E2/E3 nudge the
+-- one under the cursor coarse/fine (Woodland.lua's enc()). the title line's
+-- right side carries the same transient event feedback the network view used
+-- to print along its bottom edge (a sever, a gait swap, Regrow/Clearing).
+
+function screenui.draw_global()
+  screen.level(15)
+  screen.move(2, 8)
+  screen.text("Woodland")
+  screen.level(8)
+  screen.move(126, 8)
+  screen.text_right(string.sub(state.last_event or "", 1, 18))
+
+  screen.level(4)
+  screen.move(2, 11)
+  screen.line(126, 11)
+  screen.stroke()
+
+  local focus = util.clamp(state.gparam_focus or 1, 1, gparam.PARAM_COUNT)
+  draw_param_list(gparam.PARAMS, focus,
+                  function(p) return p.text() end,
+                  function(p) return p.frac() end,
+                  "E1 pick  E2/E3 coarse/fine")
 end
 
 -- cell view (one cell held) --------------------------------------------------
@@ -574,10 +408,8 @@ function screenui.redraw()
     screenui.draw_cell(state.held[1])
   elseif state.voice_edit then
     screenui.draw_voice(state.voice_edit, true)
-  elseif state.view == "network" then
-    screenui.draw_network()
-  elseif state.view == "meters" then
-    screenui.draw_meters()
+  else
+    screenui.draw_global()
   end
 
   if state.confirm then

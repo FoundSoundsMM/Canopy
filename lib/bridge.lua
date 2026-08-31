@@ -196,4 +196,8 @@ function bridge.master_level(v)
   engine.master_level(v)
 end
 
+function bridge.compressor(v)
+  engine.compressor(v)
+end
+
 return bridge

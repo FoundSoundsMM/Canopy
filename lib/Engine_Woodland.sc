@@ -234,10 +234,19 @@ Engine_Woodland : CroneEngine {
 		}).add;
 
 		SynthDef(\woodland_fx, {
-			arg busIn=0, out=0, size=0.5, damp=0.5, mix=0.3, level=0.8;
+			arg busIn=0, out=0, size=0.5, damp=0.5, mix=0.3, level=0.8, compAmt=0;
 			var dry = In.ar(busIn, 4).sum;
 			var wet = FreeVerb.ar(dry, mix, size, damp);
-			Out.ar(out, (wet * level) ! 2);
+			var sig = (wet * level) ! 2;
+			// §4.1 Output compressor: a bus glue stage on the final mix, not a
+			// per-voice one -- threshold and ratio both ride compAmt so 0 is a
+			// true bypass (threshold 1, ratio 1) and 1 is a hard, fast-ish
+			// squeeze. fixed attack/release: this is meant to sit and glue, not
+			// be tuned per patch.
+			var thresh = 1 - (compAmt * 0.85);
+			var ratio = 1 + (compAmt * 7);
+			sig = Compander.ar(sig, sig, thresh, 1, 1 / ratio, 0.01, 0.15);
+			Out.ar(out, sig);
 		}).add;
 
 		// shared gate envelope for every exciter (§2.4: "an S cell is
@@ -914,6 +923,12 @@ Engine_Woodland : CroneEngine {
 		// master level (§4.1) and needs somewhere to land.
 		this.addCommand("master_level", "f", { |msg|
 			fxSynth.set(\level, msg[1]);
+		});
+
+		// compressor(amount) -- §4.1 Output compressor, the global page's
+		// ninth knob.
+		this.addCommand("compressor", "f", { |msg|
+			fxSynth.set(\compAmt, msg[1]);
 		});
 	}
 

@@ -104,9 +104,20 @@ reach. The shape of what is left is what makes the panel readable.
   `test/soak.lua`, because overrunning it wedges matron's screen queue and
   takes the front panel down with it.
 
-Not yet built: the metering back-channel (§7.4 — so the meters view is
-still idle brightness, and continuous audio-rate cell response is not lit),
-and PARAMS/PSET persistence.
+### Build phase 6b — the global param page
+
+The network view described above, and the meters view cycled alongside it,
+are gone — replaced by a nine-parameter list (§5.2, `gparam.lua`): the same
+E1-select/E2-E3-nudge shape the voice sound page already had, for macros that
+reach every voice at once. Weather is gone with it, split into independent
+**Swing** and **Rain**. New: **Scale** (quantises every voice's pitch to a
+scale, 0 = free), **Drops** (random pitch offset per strike), a global
+**Decay** multiplier, a global **Pitch** transpose, and an output
+**Compressor**. Canopy moved into the same list rather than keeping its own
+bare encoder.
+
+Not yet built: the metering back-channel (§7.4 — so continuous audio-rate
+cell response is not lit), and PARAMS/PSET persistence.
 
 ## Install
 
@@ -141,20 +152,21 @@ or copy this repo to `~/dust/code/Woodland` by hand. Then select
   set it wild — metric, euclidean and figure are the ones with something to
   root to. Same gesture on an F cell snaps its field to the scale, or sets
   it free.
-- Nothing held: `E1`/`E2`/`E3` are Canopy/Weather/Tempo, and `K1`+`E3` is
-  the master level; `K2` toggles Still; `K3` cycles Network → Meters.
-- **Weather (`E2`) is the groove knob.** At 0 every pulse — however freely
-  its cell runs — snaps onto a grid line, and unrelated gaits cohere into one
-  groove: each cell quantises to the coarsest of 8th/16th/32nd/64th that fits
-  inside its own cycle, and a burst is triggered on the beat with its ratchet
-  on a subdivision. From 0 to 0.5 swing ramps in, warping the grid so
-  off-beats land late and beats stay put. Past 0.5 the snap loosens and
-  jitter grows in its place, until at 1 nothing is held at all and the patch
-  is rainfall in a forest. The corner of the network view reads out the tempo
-  and where the knob has it: `lock` / `swNN` / `lsNN` / `rain`.
-  What the weave emits is deliberately *not* re-quantised — those pulses are
-  derived from one that was already placed, and snapping a flam or a swung
-  off-beat back onto the grid would undo the only thing it does.
+- Nothing held: `E1` picks one of nine global params (BPM, Swing, Rain,
+  Scale, Drops, Decay, Pitch, Compressor, Canopy), `E2`/`E3` nudge it coarse/
+  fine. `K1`+`E3` is the master level; `K2` toggles Still.
+- **Swing and Rain are the groove knobs.** At Swing 0 / Rain 0 every pulse —
+  however freely its cell runs — snaps onto a grid line, and unrelated gaits
+  cohere into one groove: each cell quantises to the coarsest of
+  8th/16th/32nd/64th that fits inside its own cycle, and a burst is triggered
+  on the beat with its ratchet on a subdivision. Turning Swing up warps the
+  grid so off-beats land late and beats stay put. Turning Rain up loosens the
+  snap and grows jitter in its place, until at 1 nothing is held at all and
+  the patch is rainfall in a forest — Rain also scales gait-rate drift,
+  D↔D coupling and pitch-field wander. What the weave emits is deliberately
+  *not* re-quantised — those pulses are derived from one that was already
+  placed, and snapping a flam or a swung off-beat back onto the grid would
+  undo the only thing it does.
 - `K1`+`K2` (hold ~1s): Regrow — a seeded patch that already plays.
 - `K1`+`K3` (hold ~1s): Clearing — cut every cable.
 
@@ -166,10 +178,10 @@ lib/
   topology.lua              the map: cell records, coords, types, adjacency
   lexicon.lua               names, descriptions, each cell type's one knob
   patch.lua                 the cable graph: add/remove/trim, serialisation
-  quantise.lua              the Weather groove: quantise -> swing -> chaos
+  quantise.lua              the groove: Swing/Rain place a gait's emission
   state.lua                 shared runtime UI state
   gridui.lua                grid render + hold/tap state machine
-  screenui.lua              network / meters / cell / edge / voice views
+  screenui.lua              global param / cell / edge / voice views
   dispatch.lua              §6 type-interaction matrix: pulse events
                              (-> T/P/M, S, F, H) and the continuous patch
                              matrix (S<->S, S->M, S<->H, H<->H, H->M, O->*)
@@ -178,6 +190,7 @@ lib/
   weave.lua                 the twenty R-cell pulse transforms
   climate.lua               the eight C-cell slow modulators
   voice.lua                 voice sockets + the nine-parameter sound page
+  gparam.lua                the nine-parameter global page (§4.1, §5.2)
   exciter.lua               S-cell control layer: lazy alloc, gating, Colour
   heartwood.lua             the diffusion lattice's discrete-event side
   grove.lua                 the pitch fields: modes, coupling, voice retuning
@@ -226,9 +239,10 @@ to actually render audio.
   two climates average rather than race, every shape moves and stays in
   range, a pulse landing on a climate does nothing to it (see the C handler
   in `dispatch.lua` for why that matters), and Still freezes it.
-- `groove.lua` — the whole Weather sweep: divisions, lock, swing ramping in
-  and landing off-beats late, bursts triggered on the beat, the upper half
-  letting go, the readout, and the grid following the transport.
+- `groove.lua` — the Swing/Rain groove: divisions, lock, Swing ramping in and
+  landing off-beats late without moving the grid, bursts triggered on the
+  beat, Rain letting go independently of Swing, and the grid following the
+  transport.
 - `decay.lua` — every voice starts on its own ring time, the knob moves it
   in seconds, a socket hands the gesture to its voice, an exciter gets the
   same knob as a ratio, and cells with no sound of their own store nothing.
@@ -247,15 +261,20 @@ to actually render audio.
   and Damp sweeping around each voice's own baseline, the P socket's depth,
   the O socket answering with a pulse on every strike and resolving to an
   audio tap, and the refractory bounding a self-loop.
+- `gparam.lua` — the global param page: E1 clamped at both ends, BPM's
+  coarse/fine steps and clock/floor/ceiling clamping, Scale's one-entry-per-
+  flick detent and quantising `grove.hz` only once it isn't free, Drops
+  widening the per-strike spread, global Decay and Pitch reaching the engine
+  for every voice at once, and Compressor forwarding to the engine.
 - `smoke.lua` — loads `Woodland.lua` itself and exercises every screen
   view, the sound page, and every control.
 - `soak.lua` — the same, but against a *strict* norns stub: `screen`, `util`
   and `clock` expose only the functions norns actually has, so calling one it
   doesn't is an error rather than a silent no-op. Redraws from every state
-  (all 92 cells held one at a time, all 130 type pairs held in twos, both
-  views with a live patch), 4000 random gestures with the scheduler running,
-  and the per-frame screen command and paint budgets. This is the test that
-  catches "the screen died but the grid still works".
+  (all 92 cells held one at a time, all 130 type pairs held in twos, the
+  global page with a live patch), 4000 random gestures with the scheduler
+  running, and the per-frame screen command and paint budgets. This is the
+  test that catches "the screen died but the grid still works".
 - `perf.lua` — what the 2 ms tick costs. Cheap on a dev machine, but the
   CM3 is the budget that matters, so re-check it there if the scheduler
   ever feels like the thing making the UI stutter.

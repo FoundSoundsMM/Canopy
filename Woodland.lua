@@ -11,8 +11,10 @@
 -- K1 + tap a D cell: root it to the clock, or set it wild.
 -- K1 + tap an F cell: snap its field to the scale, or set it free.
 -- hold a D/R/F/C cell, K1+E2: swap its gait / rule / mode / shape.
--- E1/E2/E3 with nothing held: Canopy, Weather, BPM. K1+E3: master level.
--- K3: cycle the screen (network -> meters), or close the sound page.
+-- E1/E2/E3 with nothing held: the global param page -- E1 picks one of nine
+-- (BPM, Swing, Rain, Scale, Drops, Decay, Pitch, Compressor, Canopy), E2/E3
+-- nudge it coarse/fine. K1+E3: master level.
+-- K3: close the sound page (nothing else to cycle to now).
 -- K2: freeze the pulse gaits (Still).
 -- K1+K2 (hold): Regrow -- a seeded patch that already plays.
 -- K1+K3 (hold): Clearing -- cut every cable.
@@ -29,6 +31,12 @@
 -- ten, and a per-voice sound page instead of one Grain macro. the metering
 -- back-channel and PARAMS/PSET persistence are still ahead
 -- (docs/woodland-spec.md §9 has the build order).
+-- build phase 6b: the network view -- the patch drawn as a lit map with
+-- dotted cable wires -- is gone, replaced by §5.2's global param page
+-- (lib/gparam.lua): the same E1-select/E2-E3-nudge shape as the sound page,
+-- for nine macros instead of one voice. Weather is gone with it, split into
+-- independent Swing and Rain; Scale, Drops, global Decay, global Pitch and
+-- an output Compressor are new.
 
 engine.name = "Woodland"
 
@@ -56,31 +64,13 @@ local gridui   = wl("gridui")
 local screenui = wl("screenui")
 local bridge   = wl("bridge")
 local voice    = wl("voice")
+local gparam   = wl("gparam")
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
 local heartwood = wl("heartwood")
 local grove     = wl("grove")
 local weave     = wl("weave")   -- Regrow seeds rules through it; also loaded
 local climate   = wl("climate") -- for the listeners each of them registers
-
--- fixed for now; only the overall wet amount (E1: Canopy) is exposed yet.
-local CANOPY_SIZE = 0.6
-local CANOPY_DAMP = 0.5
-
--- §4.1 E3 is the transport now: the whole patch quantises against it at low
--- Weather, so it has to be reachable without diving into PARAMS. one BPM per
--- detent. norns' clock reads its tempo from the clock_tempo param rather
--- than from a setter, so that is what gets written -- and it is guarded,
--- because the offline test harness has no params menu.
-local BPM_MIN, BPM_MAX = 20, 300
-
-local function set_bpm(v)
-  state.global.bpm = util.clamp(v, BPM_MIN, BPM_MAX)
-  if params and params.set then
-    params:set("clock_tempo", state.global.bpm)
-  end
-  state.set_event(string.format("%.0f BPM", state.global.bpm), 0.8)
-end
 
 local g = nil
 local screen_metro, grid_metro
@@ -330,11 +320,11 @@ function key(n, z)
     keystate.k3 = (z == 1)
     if z == 0 and #state.held == 0 and k3_solo_press then
       -- the sound page is a mode, so K3 is its way out as well as the grid's:
-      -- you should never have to remember which voice cell you tapped.
+      -- you should never have to remember which voice cell you tapped. with
+      -- no page open, K3 has nothing left to do -- the global param page is
+      -- always the screen underneath everything else now.
       if state.voice_edit then
         state.voice_edit = nil
-      else
-        state.cycle_view()
       end
     end
   end
@@ -376,18 +366,19 @@ function enc(n, d)
     return
   end
 
-  if n == 1 then
-    state.global.canopy = util.clamp(state.global.canopy + d / 500, 0, 1)
-    bridge.canopy(CANOPY_SIZE, CANOPY_DAMP, state.global.canopy)
-  elseif n == 2 then
-    state.global.weather = util.clamp(state.global.weather + d / 500, 0, 1)
-  elseif n == 3 then
-    if keystate.k1 then
-      state.global.level = util.clamp(state.global.level + d / 500, 0, 1)
-      bridge.master_level(state.global.level)
-    else
-      set_bpm(state.global.bpm + d)
-    end
+  -- §5.2 the global param page: E1 walks gparam.PARAMS, E2/E3 nudge the one
+  -- under the cursor coarse/fine -- same shape as the voice page above, for
+  -- the nine macros that reach every voice at once (lib/gparam.lua). K1+E3
+  -- stays master level, unrelated to the nine and untouched by this.
+  if n == 3 and keystate.k1 then
+    state.global.level = util.clamp(state.global.level + d / 500, 0, 1)
+    bridge.master_level(state.global.level)
+  elseif n == 1 then
+    state.gparam_focus = util.clamp((state.gparam_focus or 1) + d,
+                                    1, gparam.PARAM_COUNT)
+  else
+    local p = gparam.nudge(state.gparam_focus or 1, d, n == 2)
+    state.set_event(p.label .. " " .. p.text(), 0.5)
   end
 end
 
@@ -409,14 +400,10 @@ function init()
   end, 1 / 30, -1)
   grid_metro:start()
 
-  -- adopt whatever tempo the clock is already on, so E3 starts from there
-  -- rather than snapping the transport to state.lua's default on load.
-  state.global.bpm = util.clamp(clock.get_tempo() or 120, BPM_MIN, BPM_MAX)
-
   voice.init()
   heartwood.init()
   grove.init()
-  bridge.canopy(CANOPY_SIZE, CANOPY_DAMP, state.global.canopy)
+  gparam.init() -- adopts the clock's tempo, pushes the other eight (§5.2)
   bridge.master_level(state.global.level)
   rambler.start()
 end

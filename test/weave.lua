@@ -32,7 +32,8 @@ end
 
 local function rig(seed, rule, char, gain)
   local M = fresh(seed)
-  M.state.global.weather = 0
+  M.state.global.swing = 0
+  M.state.global.rain = 0
   driver(M, KNOCKER)
   M.weave.set_rule(TROD, rule)
   if char then M.state.character[TROD] = char end
@@ -99,7 +100,8 @@ end
 print("\n-- hocket sends each pulse a different way --")
 do
   local M = fresh(3)
-  M.state.global.weather = 0
+  M.state.global.swing = 0
+  M.state.global.rain = 0
   driver(M, KNOCKER)
   M.weave.set_rule(TROD, "hocket")
   M.state.character[TROD] = 0            -- stride 1: straight round-robin
@@ -142,7 +144,7 @@ end
 print("\n-- a chain of transforms stays bounded --")
 do
   local M = fresh(9)
-  M.state.global.weather = 1.0
+  M.state.global.rain = 1.0
   driver(M, KNOCKER)
   local rs = {}
   for id, c in M.topology.each() do if c.type == "R" then table.insert(rs, id) end end

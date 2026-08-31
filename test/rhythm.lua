@@ -12,7 +12,7 @@ local KNOCK = "oak.trig"
 print("\n-- every gait produces pulses --")
 for _, gait in ipairs(fresh(7).rambler.GAIT_ORDER) do
   local M = fresh(7)
-  M.state.global.weather = 0.4
+  M.state.global.rain = 0.4
   M.rambler.set_gait(KNOCKER, gait)
   M.patch.add(KNOCKER, KNOCK, 0.8)
   run(M, 20)
@@ -72,9 +72,14 @@ local function phase_gap(M)
   local d = math.abs(a - b) % 1
   return math.min(d, 1 - d)
 end
-local function two_drifters(seed, gain, weather, seconds)
+local function two_drifters(seed, gain, rain, seconds)
   local M = fresh(seed)
-  M.state.global.weather = weather
+  -- Rain is what this test sweeps; Swing used to come along for free as the
+  -- other half of one Weather knob, and pinning it at 0 here (rather than
+  -- its new independent default) keeps D->D pulse delivery timing out of a
+  -- test that is about the Kuramoto coupling, not the groove.
+  M.state.global.swing = 0
+  M.state.global.rain = rain
   M.rambler.set_gait(GABRIEL, "drifter")
   M.rambler.set_gait(HUNT, "drifter")
   M.state.character[GABRIEL] = 0.20    -- 2.0 Hz
@@ -93,7 +98,7 @@ local function two_drifters(seed, gain, weather, seconds)
   return lo, hi
 end
 
--- Weather 0 zeroes the drift random walk, so these are deterministic.
+-- Rain 0 zeroes the drift random walk, so these are deterministic.
 -- K = 2.0 * 0.15 * 2.5 (drifter's multiplier) = 0.75 Hz against a 0.6 Hz
 -- detune; locking theory puts the standing offset at asin(0.6/1.5)/2pi = 0.066.
 do
@@ -106,7 +111,7 @@ do
   check("uncabled cells sweep freely", hi > 0.45 and lo < 0.05,
         string.format("gap %.3f..%.3f", lo, hi))
   lo, hi = two_drifters(11, 1.0, 0.5)
-  check("still locks with Weather up", hi < 0.15, string.format("gap %.3f..%.3f", lo, hi))
+  check("still locks with Rain up", hi < 0.15, string.format("gap %.3f..%.3f", lo, hi))
 end
 
 print("\n-- Still freezes everything --")
@@ -127,7 +132,7 @@ end
 print("\n-- a densely cross-patched graph stays bounded --")
 do
   local M = fresh(9)
-  M.state.global.weather = 1.0
+  M.state.global.rain = 1.0
   local ds = {}
   for id, cell in M.topology.each() do
     if cell.type == "D" then table.insert(ds, id) end

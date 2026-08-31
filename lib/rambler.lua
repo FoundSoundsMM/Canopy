@@ -25,7 +25,7 @@
 -- them to the transport exactly instead of approximately.
 --
 -- quantise.lua sits between every *gait* and its output: a gait free-runs at
--- whatever rate it likes, but when it is heard is Weather's call. what the
+-- whatever rate it likes, but when it is heard is Swing/Rain's call. what the
 -- weave and the voice outs emit is deliberately NOT re-quantised -- those
 -- pulses are derived from one that was already placed, and snapping a flam or
 -- a swung off-beat back onto the grid would undo the only thing it does.
@@ -44,12 +44,11 @@ local rambler = {}
 
 rambler.TICK = 1 / 500
 rambler.FLASH_DECAY = 0.12  -- §5.1 "flash 15 on pulse, decay ~120 ms"
-rambler.TRAIL_LIFE = 0.30   -- §5.2 pulse dot travel time along a cable
 
 local TICK = rambler.TICK
 
 -- Kuramoto coupling constant, in Hz of phase pull at unity edge gain (§2.3).
--- scaled by Weather (E2) and by each gait's own coupling multiplier.
+-- scaled by Rain and by each gait's own coupling multiplier.
 local K_BASE = 2.0
 
 -- runaway guards. a patch is a graph with cycles in it by design -- and since
@@ -57,7 +56,6 @@ local K_BASE = 2.0
 -- the fan-out per tick and the scheduled-tap backlog are both hard-capped.
 local MAX_EMITS_PER_TICK = 64
 local MAX_SCHEDULED = 192
-local MAX_TRAILS = 48
 
 -- how far an arriving pulse shoves a free-running neighbour's phase (§6's
 -- "mutual triggering", the discrete half of a D<->D cable). deliberately
@@ -73,9 +71,6 @@ local scheduled = {}   -- {t=, r=, w=} future taps (burst ratchets)
 local inbox = {}       -- {id=, w=, src=} pulse-cell traffic, delivered next tick
 local sources = {}     -- {id=, w=} deferred emissions from non-pulse cells
 local emits_this_tick = 0
-local tick_n = 0
-
-rambler.trails = {}    -- {from=, to=, t=} recent pulses, for the network view
 
 local function char(r)
   return state.get_character(r.id, r.cell, 0, 1)
@@ -181,7 +176,7 @@ GAITS.slow = {
   wrap = function(r) return 1.0 end,
 }
 
--- burst: one wrap fires a ratchet of 2-7. Weather picks how many.
+-- burst: one wrap fires a ratchet of 2-7. Rain picks how many.
 -- §4.1 wants the burst itself triggered on the beat, so it overrides the
 -- rate-derived grid with a whole beat, and lays its ratchet out on a
 -- subdivision of that beat rather than on a fraction of its own cycle -- the
@@ -196,7 +191,7 @@ GAITS.burst = {
   end,
   rate = function(r) return (GAITS.burst.read(r)) end,
   ratchet = function(r, t0, weight)
-    local n = 2 + math.floor((state.global.weather or 0.4) * 5 + 0.5)
+    local n = 2 + math.floor((state.global.rain or 0) * 5 + 0.5)
     if n < 2 then return end
     local chaos = quantise.chaos()
     local grid_gap = quantise.ratchet_gap(n) * quantise.spb()
@@ -216,14 +211,14 @@ GAITS.burst = {
 }
 
 -- stochastic: a Bernoulli gate at the wrap. E2 is the probability; the rate
--- itself rides Weather, so wilder settings also mean faster dice.
+-- itself rides Rain, so wilder settings also mean faster dice.
 GAITS.stochastic = {
   rooted_ok = false, coupling = 1.0, drift = 1.0,
   read = function(r)
     local p = char(r)
     return p, string.format("p %.2f", p)
   end,
-  rate = function(r) return 1.5 + (state.global.weather or 0.4) * 4.5 end,
+  rate = function(r) return 1.5 + (state.global.rain or 0) * 4.5 end,
   wrap = function(r)
     if math.random() < (GAITS.stochastic.read(r)) then
       return 0.6 + math.random() * 0.4
@@ -362,13 +357,6 @@ function rambler.schedule(r, delay, w)
   rambler.push(util.time() + delay, r, w, false)
 end
 
--- §5.2's pulse dots. heartwood.lua draws on the same list, so a pulse
--- crossing the lattice animates exactly like one crossing a D->D cable.
-function rambler.trail(from, to, now)
-  if #rambler.trails >= MAX_TRAILS then return end
-  table.insert(rambler.trails, {from = from, to = to, t = now or util.time()})
-end
-
 -- a pulse arriving at a pulse cell from outside its own family -- one
 -- emerging from the heartwood lattice, say. deferred by a tick and delivered
 -- through the same inbox as cell-to-cell traffic, so a D->H->D loop is
@@ -408,7 +396,6 @@ function rambler.emit_from(id, weight, only, except)
   emits_this_tick = emits_this_tick + 1
 
   weight = util.clamp(weight or 1, 0, 1)
-  local now = util.time()
   local links = rambler.out_links(id)
   local sent, eligible = 0, 0
 
@@ -438,7 +425,6 @@ function rambler.emit_from(id, weight, only, except)
         else
           dispatch.on_pulse(id, link.id, link.edge, weight)
         end
-        rambler.trail(id, link.id, now)
         sent = sent + 1
       end
     end
@@ -464,7 +450,7 @@ local function period_of(gait, r)
   return 1 / hz
 end
 
--- the front door for a *gait*: Weather decides whether it speaks now or on
+-- the front door for a *gait*: Swing/Rain decide whether it speaks now or on
 -- the next grid line (§4.1, and quantise.lua for the sweep). the ratchet hook
 -- hangs off the quantised time, not the raw one, so a burst's flam is laid
 -- out from where the burst is actually heard.
@@ -544,11 +530,10 @@ local function advance_rooted(r, gait)
 end
 
 local function advance_wild(r, gait, K, chaos)
-  -- §4.1 Weather is also "gait drift": a slow random walk on the rate. it
-  -- rides chaos rather than raw Weather, so the lower half of the knob is a
-  -- groove being swung rather than a groove being wobbled -- there is nothing
-  -- to be gained from drifting a rate whose output is about to be snapped
-  -- back onto the grid anyway.
+  -- §4.1 Rain is also "gait drift": a slow random walk on the rate, scaled
+  -- by chaos (Rain) rather than Swing -- there is nothing to be gained from
+  -- drifting a rate whose output is about to be snapped back onto the grid
+  -- anyway.
   if gait.drift > 0 and chaos > 0 then
     r.drift = util.clamp(
       r.drift + (math.random() - 0.5) * chaos * gait.drift * 0.01, -0.4, 0.4)
@@ -586,23 +571,9 @@ local function advance_wild(r, gait, K, chaos)
   if r.phase >= 1.0 then r.phase = r.phase % 1.0 end
 end
 
-local function prune_trails(now)
-  local i = 1
-  while i <= #rambler.trails do
-    if now - rambler.trails[i].t >= rambler.TRAIL_LIFE then
-      table.remove(rambler.trails, i)
-    else
-      i = i + 1
-    end
-  end
-end
-
 function rambler.tick()
   local now = util.time()
   emits_this_tick = 0
-
-  tick_n = tick_n + 1
-  if tick_n % 8 == 0 then prune_trails(now) end
 
   -- §4.1 Still: gaits freeze, resonators ring out. scheduled taps and queued
   -- traffic freeze with them rather than flushing on resume.
@@ -658,8 +629,8 @@ function rambler.tick()
     r.snap = r.phase
   end
 
-  local weather = state.global.weather or 0.4
-  local K = K_BASE * (0.15 + weather * 1.85)
+  local rain = state.global.rain or 0
+  local K = K_BASE * (0.15 + rain * 1.85)
   local chaos = quantise.chaos()
 
   for _, id in ipairs(order) do
@@ -692,7 +663,7 @@ function rambler.level(id, base)
   return util.clamp(math.floor(lvl), 0, 15)
 end
 
--- which grid this cell is currently being held to, or nil once Weather has
+-- which grid this cell is currently being held to, or nil once Rain has
 -- let go of it entirely (§5.3 reads this out under the gait).
 function rambler.grid_name(id)
   local r = ramblers[id]

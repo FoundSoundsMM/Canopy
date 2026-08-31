@@ -1,15 +1,14 @@
 -- quantise.lua
--- the Weather groove machine (§4.1 E2): *when* a pulse is allowed to land.
+-- the groove machine (§4.1 Swing/Rain): *when* a pulse is allowed to land.
 --
 -- rambler.lua decides when a gait wants to speak. this decides when it
--- actually does, and one knob sweeps the whole continuum:
+-- actually does, on two independent knobs:
 --
---   W = 0        every emission snaps to a straight grid line and the patch
---                locks into a groove, whatever rates the cells free-run at
---   W 0 -> 0.5   swing ramps in, delaying the off-grid positions, until at
---                0.5 the off-beats sit as late as they are ever going to
---   W 0.5 -> 1   the snap loosens and jitter grows in its place, until at 1
---                nothing is held at all and the patch is rain in a forest
+--   Swing 0 -> 1   every emission starts on a straight grid line; swing
+--                  ramps in, delaying the off-grid positions, until the
+--                  off-beats sit as late as they are ever going to
+--   Rain  0 -> 1   the snap loosens and jitter grows in its place, until at
+--                  1 nothing is held at all and the patch is rain in a forest
 --
 -- the grid is per cell, not global: each one is quantised to the coarsest of
 -- 8th / 16th / 32nd / 64th that still fits inside one cycle of its own rate,
@@ -67,20 +66,17 @@ quantise.SWING_MAX = 0.5
 quantise.JITTER_MAX = 0.9
 
 -- macro readings ------------------------------------------------------------
+--
+-- swing and rain used to be one combined Weather knob, split at its
+-- midpoint (low half swing, high half chaos). gparam.lua now exposes them as
+-- independent params, so both read their own value directly.
 
-function quantise.weather()
-  return util.clamp(state.global.weather or 0, 0, 1)
-end
-
--- 0 at W=0, 1 from W=0.5 up. swing is fully in by the halfway point and then
--- stays in while chaos takes over dissolving the grid it swings against.
 function quantise.swing()
-  return util.clamp(quantise.weather() / 0.5, 0, 1)
+  return util.clamp(state.global.swing or 0, 0, 1)
 end
 
--- 0 up to W=0.5, then 0..1 across the top half.
 function quantise.chaos()
-  return util.clamp((quantise.weather() - 0.5) / 0.5, 0, 1)
+  return util.clamp(state.global.rain or 0, 0, 1)
 end
 
 function quantise.spb()

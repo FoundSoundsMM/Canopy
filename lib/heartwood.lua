@@ -157,7 +157,6 @@ local function arrive(n, w, hops, from, now, src)
       else
         dispatch.on_pulse(n.id, link.id, link.edge, w)
       end
-      rambler.trail(n.id, link.id, now)
     end
   end
 
@@ -186,9 +185,6 @@ local function arrive(n, w, hops, from, now, src)
       table.insert(pending, {
         t = now + delay, id = l.id, w = ww, hops = hops + 1, from = n.id,
       })
-      -- §5.2's travelling dot, so the network view shows the wave crawling
-      -- round the ring and not only where it comes back out.
-      rambler.trail(n.id, l.id, now)
     end
   end
 end

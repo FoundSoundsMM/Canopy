@@ -122,7 +122,8 @@ end
 print("\n-- the O socket answers with a pulse every time it is struck --")
 do
   local M = fresh(13)
-  M.state.global.weather = 0
+  M.state.global.swing = 0
+  M.state.global.rain = 0
   driver(M, KNOCKER)                       -- 2 Hz
   M.patch.add(KNOCKER, "oak.trig", 1.0)
   M.patch.add("oak.out", BECK, 1.0)
@@ -155,7 +156,8 @@ do
   -- ignores it. that is the design working, not the loop failing -- a
   -- feedback path only says anything once something in it takes time.
   local M = fresh(19)
-  M.state.global.weather = 0
+  M.state.global.swing = 0
+  M.state.global.rain = 0
   driver(M, KNOCKER)
   M.patch.add(KNOCKER, "oak.trig", 1.0)
   M.patch.add("oak.out", "oak.trig", 1.0)
@@ -166,7 +168,8 @@ do
 
   -- through a transform that does take time, the same loop is a real one.
   local N = fresh(19)
-  N.state.global.weather = 0
+  N.state.global.swing = 0
+  N.state.global.rain = 0
   driver(N, KNOCKER)
   N.weave.set_rule("r.twitten", "echo")
   N.patch.add(KNOCKER, "oak.trig", 1.0)
@@ -183,7 +186,8 @@ end
 print("\n-- the refractory is what bounds it, not luck --")
 do
   local M = fresh(23)
-  M.state.global.weather = 0
+  M.state.global.swing = 0
+  M.state.global.rain = 0
   driver(M, KNOCKER, 1.0)                  -- 4 x beat = 8 Hz
   M.weave.set_rule(GINNEL, "mult")
   M.state.character[GINNEL] = 1.0          -- x7

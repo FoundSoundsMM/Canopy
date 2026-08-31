@@ -85,25 +85,54 @@ local last_glide = {}   -- voice_id -> the glide last sent
 local last_drift = {}   -- voice_id -> the drift depth last sent
 local tick_n = 0
 
+-- rhythm/field wildness used to read Weather directly; gparam.lua now
+-- exposes that half of it as Rain (state.global.rain), independent of Swing.
 local function wild()
-  return state.global.weather or 0.4
+  return state.global.rain or 0
 end
 
 -- scale ---------------------------------------------------------------------
 
--- nearest scale tone to `x` semitones, searching the octave it lands in and
--- the one above (so a note just under an octave snaps up to it, not back
+-- nearest tone of `scale` to `x` semitones, searching the octave it lands in
+-- and the one above (so a note just under an octave snaps up to it, not back
 -- down to the seventh).
-local function snap_semitones(x)
+local function snap_to(x, scale)
   local oct = math.floor(x / 12)
   local rem = x - oct * 12
   local best, bd = 0, math.huge
-  for _, s in ipairs(grove.SCALE) do
+  for _, s in ipairs(scale) do
     local d = math.abs(rem - s)
     if d < bd then bd, best = d, s end
   end
   if math.abs(rem - 12) < bd then return (oct + 1) * 12 end
   return oct * 12 + best
+end
+
+local function snap_semitones(x)
+  return snap_to(x, grove.SCALE)
+end
+
+-- §4.1 Scale: a final, global quantisation stage every voice's total pitch
+-- passes through (grove.hz below), independent of and downstream from a
+-- field's own per-cell snap (§2.6, K1+tap) -- that one quantises a field's
+-- wandering degree before it is summed with everything else; this one
+-- quantises the sum, unconditionally, whenever a scale is selected. index 0
+-- is "free": the tuning is whatever it already was.
+grove.SCALE_NAMES = {"major", "minor", "pentatonic", "whole tone", "chromatic"}
+grove.SCALES = {
+  {0, 2, 4, 5, 7, 9, 11},        -- major
+  {0, 2, 3, 5, 7, 8, 10},        -- natural minor
+  {0, 3, 5, 7, 10},              -- minor pentatonic (grove.SCALE's own scale)
+  {0, 2, 4, 6, 8, 10},           -- whole tone
+  {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, -- chromatic
+}
+
+function grove.quantise_semitones(x)
+  local i = state.global.scale_i or 0
+  if i <= 0 then return x end
+  local scale = grove.SCALES[i]
+  if not scale then return x end
+  return snap_to(x, scale)
 end
 
 -- modes ----------------------------------------------------------------------
@@ -192,7 +221,7 @@ MODES.scatter = {
 -- wander: no degrees at all. the field picks somewhere to be and walks
 -- there at a steady speed, then picks somewhere else -- so a voice under it
 -- is always on its way to a note rather than sitting on one. an incoming
--- pulse throws the destination somewhere new mid-walk. Weather sets both how
+-- pulse throws the destination somewhere new mid-walk. Rain sets both how
 -- far it strays and how fast it gets there.
 --
 -- an earlier version had `target` random-walking by a per-tick increment and
@@ -374,13 +403,15 @@ function grove.offset(voice_id)
 end
 
 -- root, plus the sound editor's Tune (§5.5), plus whatever the fields are
--- doing, plus whatever per-strike detune the caller passes in. voice.lua owns
--- Tune; this is the only place the three are ever summed.
+-- doing, plus the global Pitch macro, plus whatever per-strike detune the
+-- caller passes in -- then, if Scale has selected one, quantised as a whole.
+-- voice.lua owns Tune; this is the only place all of them are ever summed.
 function grove.hz(voice_id, extra_semitones)
   local cell = topology.get(voice_id)
   if not cell or not cell.root then return nil end
   local st = grove.offset(voice_id) + wl("voice").tune_semitones(voice_id)
-             + (extra_semitones or 0)
+             + (state.global.pitch_offset or 0) + (extra_semitones or 0)
+  st = grove.quantise_semitones(st)
   return cell.root * (2 ^ (st / 12))
 end
 
@@ -483,19 +514,12 @@ local function move(f, pos, glide)
   if not deferring then refresh(f, glide) end
 end
 
--- one step of a field, from a strike or an incoming pulse. `trail` draws
--- §5.2's travelling dot down each of this field's cables -- worth it for a
--- pulse-driven step, which is otherwise invisible on the network view, and
--- not for a strike-driven one, where the strike is already drawing its own.
-local function step_field(f, w, now, trail)
+-- one step of a field, from a strike or an incoming pulse.
+local function step_field(f, w, now)
   local mode = MODES[f.mode]
   f.flash = now or util.time()
   f.last_w = util.clamp(w or 1, 0, 1)
   move(f, mode.step(f), mode.glide)
-  if trail then
-    local rambler = wl("rambler")
-    for _, l in ipairs(f.voices) do rambler.trail(f.id, l.node, f.flash) end
-  end
 end
 
 -- a pulse cabled into an F cell (from a D or R cell, or one emerging from
@@ -504,16 +528,16 @@ end
 function grove.step(f_id, w, src_id)
   local f = fields[f_id]
   if not f then return end
-  step_field(f, w, util.time(), true)
+  step_field(f, w, util.time())
 end
 
 -- called by dispatch immediately before a strike lands. every field tuning
 -- this voice takes a step (unless its mode moves on its own clock instead),
 -- and the voice is retuned before the mallet does.
 --
--- a voice with no field cabled to it still gets a few cents of per-strike
--- detune, scaled by Weather -- the pitch half of dispatch's force/hardness
--- wobble, and the reason a bare patch stopped sounding like a machine.
+-- §4.1 Drops: every strike gets a random pitch offset, 0.02 st at Drops=0 --
+-- the reason a bare patch never sounded like a machine, now a floor rather
+-- than the whole effect -- widening to gparam.DROPS_MAX_ST semitones at 1.
 function grove.on_strike(voice_id)
   local links = voice_links[voice_id]
   local glide, stepped = nil, nil
@@ -536,7 +560,8 @@ function grove.on_strike(voice_id)
       refresh(f, MODES[f.mode].glide, voice_id)
     end
   end
-  local detune = (math.random() * 2 - 1) * (0.02 + wild() * 0.08)
+  local drops = wl("gparam").DROPS_MAX_ST
+  local detune = (math.random() * 2 - 1) * (0.02 + (state.global.drops or 0) * drops)
   push_voice(voice_id, glide, detune)
 end
 

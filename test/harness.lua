@@ -41,6 +41,7 @@ local function fresh_calls()
     heart_conductance = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
+    compressor = {},
   }
 end
 CALLS = fresh_calls()
@@ -87,6 +88,8 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.exciter_decay, {t = T, index = a[1], scale = a[2]})
     elseif k == "voice_bend" then
       table.insert(CALLS.voice_bend, {t = T, voice = a[1], v = a[2]})
+    elseif k == "compressor" then
+      table.insert(CALLS.compressor, {t = T, v = a[1]})
     end
   end
 end})
@@ -110,7 +113,7 @@ function fresh(seed)
   local M = {}
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "heartwood", "grove", "climate", "weave",
-                      "dispatch", "voice", "rambler", "exciter"}) do
+                      "dispatch", "voice", "rambler", "exciter", "gparam"}) do
     M[n] = wl(n)
   end
   return M

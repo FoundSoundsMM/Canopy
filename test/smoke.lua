@@ -29,7 +29,7 @@ do
   local names, n = {}, 0
   for k in pairs(M) do table.insert(names, k) n = n + 1 end
   table.sort(names)
-  check("all 16 modules memoised, one copy each", n == 16, table.concat(names, ","))
+  check("all 17 modules memoised, one copy each", n == 17, table.concat(names, ","))
 end
 
 -- the whole point of the memo: one graph, seen by everyone
@@ -57,9 +57,8 @@ check("scheduler drives the engine end to end", #CALLS.strike > 0,
       "strikes " .. #CALLS.strike)
 
 -- every screen view redraws without erroring, held and unheld
-local views = {"network", "meters"}
 local ok, err = pcall(function()
-  for _, v in ipairs(views) do M.state.view = v; redraw() end
+  redraw()                                    -- the global param page
   gridobj.key(7, 4, 1); redraw()              -- cell view, a D cell
   gridobj.key(2, 1, 1); redraw()              -- edge view
   gridobj.key(2, 1, 0); gridobj.key(7, 4, 0)
@@ -123,21 +122,30 @@ do
         tostring(M.state.voice_edit))
 end
 
--- §4.1: E3 is the transport with nothing held, master level under K1.
+-- §4.1/§5.2: the global param page has the encoders with nothing held.
+-- BPM is gparam.PARAMS[1], so it's already focused from a fresh load.
 do
+  check("BPM is focused by default", M.state.gparam_focus == 1,
+        tostring(M.state.gparam_focus))
   local before = M.state.global.bpm
-  enc(3, 6)
-  check("E3 moves the tempo", M.state.global.bpm == before + 6,
+  enc(2, 6)                       -- coarse: 1 bpm/detent
+  check("E2 moves the tempo", M.state.global.bpm == before + 6,
         tostring(M.state.global.bpm))
   check("and the norns clock went with it", clock.get_tempo() == before + 6,
         tostring(clock.get_tempo()))
+
   local level = M.state.global.level
   key(1, 1)
   enc(3, 10)
   key(1, 0)
   check("K1+E3 moves the master level instead", M.state.global.level > level)
   check("and leaves the tempo alone", M.state.global.bpm == before + 6)
-  enc(3, -6)
+  enc(2, -6)
+
+  enc(1, 1)
+  check("E1 walks the nine global params", M.state.gparam_focus == 2,
+        tostring(M.state.gparam_focus))
+  enc(1, -1)
 end
 
 ok, err = pcall(cleanup)

@@ -5,34 +5,34 @@
 
 local state = {}
 
--- §5.2-5.3 screen views (cycled with K3 when nothing is held). the lexicon
--- pages are gone: every cell's one knob names itself on the cell view, which
--- is where you are already looking when you want to know what it does.
-state.views = {"network", "meters"}
-state.view = "network"
-
-function state.cycle_view()
-  for i, v in ipairs(state.views) do
-    if v == state.view then
-      state.view = state.views[(i % #state.views) + 1]
-      return
-    end
-  end
-end
-
 -- §5.5 the sound editor. tapping a voice cell puts its id in here and the
 -- screen becomes that voice's eight-parameter page; tapping it again (or K3)
--- clears it and the screen goes back to whatever view it was on.
+-- clears it and the screen goes back to the global param page.
 state.voice_edit = nil
 state.vparam_focus = 1
 
--- §4.1 global macros
+-- §4.1/§5.2 the global param page (nothing held, no voice page open): E1
+-- walks gparam.PARAMS, E2/E3 nudge coarse/fine. replaced the network/wires
+-- map -- see lib/gparam.lua.
+state.gparam_focus = 1
+
+-- §4.1 global macros. `swing` and `rain` used to be one combined "Weather"
+-- knob (low half swing, high half chaos/wildness); gparam.lua now exposes
+-- them as independent params, so quantise.lua and every rhythm/field
+-- "wildness" read in rambler.lua/grove.lua that used to share the one
+-- weather value now reads `rain` directly.
 state.global = {
-  canopy = 0.3,   -- E1: reverb amount
-  weather = 0.4,  -- E2: groove -- quantise -> swing -> chaos (see quantise.lua)
-  bpm = 120,      -- E3: transport tempo, mirrored onto the norns clock param
-  level = 0.8,    -- K1+E3: master level
-  still = false,  -- K2: freeze all pulse gaits
+  canopy = 0.3,      -- reverb amount
+  swing = 0.8,       -- quantise.lua's swing() -- preserves the old default feel
+  rain = 0,          -- quantise.lua's chaos(), plus rhythm/field wildness
+  bpm = 120,         -- transport tempo, mirrored onto the norns clock param
+  scale_i = 0,       -- global pitch quantisation; 0 = free (grove.SCALES)
+  drops = 0,         -- per-strike random pitch offset range
+  decay_mult = 0.5,  -- global decay multiplier, 0.5 = x1 (voice.lua)
+  pitch_offset = 0,  -- global transpose, semitones (grove.lua)
+  compressor = 0,    -- output bus compressor amount
+  level = 0.8,       -- K1+E3: master level
+  still = false,     -- K2: freeze all pulse gaits
 }
 
 -- grid hold tracking

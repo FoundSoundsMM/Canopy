@@ -31,6 +31,14 @@ function voice.decay_seconds(id)
   if not cell or cell.type ~= "voice" then return nil end
   local d = state.get_decay(id)
   return cell.decay * (2 ^ ((d - 0.5) * 2 * voice.DECAY_OCTAVES))
+             * voice.decay_mult_ratio()
+end
+
+-- §4.1 the global Decay macro: the same bipolar-octave shape as the per-voice
+-- knob above, applied on top of every voice at once. 0.5 is x1 (no change).
+function voice.decay_mult_ratio()
+  local d = state.global.decay_mult or 0.5
+  return 2 ^ ((d - 0.5) * 2 * voice.DECAY_OCTAVES)
 end
 
 -- how far off its root this voice is tuned, in semitones. grove.lua adds

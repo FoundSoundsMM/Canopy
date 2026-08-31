@@ -133,14 +133,11 @@ do
   tick(500 * 4)
 
   local ok = true
-  for _, view in ipairs({"network", "meters"}) do
-    M.state.view = view
-    for _ = 1, 40 do
-      tick(33)
-      ok = guard("redraw " .. view, redraw) and ok
-    end
+  for _ = 1, 40 do
+    tick(33)
+    ok = guard("redraw global page", redraw) and ok
   end
-  check("network and meters redraw with a live patch", ok, failures[1])
+  check("the global param page redraws with a live patch", ok, failures[1])
 
   ok = true
   for _, id in ipairs(all_ids) do
@@ -223,10 +220,8 @@ do
       ok = guard("enc", function() enc(math.random(3), math.random(-4, 4)) end) and ok
     elseif roll < 0.75 then
       ok = guard("grid_redraw", function() M.gridui.grid_redraw(gridobj) end) and ok
-    elseif roll < 0.95 then
-      ok = guard("redraw", redraw) and ok
     else
-      M.state.view = (math.random() < 0.5) and "network" or "meters"
+      ok = guard("redraw", redraw) and ok
     end
     tick(math.random(1, 12))
   end
@@ -243,12 +238,14 @@ end
 
 -- the screen budget -------------------------------------------------------------
 --
--- this is the one that bit: the network view was issuing ~600 screen commands a
--- frame, ~240 of them cairo paint calls (`level`/`fill`), which at 15 fps fills
--- matron's screen queue faster than it drains. a full queue blocks the Lua
--- thread, so the screen stops updating and the front panel stops responding
--- while the grid -- its own callback, its own metro -- carries on. numbers, not
--- vibes, so it cannot creep back.
+-- this is the one that bit, back when the idle screen was the network view: it
+-- was issuing ~600 screen commands a frame, ~240 of them cairo paint calls
+-- (`level`/`fill`), which at 15 fps fills matron's screen queue faster than it
+-- drains. a full queue blocks the Lua thread, so the screen stops updating and
+-- the front panel stops responding while the grid -- its own callback, its own
+-- metro -- carries on. the global param page that replaced it is nine label/
+-- value/bar rows, the same shape as the sound page below, so the budget here
+-- is really just guarding against a future regression. numbers, not vibes.
 
 print("\n-- the screen budget, per frame --")
 do
@@ -278,7 +275,8 @@ do
   M.patch.clear()
 
   -- the worst case the patch cap allows: 64 cables, every cell lit, pulses in
-  -- flight. if this frame is affordable, every frame is.
+  -- flight. the global page doesn't draw the patch at all any more, but the
+  -- cell/edge views still do, so this is still worth setting up.
   local ids = {}
   for id, cell in M.topology.each() do
     if cell.type ~= "voice" then table.insert(ids, id) end
@@ -290,17 +288,9 @@ do
   end
   tick(500 * 3)
 
-  M.state.view = "network"
   local calls, paint = frame()
-  check("network, 64 cables: under 500 commands", calls < 500, calls .. " calls")
-  check("network, 64 cables: under 40 paint calls", paint < 40, paint .. " paint")
+  check("the global param page: under 200 commands", calls < 200, calls .. " calls")
 
-  M.state.view = "meters"
-  calls, paint = frame()
-  check("meters: under 200 commands", calls < 200, calls .. " calls")
-  check("meters: under 20 paint calls", paint < 20, paint .. " paint")
-
-  M.state.view = "network"
   M.state.voice_edit = "oak"
   calls, paint = frame()
   check("the sound page: under 200 commands", calls < 200, calls .. " calls")

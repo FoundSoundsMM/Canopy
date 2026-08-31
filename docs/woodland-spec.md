@@ -170,7 +170,7 @@ dphi_i  =  rate_i * dt  +  K * sum_j ( g_ij * sin(2*pi*(phi_j - phi_i)) )
 ```
 
 `g_ij` is the edge gain (bipolar). Positive gain pulls toward sync; negative
-gain pushes toward anti-phase. `K` scales with the global **Weather** macro.
+gain pushes toward anti-phase. `K` scales with the global **Rain** macro.
 This is the whole rhythm engine — no step sequencer anywhere.
 
 Metric, euclidean and figure are *rooted* to the norns clock by default; the
@@ -329,9 +329,9 @@ incommensurate slow shapes summed, per-voice phase offsets). It is on by
 default at ~6 cents whether or not anything is cabled — it is why an untouched
 patch no longer repeats one identical note — and cabling a wide field into a
 voice deepens it, to a ceiling of 35 cents. Above that it stops sounding like
-wood and starts sounding out of tune. There is a per-strike detune of the same
-order in `grove.on_strike`, scaled by Weather: the pitch half of §2.3's
-organic-rhythm wobble.
+wood and starts sounding out of tune. There is a separate per-strike detune in
+`grove.on_strike`, scaled by the global **Drops** macro (§4.1) rather than by
+this drift.
 
 ### 2.7 The weave — R (20)
 
@@ -371,7 +371,7 @@ in beats, so they stay in time when the tempo moves; Twitten, Holt, Bramble,
 Tangle and Briar measure themselves in milliseconds, because smearing across
 the grid is the whole point of them.
 
-**What the weave emits is not re-quantised.** Weather (§4.1) places a *gait's*
+**What the weave emits is not re-quantised.** Swing/Rain (§4.1) place a *gait's*
 emission on a grid line. A pulse coming out of an R cell is derived from one
 that was already placed, and snapping a flam or a swung off-beat back onto the
 grid would undo the only thing that cell does.
@@ -456,38 +456,43 @@ one is unambiguously the sound-page gesture.
 
 | Control | Function |
 |---------|----------|
-| E1 | **Canopy** — global space/reverb amount |
-| E2 | **Weather** — the groove knob (see below) |
-| E3 | **Tempo** — transport BPM, 1 per detent (writes `clock_tempo`) |
+| E1 | pick one of nine global params (§5.2) |
+| E2 / E3 | nudge the picked param, coarse / fine |
 | K1 + E3 | Master level |
 | K2 | **Still** — freeze all pulse gaits; resonators ring out. Tap again to resume |
-| K3 | cycle screen view: Network → Meters — or close the sound page if it is open |
+| K3 | close the sound page, if it is open (nothing else to cycle to) |
 | K1 + K2 | **Regrow** — a seeded patch that already plays (hold to confirm) |
 | K1 + K3 | **Clearing** — cut every cable (hold to confirm) |
 
-**Weather (E2) is one sweep through three regimes.** It decides *when* a pulse
-is allowed to land, not what it sounds like; `lib/quantise.lua` owns the whole
-mapping and `lib/rambler.lua` routes every emission through it.
+**The nine global params** (`lib/gparam.lua`), in E1 order:
 
-| Weather | What the patch does |
-|---------|---------------------|
-| 0 | **Locked.** Every emission snaps forward onto a grid line, whatever rate the cell free-runs at, so unrelated gaits cohere into one groove |
-| 0 → 0.5 | **Swing.** The grid itself is warped: each pair of 8ths is stretched then squeezed, so off-beats land late and beats never move. Full swing is a 3:1 long-short; the triplet 2:1 feel sits two thirds up |
-| 0.5 → 1 | **Chaos.** The snap loosens toward the time the cell actually wanted, and a widening random displacement grows in its place. Rate drift comes back here too |
-| 1 | **Rain.** Nothing is held at all — the free-running behaviour the gaits had before any of this |
+| Param | What it does | Range |
+|-------|--------------|-------|
+| BPM | transport tempo, writes `clock_tempo` | 20 .. 300 |
+| Swing | grid warp: each pair of 8ths stretched then squeezed, so off-beats land late and beats never move | 0 (straight) .. 1 (full, ~3:1 long-short) |
+| Rain | trigger randomness: loosens the quantise snap and grows a random displacement in its place; also scales gait-rate drift and coupling, and pitch-field wander | 0 (locked to the grid) .. 1 (free-running, "rain") |
+| Scale | quantises every voice's total pitch to a scale, unconditionally and after everything else has summed | 0 (free/unquantised) .. N (major, minor, pentatonic, whole tone, chromatic) |
+| Drops | per-strike random pitch offset, on top of the ~0.02 st floor every strike has always had | 0 .. 1 (up to ±1.5 st) |
+| Decay | multiplies every voice's resonator ring time at once | ×0.25 .. ×4 |
+| Pitch | transposes every voice at once | ±24 semitones |
+| Compressor | a glue compressor on the final stereo mix | 0 (bypass) .. 1 |
+| Canopy | global space/reverb amount | 0 .. 1 |
 
-The grid is per cell, not global: each is quantised to the coarsest of
-8th / 16th / 32nd / 64th that still fits inside one cycle of its own rate, so a
-Shuck lands on 8ths and a Gabriel on 64ths and both stay in time with each
-other. A **burst** overrides that and is triggered on the beat, with its ratchet
-laid out on a subdivision so the whole flam sits on grid lines.
+Swing and Rain decide *when* a pulse is allowed to land, not what it sounds
+like; `lib/quantise.lua` owns that mapping and `lib/rambler.lua` routes every
+emission through it. The grid is per cell, not global: each is quantised to
+the coarsest of 8th / 16th / 32nd / 64th that still fits inside one cycle of
+its own rate, so a Shuck lands on 8ths and a Gabriel on 64ths and both stay in
+time with each other. A **burst** overrides that and is triggered on the beat,
+with its ratchet laid out on a subdivision so the whole flam sits on grid
+lines.
 
 Snapping is *forward* to the next line, never back to the nearest — a wrap is
 only known about once it has happened. The cost is up to one grid interval of
 latency, and since the grid is never coarser than the cell's own cycle, it never
 costs the cell a pulse.
 
-Weather places a **gait's** emission. What the weave (§2.7) and a voice's O
+Swing/Rain place a **gait's** emission. What the weave (§2.7) and a voice's O
 socket (§2.2) emit is deliberately not re-quantised: those pulses are derived
 from one that was already placed, and holding them to the grid a second time
 would undo the transform. Timing you want humanized is a patchable choice on
@@ -569,46 +574,42 @@ floored to a minimum readable brightness so it doesn't vanish; voice cells
 (never cable endpoints themselves) scale ×0.4 toward black. This is how you
 read a patch — and see what's still available to patch into — on the grid.
 
-### 5.2 Screen — Network view (nothing held)
+### 5.2 Screen — Global param page (nothing held)
 
-The full 16x8 map drawn at 7px pitch (112x56, centred), with cables drawn
-between cell centres as **dim dotted runs**. At full brightness and solid, a
-patch of twenty cables is a ball of wool: the lines are the least important
-thing on this screen and they were shouting over the cells, the travelling
-pulse dots and each other. Brightness still tracks |gain|, but over a much
-shorter range; an inverting cable is drawn with the dots twice as far apart, so
-it reads as a thinner connection rather than as a different kind of drawing;
-and a one-way cable gets one brighter dot three quarters of the way along
-rather than an arrowhead made of five pixels. The endpoints are left alone —
-the cell's own dot should be the brightest thing at that coordinate.
+What used to be here — the full 16x8 map drawn as a lit grid with dotted
+cable "wires" between cell centres, and a travelling dot per pulse — is gone.
+It was a nice picture, but it left the nine global macros with nowhere of
+their own to live: Canopy and the old Weather knob were plain encoder turns
+with no readout, and everything this page now exposes (Scale, Drops, global
+Decay, global Pitch, the output Compressor) had no home at all.
 
-Pulses render as a bright dot travelling the line. Now that the cables are dim,
-those dots are what the view is *for*. Bottom line: the most recent event, with
-the tempo and the Weather tag in the corner.
-
-**Everything on this view is bucketed by brightness and painted once per
-level.** Drawn a dot at a time — level, shape, fill, level, shape, fill — the
-map plus its cables is around six hundred screen commands a frame, a couple of
-hundred of them cairo *paint* calls. At 15 fps that fills matron's screen queue
-faster than it drains, and a full queue blocks the Lua thread: the screen stops
-updating and the front panel stops responding, while the grid — its own
-callback, its own metro — carries on, so the script looks alive and the norns
-looks broken. Bucketed, the same picture costs about sixteen paint calls. The
-number of cable dots is budgeted too (they are shared out across however many
-cables exist, evenly spaced within each), so the frame cost is bounded by the
-patch cap rather than by the patch. `test/soak.lua` asserts both numbers.
+In its place: the same two-column, nine-row list §5.5 already gave the voice
+sound page, for `lib/gparam.lua`'s nine params (§4.1) instead of one voice's
+nine. `E1` walks the list, `E2` moves the picked param coarsely and `E3`
+finely. There is no tap/hold gesture to reach it and no page to leave — it is
+simply what the screen shows whenever nothing is held and no sound page is
+open, the same way the network view always was.
 
 ```
-    ▪ ▪▪▪▪▪▪▪▪▪▪ ▪
-  ▪[O]▪ ··········  ▪[H]▪
-    ▪  ▪ ▪ · · · · ▪ ▪  ▪
-  ·  · ▪ ▪ ░░░░ ▪ ▪ ·  ·
-  ·  · ▪ ▪ ░░░░ ▪ ▪ ·  ·
-    ▪  ▪ ▪ · · · · ▪ ▪  ▪
-  ▪[A]▪ ▪▪▪▪▪▪▪▪▪▪  ▪[R]▪
-    ▪ ▪▪▪▪▪▪▪▪▪▪ ▪
- Knocker -> Trod        120 lock
+ Woodland                    severed Oak (2)
+ ─────────────────────────────────────
+ BPM         120    Decay      x1.00
+ ▐▓▓▓▓▓▓▓░░░░       ▐▓▓▓▓▓▓░░░░░░
+ Swing      0.80    Pitch     +0.0 st
+ ▐▓▓▓▓▓▓▓▓░░░       ▐▓▓▓▓▓▓░░░░░░
+ Rain       0.00    Comp        0.00
+ ▐░░░░░░░░░░░       ▐░░░░░░░░░░░░
+ Scale      free    Canopy      0.30
+ ▐░░░░░░░░░░░       ▐▓▓▓▓░░░░░░░░
+ Drops      0.00
+ ▐░░░░░░░░░░░
+ E1 pick  E2/E3 coarse/fine
 ```
+
+The title line's right side carries the same transient event feedback the old
+network view printed along its bottom edge — a sever, a gait swap, Regrow or
+Clearing's result — so that feedback still has somewhere to be read after a
+tap-and-release gesture completes.
 
 ### 5.3 Screen — Cell view (a cell held)
 
@@ -631,7 +632,7 @@ there so the numbers underneath it mean something the first time you hold a
 cell you have not held before.
 
 The row below that is whatever the cell type has to say about itself: a D
-cell's rooted/wild and the grid Weather is holding it to; an R cell's cables
+cell's rooted/wild and the grid Rain is holding it to; an R cell's cables
 in and out and whether its gate is open; an H cell's hop, links and loss; an F
 cell's current degree in semitones; a C cell's reach and current value; and
 for anything with a sound of its own, the decay row.
@@ -643,10 +644,14 @@ screen space a second row used to have.
 Two cells held → an edge view: both names, one bipolar gain bar, and a short
 description of what actually flows across that edge given the two types.
 
-### 5.4 Screen — Meters view
+### 5.4 Screen — Meters view (removed)
 
-Per-cell activity, once the metering back-channel (§7.4) exists. Until then it
-draws idle brightness as small bars and says so.
+Was a placeholder per-cell activity view, cycled in with K3 alongside the
+network view. It went with the network view in build phase 7 (§5.2) — a
+metering back-channel (§7.4) still doesn't exist, and there is no longer a
+screen mode reserved for it. If per-cell metering lands, it belongs on the
+cell view (§5.3), read live under whichever cell is held, rather than as its
+own idle-screen mode.
 
 ### 5.5 Screen — the voice sound page
 
@@ -783,13 +788,14 @@ Woodland/
                                the shared pulse bus everything emits through
     weave.lua               -- the twenty R-cell pulse transforms
     climate.lua             -- the eight C-cell slow modulators
-    quantise.lua            -- the Weather groove: quantise -> swing -> chaos
+    quantise.lua            -- the groove: Swing/Rain place a gait's emission
     exciter.lua             -- S-cell control layer (audio side lives in SC)
     heartwood.lua           -- diffusion lattice
     grove.lua               -- pitch fields: modes, coupling, voice retuning
     voice.lua               -- voice sockets + the nine-parameter sound page
+    gparam.lua              -- the nine-parameter global page (§4.1, §5.2)
     gridui.lua              -- grid render + hold/tap state machine
-    screenui.lua            -- network / meters / cell / edge / voice views
+    screenui.lua            -- global param / cell / edge / voice views
     bridge.lua              -- engine command wrapper, throttling, meter cache
   lib/Engine_Woodland.sc    -- SC: modal voices, exciters, patch matrix, canopy
   README.md
@@ -997,6 +1003,7 @@ patch_add(id, kind, src, dst, gain)
 patch_gain(id, gain)            patch_free(id)
 heart_conductance(i, v)
 canopy(size, damp, mix)         master_level(v)
+compressor(amount)
 ```
 
 `voice_grain` is gone; `voice_sap`/`voice_sway`/`voice_moss` collapsed into
@@ -1040,6 +1047,13 @@ Each phase ends in something testable on the device.
    feedback (both the audio path and the pulse path, so this phase absorbed the
    old phase 6), the weave, the climate, twenty exciters, the `figure` gait, the
    per-voice sound page, and the lexicon pages dropped. See the §2 header.
+6b. **The global param page.** The network view (and the meters view
+   cycled alongside it) is gone, replaced by §5.2's nine-parameter list —
+   `gparam.lua`. Weather is gone with it, split into independent Swing and
+   Rain; Scale, Drops, global Decay, global Pitch and an output Compressor
+   are new. Out of build order for the same reason 5b/5c were: this is a
+   control-surface rework, not something that needed the phases between it
+   and phase 6 to exist first.
 7. **Life.** Metering back-channel → grid and screen animation. Narrower than
    it was: see §7.4.
 8. **Persistence and polish.** PARAMS, PSET + graph save/load, clock sync,
