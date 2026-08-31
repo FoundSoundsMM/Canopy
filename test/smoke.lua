@@ -29,13 +29,14 @@ do
   local names, n = {}, 0
   for k in pairs(M) do table.insert(names, k) n = n + 1 end
   table.sort(names)
-  -- climate.lua is gone and clockcell.lua/sequencer.lua are new. the offline
-  -- harness's own fresh() pulls in 18 core modules (topology, patch, state,
-  -- bridge, quantise, lexicon, heartwood, grove, clockcell, weave, dispatch,
-  -- voice, gvoice, rambler, exciter, gparam, tm, sequencer); this is a cold
-  -- load of the real Canopy.lua, so it also pulls in the two UI-layer
-  -- modules those other tests never touch -- gridui and screenui -- for 20.
-  check("all 20 modules memoised, one copy each", n == 20, table.concat(names, ","))
+  -- climate.lua is gone; clockcell.lua, sequencer.lua and cellparam.lua are
+  -- new. the offline harness's own fresh() pulls in 19 core modules
+  -- (topology, patch, state, bridge, quantise, lexicon, heartwood, grove,
+  -- clockcell, weave, dispatch, voice, gvoice, rambler, exciter, gparam, tm,
+  -- sequencer, cellparam); this is a cold load of the real Canopy.lua, so it
+  -- also pulls in the two UI-layer modules those other tests never touch --
+  -- gridui and screenui -- for 21.
+  check("all 21 modules memoised, one copy each", n == 21, table.concat(names, ","))
 end
 
 -- the whole point of the memo: one graph, seen by everyone
@@ -92,23 +93,23 @@ check("grid redraws", ok, tostring(err))
 ok, err = pcall(function()
   for n = 1, 3 do key(n, 1); key(n, 0) end
   for n = 1, 3 do enc(n, 1); enc(n, -1) end
-  -- K1+E2 on a held D cell must swap the gait
+  -- a gait is a named row on the held cell's page now (Gait, row 2), not a
+  -- K1+E2 modifier: hold the cell, E1 to the row, E2 to move it.
   gridobj.key(7, 4, 1)
-  key(1, 1)
-  for _ = 1, 3 do enc(2, 1) end
-  key(1, 0)
+  enc(1, 1)                       -- Rate -> Gait
+  for _ = 1, 4 do enc(2, 1) end
   gridobj.key(7, 4, 0)
 end)
 check("keys and encoders survive", ok, tostring(err))
-check("K1+E2 swapped Hob's gait", M.rambler.info("d.hob").gait ~= "euclidean",
+check("the Gait row swapped Hob's gait", M.rambler.info("d.hob").gait ~= "euclidean",
       M.rambler.info("d.hob").gait)
 
--- §5.5: tapping a voice cell opens its sound page and hands it the encoders;
--- tapping it again gives them back. Oak's cell is at (2,2).
+-- tapping ANY cell opens its settings page and hands it the encoders; tapping
+-- it again gives them back. Oak's cell is at (2,2).
 do
   gridobj.key(2, 2, 1); T = T + 0.05; gridobj.key(2, 2, 0)
   check("tapping the voice cell opens its sound page",
-        M.state.voice_edit == "oak", tostring(M.state.voice_edit))
+        M.state.cell_edit == "oak", tostring(M.state.cell_edit))
 
   local before = M.state.get_vparam("oak", "tune", 0.5)
   enc(1, 0)                       -- stay on Tune
@@ -126,13 +127,14 @@ do
   enc(1, 1)
   check("E1 walks the twelve", M.state.vparam_focus == 2,
         tostring(M.state.vparam_focus))
+  M.state.vparam_focus = 1
 
   ok, err = pcall(redraw)
   check("the sound page redraws", ok, tostring(err))
 
   gridobj.key(2, 2, 1); T = T + 0.05; gridobj.key(2, 2, 0)
-  check("tapping it again closes it", M.state.voice_edit == nil,
-        tostring(M.state.voice_edit))
+  check("tapping it again closes it", M.state.cell_edit == nil,
+        tostring(M.state.cell_edit))
 end
 
 -- §4.1/§5.2: the global param page has the encoders with nothing held.

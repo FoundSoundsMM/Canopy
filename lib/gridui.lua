@@ -1,40 +1,52 @@
 -- gridui.lua
 -- grid render + hold/tap patching state machine. (§3, §4.2, §5.1)
+--
+-- one gesture vocabulary, the same on every cell of every type:
+--
+--   tap a cell                 toggle its settings page open / closed
+--   hold a cell                glance at the same page, until you let go
+--   hold, then E1 / E2 / E3    pick a row, move it coarse / fine
+--   K1 + tap a cell            do the thing that cell does: strike a voice or
+--                              a drum, fire an exciter, pulse a trigger, put a
+--                              sequencer step in or take it out
+--   hold one, tap another      cable them (K1 held: one-way)
+--   hold two                   E3 sets that cable's gain
+--   K2 + K3 while holding      sever every cable at that cell
+--
+-- what this replaced: only voice/GVOICE/TM cells had a page and a tap that
+-- opened it; a tap on a SEQ cell toggled a step instead; K1+tap flipped a
+-- boolean on D and F cells and did nothing anywhere else; K1+E2 cycled a bank
+-- on D/R/F and stored a number nothing read on everything else; E1 walked a
+-- cable list only visible one row at a time. every one of those is now a
+-- named row on a page that every cell type has (lib/cellparam.lua).
 
 local topology   = wl("topology")
 local patch      = wl("patch")
-local lexicon    = wl("lexicon")
 local state      = wl("state")
 local rambler    = wl("rambler")
-local weave      = wl("weave")
 local heartwood  = wl("heartwood")
 local grove      = wl("grove")
 local clockcell  = wl("clockcell")
 local sequencer  = wl("sequencer")
+local weave      = wl("weave")
+local cellparam  = wl("cellparam")
 
 local gridui = {}
 
--- K1+E2 cycles the rule a cell runs on -- a D cell's gait, an R cell's
--- transform, an F cell's mode, a C cell's shape (§4.2, §2.6, §2.7, §2.8). one
--- step per three detents, so a normal flick of the encoder moves one rather
--- than five.
-local RULE_DETENTS = 3
-local rule_acc = {}
-
--- the cells that have a swappable rule at all, and the function that swaps it.
-local CYCLERS = {
-  D = function(id, step) return rambler.cycle_gait(id, step) end,
-  R = function(id, step) return weave.cycle_rule(id, step) end,
-  F = function(id, step) return grove.cycle_mode(id, step) end,
-}
+-- E2 is coarse and E3 is fine on the same row, on the held glance and on the
+-- open page alike -- Canopy.lua uses these same two numbers.
+gridui.COARSE = 1 / 80
+gridui.FINE = 1 / 500
 
 -- below this held-duration, releasing a cell counts as a "tap". with a first
--- cell still held that toggles the cable; on its own it is the gesture that
--- opens a voice's sound page or flips a D cell's root. at or above it, the
--- two-down period was a deliberate hold+hold inspection (§3 row 3) and
--- release does not also toggle. the spec doesn't pin an exact figure; this is
--- the implementation's call.
-gridui.TAP_THRESHOLD = 0.3
+-- cell still held that toggles the cable; on its own it opens or closes the
+-- cell's settings page. at or above it, the press was a deliberate hold --
+-- a glance at the page, or a two-cell inspection (§3 row 3) -- and the
+-- release does not also toggle. 0.3 s turned out to be short enough that an
+-- unhurried tap missed it and appeared to do nothing at all, which is most of
+-- why sequencer steps felt uninputtable; this is the implementation's call
+-- and 0.45 is a more forgiving one.
+gridui.TAP_THRESHOLD = 0.45
 
 local sever_fired = false
 
@@ -69,10 +81,9 @@ function gridui.on_grid_key(x, y, z, keystate)
 
     local cell = topology.get(id)
 
-    -- the socket collapse made a voice cell a cable endpoint like every
-    -- other cell on the panel -- its own point carries the tap-to-open-page
-    -- gesture (§5.5) and the hold/tap cable gesture both, unambiguously,
-    -- the same way a GVOICE or TM cell already did.
+    -- every cell is a cable endpoint and every cell has a page, so this
+    -- branch is type-free: with something else held the tap draws a cable,
+    -- on its own it works the page.
     if anchor and held_dur < gridui.TAP_THRESHOLD then
       local anchor_cell = topology.get(anchor)
       local oneway = keystate and keystate.k1
@@ -90,50 +101,85 @@ function gridui.on_grid_key(x, y, z, keystate)
 end
 
 -- a tap on one cell with nothing else held ---------------------------------
+-- exactly two outcomes, the same for every type on the panel: K1 held fires
+-- the cell, K1 up toggles its page.
 
 function gridui.on_tap(id, cell, keystate)
-  if cell.type == "voice" or cell.type == "GVOICE" or cell.type == "TM" then
-    -- §5.5 (§2.7b for the percussion cells, §2.3b for the TM cells): the
-    -- screen becomes this cell's sound page, and tapping it again puts the
-    -- screen back where it was. K1 is ignored here -- there is no second
-    -- gesture on a voice, GVOICE or TM cell to be ambiguous against.
-    if state.voice_edit == id then
-      state.voice_edit = nil
-      state.set_event(cell.name .. ": closed", 1.2)
-    else
-      state.voice_edit = id
-      state.vparam_focus = 1
-      state.set_event(cell.name .. ": sound", 1.2)
-    end
-    return
+  if keystate and keystate.k1 then
+    gridui.act(id, cell)
+  else
+    gridui.toggle_page(id, cell)
   end
+end
 
+function gridui.toggle_page(id, cell)
+  if state.cell_edit == id then
+    state.cell_edit = nil
+    state.set_event(cell.name .. ": closed", 1.2)
+  else
+    state.cell_edit = id
+    state.vparam_focus = 1
+    state.set_event(cell.name .. ": settings", 1.2)
+  end
+end
+
+-- can anything this cell makes actually leave the panel? nothing reaches a
+-- speaker unless it is cabled, directly or through the patch, to one of the
+-- sixteen Output cells -- so a voice you fire and cannot hear is a normal,
+-- correct, and very confusing state to be in. K1+tap says so out loud.
+local function reaches_output(id)
+  local seen, queue = {[id] = true}, {id}
+  local head = 1
+  while head <= #queue do
+    local cur = queue[head]
+    head = head + 1
+    if topology.get(cur) and topology.get(cur).type == "O" then return true end
+    for _, edge in ipairs(patch.edges_at(cur)) do
+      local other = patch.other(edge, cur)
+      if not seen[other] then
+        seen[other] = true
+        table.insert(queue, other)
+      end
+    end
+  end
+  return false
+end
+
+-- the cells whose "fire it once" is a pulse out of their own door rather than
+-- something landing on them: a trigger, a transform, a register, a clock.
+-- rambler.emit_from is the one door every pulse on this panel leaves by, so
+-- this is the same event the scheduler would have produced on its own.
+local EMITTERS = {D = true, R = true, TM = true, C = true}
+
+-- K1 + tap: do the thing this cell does. a synthetic full-gain cable stands
+-- in for the pulse's source, so a voice, a drum, an exciter, a field and a
+-- heartwood node each answer through the same dispatch handler a real cable
+-- would have used -- no second, subtly different audition path to keep in
+-- step with the first.
+function gridui.act(id, cell)
   if cell.type == "SEQ" then
-    -- a plain tap, no modifier -- unambiguous against everything else here,
-    -- since the hold/tap cable gesture needs an anchor and every other tap
-    -- gesture on this list is gated on a cell type or K1 first.
     local active = sequencer.toggle_step(id)
-    state.set_event(cell.name .. (active and " on" or " off"), 1.0)
+    state.set_event(cell.name .. (active and ": step on" or ": step off"), 1.2)
     return
   end
 
-  if not (keystate and keystate.k1) then return end
+  if cell.type == "O" then
+    state.set_event(cell.name .. ": " .. patch.degree(id) .. " in", 1.2)
+    return
+  end
 
-  -- §2.3: K1 + tap a D cell toggles rooted (locked to the norns clock)
-  -- against wild (free-running). unambiguous against the K1+tap one-way
-  -- cable gesture, which only exists while another cell is held.
-  if cell.type == "D" then
-    local rooted = rambler.toggle_rooted(id)
-    if rooted == nil then
-      state.set_event(cell.name .. ": nothing to root to", 1.5)
-    else
-      state.set_event(cell.name .. (rooted and " rooted" or " wild"), 1.5)
-    end
-  elseif cell.type == "F" then
-    -- §2.6: the same gesture on an F cell snaps its field to the scale, or
-    -- lets it sit between the notes.
-    local snap = grove.toggle_snap(id)
-    state.set_event(cell.name .. (snap and " snapped" or " free"), 1.5)
+  if EMITTERS[cell.type] then
+    rambler.emit_from(id, 1.0)
+    state.flash(id, 1)
+    state.set_event(cell.name .. ": pulse", 1.2)
+    return
+  end
+
+  wl("dispatch").on_pulse(id, id, {id = -1, a = id, b = id, gain = 1.0}, 1.0)
+  if (cell.type == "voice" or cell.type == "GVOICE") and not reaches_output(id) then
+    state.set_event(cell.name .. ": no output cable", 2.0)
+  else
+    state.set_event(cell.name .. ": fired", 1.2)
   end
 end
 
@@ -162,7 +208,28 @@ end
 -- returns true if it consumed the encoder turn (caller should skip the
 -- "nothing held" global encoder behaviour).
 
+-- the one place a settings page is driven, whether it is open (tapped) or
+-- borrowed for as long as a cell is held. Canopy.lua calls the same function
+-- for the open page, so a row behaves identically either way.
+function gridui.page_enc(id, n, d)
+  local page = cellparam.page(id)
+  if not page then return false end
+  if n == 1 then
+    state.vparam_focus =
+      util.clamp((state.vparam_focus or 1) + d, 1, page.PARAM_COUNT)
+    return true
+  end
+  local i = util.clamp(state.vparam_focus or 1, 1, page.PARAM_COUNT)
+  local p = page.nudge(id, i, d * ((n == 2) and gridui.COARSE or gridui.FINE))
+  if p then
+    state.set_event(p.label .. " " .. p.text(id), 0.5)
+  end
+  return true
+end
+
 function gridui.on_norns_enc(n, d, keystate)
+  -- two cells held: the cable between them, which is the only thing that
+  -- belongs to the pair rather than to either cell.
   if #state.held == 2 and n == 3 then
     local a, b = state.held[1], state.held[2]
     local edge_id = patch.has(a, b)
@@ -175,64 +242,8 @@ function gridui.on_norns_enc(n, d, keystate)
 
   if #state.held == 0 then return false end
 
-  local id = state.held[#state.held]
-  local cell = topology.get(id)
-  local edges = patch.edges_at(id)
-
-  if n == 1 then
-    local f = state.get_focus(id) + d
-    state.focus[id] = util.clamp(f, 0, #edges)
-  elseif n == 2 then
-    local delta = d / 100
-    local cycler = CYCLERS[cell.type]
-    if keystate and keystate.k1 and cycler then
-      -- §4.2's "K1 + E2 secondary character parameter", which for every cell
-      -- type that has a bank of rules means: pick a different rule.
-      rule_acc[id] = (rule_acc[id] or 0) + d
-      while math.abs(rule_acc[id]) >= RULE_DETENTS do
-        local step = rule_acc[id] > 0 and 1 or -1
-        rule_acc[id] = rule_acc[id] - step * RULE_DETENTS
-        local key = cycler(id, step)
-        if key then state.set_event(cell.name .. ": " .. key, 1.5) end
-      end
-    elseif keystate and keystate.k1 then
-      state.character2[id] = util.clamp(state.get_character2(id) + delta, 0, 1)
-    else
-      -- a voice cell has no single character -- it has the eight-parameter
-      -- sound page instead (§5.5) -- so E2 on one is inert rather than
-      -- quietly storing a number nothing reads.
-      local ch = lexicon.character(id)
-      if ch then
-        -- the *base*, not the effective value: E2 moves the player's setting,
-        -- and whatever weather is riding on top of it rides on top of the new
-        -- one too (§2.8).
-        local v = state.base_character(id, ch.lo, ch.hi)
-        state.character[id] = util.clamp(v + delta * (ch.hi - ch.lo), ch.lo, ch.hi)
-        state.notify_character_change(id)
-      end
-    end
-  elseif n == 3 then
-    local delta = d / 100
-    local f = state.get_focus(id)
-    if f == 0 or #edges == 0 then
-      -- §4.2 E3 with nothing focused is this sound's decay. a voice's four
-      -- sockets are parts of the voice rather than sounds of their own, so
-      -- the gesture on any of them reaches the voice's resonator
-      -- (state.lua's decay_target decides that, not this).
-      local target = state.decay_target(cell)
-      if target then
-        state.decay[target] = util.clamp(state.get_decay(target) + delta, 0, 1)
-        state.notify_decay_change(target)
-      end
-    else
-      local edge = edges[f]
-      if edge then
-        patch.set_gain(edge.id, util.clamp(edge.gain + delta, -1, 1))
-      end
-    end
-  end
-
-  return true
+  -- one cell held: its page, exactly as if it were open.
+  return gridui.page_enc(state.held[#state.held], n, d)
 end
 
 -- rendering -----------------------------------------------------------------
@@ -248,7 +259,7 @@ function gridui.brightness(id, cell)
     -- the one open sound page is worth seeing from across the room. now
     -- also a cable endpoint, so it takes the same degree-of-connection bump
     -- every other endpoint gets once it is patched.
-    local base = (state.voice_edit == id) and 12 or (patch.degree(id) > 0 and 6 or 3)
+    local base = (state.cell_edit == id) and 12 or (patch.degree(id) > 0 and 6 or 3)
     return state.flash_level(id, base)
   elseif cell.type == "O" then
     return patch.degree(id) > 0 and 5 or 1
@@ -260,11 +271,11 @@ function gridui.brightness(id, cell)
     -- §2.7b: the sound-page indicator a voice cell gets, plus a strike
     -- flash on top -- a GVOICE cell has no separate socket to carry that,
     -- so it carries its own.
-    local base = (state.voice_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
+    local base = (state.cell_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
     return state.flash_level(id, base)
   elseif cell.type == "TM" then
     -- §2.3b: same idea as a GVOICE cell's indicator.
-    local base = (state.voice_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
+    local base = (state.cell_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
     return state.flash_level(id, base)
   elseif cell.type == "E" then
     local base = patch.degree(id) > 0 and 5 or 3

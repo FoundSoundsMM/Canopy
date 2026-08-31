@@ -4,18 +4,20 @@
 -- banks of things to do to a pulse on its way between them. every socket is
 -- both an input and an output; a cable is an undirected coupling.
 --
+-- one gesture vocabulary, the same on every cell of every type:
+-- tap a cell: toggle its settings page. tap it again: back to the patch.
+-- hold a cell: glance at that same page until you let go.
+-- hold a cell, E1/E2/E3: pick a row, move it coarse/fine.
+-- K1 + tap a cell: fire it -- strike a voice or a drum, fire an exciter,
+--   pulse a trigger/transform/register/clock, put a sequencer step in or
+--   take it out.
 -- hold a cell, tap another: patch them together.
 -- hold a cell, tap a connected one: unpatch them.
 -- hold two cells together: read/set that edge's gain on E3.
--- tap a voice or a percussion (G) cell: edit its sound. tap it again: back
--- to the patch.
--- K1 + tap a D cell: root it to the clock, or set it wild.
--- K1 + tap an F cell: snap its field to the scale, or set it free.
--- hold a D/R/F/C cell, K1+E2: swap its gait / rule / mode / shape.
 -- E1/E2/E3 with nothing held: the global param page -- E1 picks one of nine
 -- (BPM, Swing, Scatter, Scale, Drops, Decay, Pitch, Rain, Excite), E2/E3
 -- nudge it coarse/fine. K1+E3: master level.
--- K3: close the sound page (nothing else to cycle to now).
+-- K3: close the settings page.
 -- K2: freeze the pulse gaits (Still).
 -- K1+K2 (hold): Regrow -- a seeded patch that already plays.
 -- K1+K3 (hold): Clearing -- cut every cable.
@@ -336,8 +338,8 @@ function key(n, z)
       -- you should never have to remember which voice cell you tapped. with
       -- no page open, K3 has nothing left to do -- the global param page is
       -- always the screen underneath everything else now.
-      if state.voice_edit then
-        state.voice_edit = nil
+      if state.cell_edit then
+        state.cell_edit = nil
       end
     end
   end
@@ -357,32 +359,20 @@ function key(n, z)
   end
 end
 
--- §5.5: E2 is coarse and E3 is fine on the same parameter. eight knobs on two
+-- E2 is coarse and E3 is fine on the same parameter. twelve knobs on two
 -- encoders would otherwise mean either a slow one or an imprecise one, and a
 -- resonator's decay wants both -- swept across two octaves to find the sound,
--- then moved a hair to make it sit.
-local VP_COARSE = 1 / 80
-local VP_FINE = 1 / 500
+-- then moved a hair to make it sit. gridui owns the two step sizes now, since
+-- the held glance and the open page have to move a row by the same amount.
 
 function enc(n, d)
   if gridui.on_norns_enc(n, d, keystate) then return end
 
-  if state.voice_edit then
-    -- §2.7b/§2.3b: a GVOICE cell's or a TM cell's sound page is the same
-    -- shape, just a different PARAMS list.
-    local cell = topology.get(state.voice_edit)
-    local pm = (cell and cell.type == "GVOICE") and gvoice
-               or (cell and cell.type == "TM") and tm
-               or voice
-    if n == 1 then
-      state.vparam_focus = util.clamp((state.vparam_focus or 1) + d,
-                                      1, pm.PARAM_COUNT)
-    else
-      local p = pm.nudge(state.voice_edit, state.vparam_focus or 1,
-                         d * ((n == 2) and VP_COARSE or VP_FINE))
-      state.set_event(p.label .. " " .. p.text(state.voice_edit), 0.5)
-    end
-    return
+  -- the open settings page, whatever type of cell it belongs to. exactly the
+  -- same call the held-cell glance above makes (lib/cellparam.lua hands both
+  -- of them the same page object).
+  if state.cell_edit then
+    if gridui.page_enc(state.cell_edit, n, d) then return end
   end
 
   -- §5.2 the global param page: E1 walks gparam.PARAMS, E2/E3 nudge the one

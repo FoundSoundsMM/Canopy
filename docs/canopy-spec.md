@@ -183,9 +183,12 @@ dphi_i  =  rate_i * dt  +  K * sum_j ( g_ij * sin(2*pi*(phi_j - phi_i)) )
 ```
 
 No cell starts **rooted** to the clock any more — that was Knocker's job by
-default before, and rootedness is now a `K1 + tap` choice on any T cell whose
-current gait supports it (euclidean, figure, metric — still `rooted_ok`
-gaits, just nobody's default).
+default before, and rootedness is now the **Clock** row on a T cell's
+settings page, available on any cell whose current gait supports it
+(euclidean, figure, metric — still `rooted_ok` gaits, just nobody's default;
+the row reads `n/a` on the others). It used to be a `K1 + tap` gesture that
+existed on T and F cells and nowhere else, which is the kind of
+per-type-only gesture the single vocabulary in §4.2 replaced.
 
 **Organic rhythm.** Unchanged: the phase/coupling math is exact and
 calibrated; every triggered strike gets a small parameter wobble on top of
@@ -377,15 +380,24 @@ ever moves either lane is a pulse cabled in.
 
 | Lane | Cells |
 |------|-------|
-| Q4 | (6,7) (7,7) (8,7) (9,7) |
+| Q4 | (7,7) (8,7) (9,7) (10,7) |
 | Q6 | (6,8) (7,8) (8,8) (9,8) (10,8) (11,8) |
 
+Both lanes are centred on the sixteen-column panel, Q4 sitting symmetrically
+inside Q6 — a 4-cell lane starts at column 7 and a 6-cell lane at column 6.
+
 Each of the physical cells in a lane is independently a cable endpoint *and*
-independently tap-toggleable (a plain, unmodified tap flips that step
-active/inactive — a UI toggle, not a cable, `state.step_active`). Tapping is
-unambiguous against the hold/tap cable gesture (which needs an anchor cell
-already held) and against every other tap gesture on the panel (all gated on
-`K1` or on a specific cell type first).
+independently switchable on and off (a UI toggle, not a cable —
+`state.step_active`). Two gestures reach it, and they are the same two that
+reach every other per-cell setting on the panel: `K1` + tap the cell, which
+is the panel-wide "fire this cell" gesture, or the **Step** row on its
+settings page, which is deliberately row one.
+
+A step's three states — empty, armed, and under the playhead — are spread
+across the grid's brightness range rather than bunched at the bottom, so a
+running lane is visibly running; the driver cell also reads a notch above an
+ordinary empty step, since it is the one cell in the lane a cable has to land
+on for the playhead to move at all.
 
 The **last** cell of each lane is the **driver**: a pulse there advances the
 lane's shared playhead by one step and, if the step it lands on is active,

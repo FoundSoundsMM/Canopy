@@ -15,12 +15,12 @@
 --
 --       1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
 --  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
---  2    .   M   .   .   .   F   F   F   N   N   N   .   .   .   M   .
+--  2    .   M   .   M   .   F   F   F   N   N   N   .   M   .   M   .
 --  3    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
 --  4    F   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   H
 --  5    .   F   .   .   .   C   T   T   T   T   C   .   .   .   H   .
---  6    E   E   F   .   .   .   .   .   .   .   .   .   .   H   .   R
---  7    E   M   .   F   .   Q4  Q4  Q4  Q4   .   .   .   H   R   M   R
+--  6    E   .   F   .   .   .   .   .   .   .   .   .   .   H   .   R
+--  7    E   E   .   F   .   .  Q4  Q4  Q4  Q4   .   .   H   .   R   R
 --  8    E   E   E   .   .   Q6  Q6  Q6  Q6  Q6  Q6   .   .   R   R   R
 --
 --   O  output (16)     M  voice (4)        F  grove field / percussion-ping
@@ -69,11 +69,14 @@ end
 -- handlers), the same "every socket is androgynous" principle the panel
 -- already ran on -- just with one socket per voice instead of four.
 
+-- all four sit together on row 2 now, two either side of the six percussion
+-- cells, rather than two up top and two buried among the E/R families in row
+-- 7 -- where the panel read as having two voices, not four.
 local VOICES = {
   {id = "oak",   name = "Oak",   index = 1, root = 55,  decay = 1.2,  struct = 0.55, damp = 1.1, x = 2,  y = 2},
-  {id = "hazel", name = "Hazel", index = 2, root = 220, decay = 0.28, struct = 0.95, damp = 1.3, x = 15, y = 2},
-  {id = "alder", name = "Alder", index = 3, root = 98,  decay = 1.6,  struct = 0.50, damp = 0.8, x = 2,  y = 7},
-  {id = "rowan", name = "Rowan", index = 4, root = 330, decay = 1.8,  struct = 0.75, damp = 0.6, x = 15, y = 7},
+  {id = "hazel", name = "Hazel", index = 2, root = 220, decay = 0.28, struct = 0.95, damp = 1.3, x = 4,  y = 2},
+  {id = "alder", name = "Alder", index = 3, root = 98,  decay = 1.6,  struct = 0.50, damp = 0.8, x = 13, y = 2},
+  {id = "rowan", name = "Rowan", index = 4, root = 330, decay = 1.8,  struct = 0.75, damp = 0.6, x = 15, y = 2},
 }
 
 for _, v in ipairs(VOICES) do
@@ -206,7 +209,7 @@ end
 
 local R_CELLS = {
   {id = "thicket", x = 16, y = 6, rule = "rest"},
-  {id = "tangle",  x = 14, y = 7, rule = "ghost"},
+  {id = "tangle",  x = 15, y = 7, rule = "ghost"},
   {id = "stile",   x = 16, y = 7, rule = "hocket"},
   {id = "sneck",   x = 14, y = 8, rule = "sift"},
   {id = "lych",    x = 15, y = 8, rule = "meet"},
@@ -249,8 +252,8 @@ end
 
 local E_CELLS = {
   {id = "bracken",  x = 1, y = 6, source = "rustle"},
-  {id = "ember",    x = 2, y = 6, source = "crackle"},
   {id = "gorse",    x = 1, y = 7, source = "spiky"},
+  {id = "ember",    x = 2, y = 7, source = "crackle"},
   {id = "windfall", x = 1, y = 8, source = "grain"},
   {id = "mistle",   x = 2, y = 8, source = "chirp"},
   {id = "wisp",     x = 3, y = 8, source = "walk"},
@@ -270,8 +273,10 @@ end
 -- cell in the lane fires that one step directly, independent of the
 -- playhead. see the new lib/sequencer.lua.
 
+-- both lanes are centred on the 16-column panel: a 4-cell lane starts at
+-- column 7, a 6-cell lane at column 6, so Q4 sits symmetrically inside Q6.
 local SEQ_LANES = {
-  {group = "q4", coords = {{6, 7}, {7, 7}, {8, 7}, {9, 7}}},
+  {group = "q4", coords = {{7, 7}, {8, 7}, {9, 7}, {10, 7}}},
   {group = "q6", coords = {{6, 8}, {7, 8}, {8, 8}, {9, 8}, {10, 8}, {11, 8}}},
 }
 

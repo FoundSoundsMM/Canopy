@@ -84,12 +84,31 @@ end
 
 -- read/control surface -------------------------------------------------------
 
+-- three states that have to be told apart across a room, so they are spread
+-- over the whole range rather than bunched at the bottom: an empty step is
+-- barely lit, an armed one clearly lit, and the playhead is unmistakable. the
+-- old base+2 / base+4 spacing put all three between 2 and 8 out of 15, which
+-- is why the lanes did not visibly move.
+sequencer.LVL_OFF = 2
+sequencer.LVL_ON = 8
+sequencer.LVL_HEAD = 15
+sequencer.LVL_HEAD_OFF = 6
+
 function sequencer.level(id, base)
   local cell = cells[id]
   if not cell then return base end
-  local lvl = base
-  if sequencer.is_active(id) then lvl = lvl + 2 end
-  if sequencer.playhead(cell.group) == cell.step then lvl = lvl + 4 end
+  local on = sequencer.is_active(id)
+  local head = (sequencer.playhead(cell.group) == cell.step)
+  local lvl
+  if head then
+    lvl = on and sequencer.LVL_HEAD or sequencer.LVL_HEAD_OFF
+  else
+    lvl = on and sequencer.LVL_ON or sequencer.LVL_OFF
+  end
+  -- the driver cell reads a notch above an ordinary empty step even when
+  -- nothing is in it: it is the one cell in the lane a cable has to land on
+  -- for the playhead to move at all, and an unlit lane gave no clue which.
+  if cell.driver and not head and not on then lvl = lvl + 2 end
   return state.flash_level(id, lvl)
 end
 

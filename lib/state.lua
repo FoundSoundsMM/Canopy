@@ -5,10 +5,14 @@
 
 local state = {}
 
--- §5.5 the sound editor. tapping a voice cell puts its id in here and the
--- screen becomes that voice's eight-parameter page; tapping it again (or K3)
--- clears it and the screen goes back to the global param page.
-state.voice_edit = nil
+-- the open settings page. tapping ANY cell puts its id in here and the screen
+-- becomes that cell's parameter page; tapping it again (or K3) clears it and
+-- the screen goes back to the global param page. it was `voice_edit` and only
+-- voice/GVOICE/TM cells could fill it -- every other type had its settings
+-- spread over modifier gestures instead. now every type has a page
+-- (lib/cellparam.lua) and every type opens it the same way, so the field is
+-- named for what it holds.
+state.cell_edit = nil
 state.vparam_focus = 1
 
 -- §4.1/§5.2 the global param page (nothing held, no voice page open): E1
@@ -41,23 +45,18 @@ state.global = {
 state.held = {}     -- ordered list of currently-held cell ids
 state.held_t = {}   -- id -> util.time() at press
 
--- per-cell UI params, lazily defaulted
-state.focus = {}       -- id -> focused edge index (0 = ALL)
-state.character = {}   -- id -> primary character value (E2), player-set
-state.character2 = {}  -- id -> secondary character value (K1+E2)
-state.decay = {}       -- id -> that sound's decay (E3 when focus == ALL)
-state.gait = {}        -- D id -> gait key (K1+E2 swaps it, §4.2)
-state.rooted = {}      -- D id -> locked to the norns clock? (K1+tap, §2.3)
-state.rule = {}        -- R id -> weave rule key (K1+E2 swaps it, §2.7)
-state.mode = {}        -- F id -> pitch-field mode key (K1+E2 swaps it, §2.6)
-state.snap = {}        -- F id -> quantised to the scale? (K1+tap, §2.6)
-state.vparam = {}      -- voice id -> {key -> 0..1} (§5.5 sound editor)
-state.step_active = {} -- SEQ id -> step on/off, a tap toggle, not a cable
-
-function state.get_focus(id)
-  if state.focus[id] == nil then state.focus[id] = 0 end
-  return state.focus[id]
-end
+-- per-cell UI params, lazily defaulted. every one of these is a named row on
+-- some cell type's settings page now (lib/cellparam.lua) rather than a
+-- modifier gesture, but what they hold and who reads them is unchanged.
+state.character = {}   -- id -> primary character value, player-set
+state.decay = {}       -- id -> that sound's decay
+state.gait = {}        -- D id -> gait key (the Gait row)
+state.rooted = {}      -- D id -> locked to the norns clock? (the Clock row)
+state.rule = {}        -- R id -> weave rule key (the Rule row)
+state.mode = {}        -- F id -> pitch-field mode key (the Mode row)
+state.snap = {}        -- F id -> quantised to the scale? (the Snap row)
+state.vparam = {}      -- voice/GVOICE/TM id -> {key -> 0..1}
+state.step_active = {} -- SEQ id -> step on/off (the Step row, and K1+tap)
 
 -- 0.5 is "whatever this sound's own default is"; the knob is symmetrical
 -- around it in both directions. voice.lua and exciter.lua own the mapping
@@ -95,11 +94,6 @@ end
 -- what the cell actually runs on. every consumer reads through here.
 function state.get_character(id, cell, lo, hi)
   return state.base_character(id, lo, hi)
-end
-
-function state.get_character2(id)
-  if state.character2[id] == nil then state.character2[id] = 0.5 end
-  return state.character2[id]
 end
 
 -- gait/rooted default to topology's per-cell value on first read; the caller
@@ -191,6 +185,13 @@ function state.set_event(text, hold)
   state.last_event = text
   state._event_t = now
   state._event_hold = hold or 0
+end
+
+-- how long ago the current message landed. the global page reads this so a
+-- message that has had its moment gives the line back to the hint rather than
+-- sitting there for the rest of the session looking like live information.
+function state.event_age()
+  return util.time() - state._event_t
 end
 
 -- confirm-hold gestures (Regrow / Clearing), read by screenui for a progress readout

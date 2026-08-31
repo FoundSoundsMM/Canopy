@@ -166,7 +166,7 @@ voice.PARAMS = {
     -- effect on the next event" shape a TM cell's Prob/Drift/Bias rows use.
     -- used to live on the T socket's own character knob; there is no socket
     -- left to carry it, so it moved here.
-    key = "hardness", label = "Hardness", default = 0.5,
+    key = "hardness", label = "Hard", default = 0.5,
     get = vp_get("hardness", 0.5), set = vp_set("hardness"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "hardness", 0.5)) end,
     push = function() end,

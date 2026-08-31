@@ -151,7 +151,7 @@ do
         ok, failures[1])
 
   ok = true
-  M.state.voice_edit = nil
+  M.state.cell_edit = nil
   for _, a in ipairs(ids_of("voice")) do
     local ax, ay = coords(a)
     gridobj.key(ax, ay, 1)
@@ -268,7 +268,7 @@ do
   end
 
   M.state.held = {}
-  M.state.voice_edit = nil
+  M.state.cell_edit = nil
   M.patch.clear()
 
   -- the worst case the patch cap allows: 64 cables, every cell lit, pulses in
@@ -288,10 +288,10 @@ do
   local calls, paint = frame()
   check("the global param page: under 200 commands", calls < 200, calls .. " calls")
 
-  M.state.voice_edit = "oak"
+  M.state.cell_edit = "oak"
   calls, paint = frame()
   check("the sound page: under 200 commands", calls < 200, calls .. " calls")
-  M.state.voice_edit = nil
+  M.state.cell_edit = nil
 
   M.state.held = {"d.hob"}
   calls, paint = frame()

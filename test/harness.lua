@@ -38,7 +38,12 @@ params = {
 -- call) and only for string concatenation -- nothing here touches disk.
 _path = {code = "/home/we/dust/code/"}
 
-screen = setmetatable({}, {__index = function() return function() end end})
+-- screen.text_extents has to return a NUMBER (screenui.lua measures with it
+-- before deciding what fits); everything else on the stub is a no-op. 5px per
+-- character is close enough to norns' variable-width font for the layout
+-- assertions in test/screen.lua to mean something.
+screen = setmetatable({text_extents = function(str) return #tostring(str) * 5 end},
+                      {__index = function() return function() end end})
 grid = {connect = function() return {key = nil, led = function() end, all = function() end,
                                      refresh = function() end} end}
 
@@ -140,7 +145,7 @@ function fresh(seed)
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "heartwood", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
-                      "gparam", "tm", "sequencer"}) do
+                      "gparam", "tm", "sequencer", "cellparam"}) do
     M[n] = wl(n)
   end
   return M

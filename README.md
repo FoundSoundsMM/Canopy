@@ -14,12 +14,12 @@ new step-sequencer lanes. Full detail and rationale in
 ```
      1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
 1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
-2    ·   M   ·   ·   ·   F   F   F   N   N   N   ·   ·   ·   M   ·
+2    ·   M   ·   M   ·   F   F   F   N   N   N   ·   M   ·   M   ·
 3    ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·
 4    F   ·   ·  TM  TM   C   T   T   T   T   C  TM  TM   ·   ·   H
 5    ·   F   ·   ·   ·   C   T   T   T   T   C   ·   ·   ·   H   ·
-6    E   E   F   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   H   ·   R
-7    E   M   ·   F   ·  Q4  Q4  Q4  Q4   ·   ·   ·   H   R   M   R
+6    E   ·   F   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   H   ·   R
+7    E   E   ·   F   ·   ·  Q4  Q4  Q4  Q4   ·   ·   H   ·   R   R
 8    E   E   E   ·   ·  Q6  Q6  Q6  Q6  Q6  Q6   ·   ·   R   R   R
 ```
 
@@ -33,8 +33,11 @@ reach. The shape of what is left is what makes the panel readable.
   gone, along with the always-on mix that used to carry it.
 - **One cable point per voice, not four.** The old T/P/M/O socket cluster is
   gone; each voice (Oak, Hazel, Alder, Rowan) is now a single **M** cell that
-  is simultaneously the tap-to-open-sound-page target and the sole cable
-  endpoint. What a cable does when it lands there is decided by what's at
+  is simultaneously the tap-to-open-settings-page target and the sole cable
+  endpoint. All four sit together on row 2, two either side of the percussion
+  block — they used to be split two-and-two between rows 2 and 7, where the
+  pair down among the exciters and the weave read as scenery and the panel
+  looked like it had two voices on it. What a cable does when it lands there is decided by what's at
   the other end: a pulse always strikes it now (discrete choke is gone —
   there's no socket left to carry the difference); a stream (an exciter or
   the heartwood) always drives its mod path, per the sound page's own new
@@ -56,16 +59,20 @@ reach. The shape of what is left is what makes the panel readable.
   (noise) on the panel instead of **G**.
 - **Two new step-sequencer lanes, Q4 and Q6.** No phase of their own, like a
   Turing Machine — only a pulse cabled in moves them. Every physical cell in
-  a lane is independently tap-toggleable (on/off) and independently
-  cable-able; the *last* cell in a lane is the "driver" — a pulse there
-  advances the lane's shared playhead and fires whichever step it lands on,
-  while a pulse on any other cell in the lane fires that step directly,
-  bypassing the playhead entirely.
+  a lane is independently switchable on and off (`K1`+tap it, or the **Step**
+  row on its page) and independently cable-able; the *last* cell in a lane is
+  the "driver" — a pulse there advances the lane's shared playhead and fires
+  whichever step it lands on, while a pulse on any other cell in the lane
+  fires that step directly, bypassing the playhead entirely. Both lanes are
+  centred on the panel, Q4 sitting symmetrically inside Q6, and the three
+  states a cell can be in — empty, armed, and under the playhead — are spread
+  across the brightness range rather than bunched at the bottom, so a running
+  lane visibly runs.
 - **The weave, heartwood, grove and exciters are all trimmed**, not changed:
   6 weave rules (was 14), a 4-node heartwood chain (was an 8-node ring), 4
   pitch fields (was 8), 6 exciters (was 20). Every weave rule and grove mode
-  not given a dedicated seat is still reachable by `K1+E2` cycling, the same
-  pattern the panel has used since it was first trimmed at build phase 6c.
+  not given a dedicated seat is still reachable from the **Rule** / **Mode**
+  row on that cell's settings page.
 
 Everything from build phases 1–7 not mentioned above — the gait bank, the
 Kuramoto coupling, Swing/Scatter, Regrow (now also wiring an Output cable per
@@ -88,29 +95,36 @@ or copy this repo to `~/dust/code/Canopy` by hand. Then select
 
 ## Controls
 
-- Hold a cell, tap another: patch them together (tap again to unpatch). Every
-  cell on the panel is a legal endpoint now, including a voice.
-- Hold two cells together: `E3` sets that edge's gain.
-- Hold a cell + `K1`, tap another: one-way cable.
-- Hold a cell + `K2`+`K3`: sever every cable at that cell.
-- Hold a cell: `E1` selects the focused cable, `E2` is that cell's one
-  character parameter, `E3` is the focused cable's gain — or, with no cable
-  focused, that sound's decay: a voice's ring time in seconds, or an
-  exciter's envelopes as a ratio. A voice, a percussion cell and a Turing
-  Machine cell have no single character knob — they have the sound page
-  instead.
-- Tap a **voice**, **percussion** or **Turing Machine** cell: open its sound
-  page. `E1` picks a parameter, `E2`/`E3` move it coarsely and finely. Tap
-  the cell again (or press `K3`) to go back. Holding the cell shows the same
-  page without taking the encoders off the patch.
-- Tap a **Q4/Q6 sequencer** cell (nothing else held): toggle that step on or
-  off.
-- Hold a **T**/**R**/**F** cell + `K1`, turn `E2`: swap its gait / rule /
-  mode.
-- `K1` + tap a T cell (nothing else held): root it to the norns clock, or
-  set it wild — euclidean, figure and metric are the gaits with something to
-  root to. Same gesture on an F cell snaps its field to the scale, or sets
-  it free.
+One gesture vocabulary, identical on every cell of every type. Nothing on the
+panel has a gesture that only it responds to any more.
+
+| gesture | what it does |
+| --- | --- |
+| **tap** a cell | toggle its settings page open / closed |
+| **hold** a cell | glance at that same page, until you let go |
+| **hold** a cell, `E1` / `E2` / `E3` | pick a row, move it coarse / fine |
+| `K1` + **tap** a cell | fire it |
+| **hold** one cell, **tap** another | cable them (tap again to unpatch) |
+| **hold** one + `K1`, **tap** another | one-way cable |
+| **hold two** cells | `E3` sets that cable's gain |
+| **hold** a cell + `K2`+`K3` | sever every cable at that cell |
+
+- **The settings page.** Every cell type has one, and it is the same object
+  every time: a list of named rows, `E1` to pick one, `E2`/`E3` to move it
+  coarsely and finely. It is the same page whether you tapped it open or are
+  just holding the cell — holding is a glance that borrows the encoders and
+  gives them back, tapping latches it (press `K3`, or tap again, to close).
+  A list longer than ten rows pages rather than crowding; the header says
+  which page you are on. What used to be a modifier gesture is a row on the
+  page now: a T cell's **Gait** and **Clock** (rooted / wild), an R cell's
+  **Rule**, an F cell's **Mode** and **Snap**, a sequencer step's **Step**,
+  an E cell's **Decay**.
+- **`K1` + tap fires the cell**, whatever it is: a voice or a percussion cell
+  strikes, an exciter fires one grain, a T / R / TM / C cell sends one pulse
+  out of its own door, and a Q4/Q6 cell puts its step in or takes it out.
+  This is how you audition a voice without patching anything — and if nothing
+  it makes can reach an Output cell, directly or down the chain, it says
+  **no output cable** rather than leaving you wondering.
 - Nothing held: `E1` picks one of nine global params (BPM, Swing, Scatter,
   Scale, Drops, Decay, Pitch, Rain, Excite), `E2`/`E3` nudge it coarse/
   fine. `K1`+`E3` is the master level; `K2` toggles Still.
@@ -144,8 +158,10 @@ lib/
   patch.lua                 the cable graph: add/remove/trim, serialisation
   quantise.lua              the groove: Swing/Scatter place a gait's emission
   state.lua                 shared runtime UI state
-  gridui.lua                grid render + hold/tap state machine
-  screenui.lua              global param / cell / edge / voice views
+  gridui.lua                grid render + the one gesture vocabulary
+  cellparam.lua             a settings page for every cell type that did
+                             not already have one (T, R, F, E, H, C, Q, Out)
+  screenui.lua              the global page, the cell page, the edge view
   dispatch.lua              §6 type-interaction matrix: pulse events
                              (-> voice, GVOICE, E, F, H) and the continuous
                              patch matrix (E<->E, E->voice, E<->H, H<->H,
@@ -208,12 +224,25 @@ to actually render audio.
   the master clock, Ratio changes take effect, it never reacts to an
   incoming pulse (a pure source, same as Climate always was), and it
   freezes under Still.
-- `sequencer.lua` — Q4/Q6 lane registration and driver flags, tap-toggling a
+- `sequencer.lua` — Q4/Q6 lane registration and driver flags, toggling a
   step affects only that step, a pulse on a non-driver step fires it
   directly regardless of the playhead, a pulse on the driver advances the
   playhead and fires whichever step it lands on only if that step is
   active, and a SEQ↔SEQ cable loop stays bounded the same way a TM↔TM one
   does.
+- `screen.lua` — nothing on the 128x64 panel may overlap anything else. A
+  recording screen stub gives every draw a bounding box, and every view the
+  script can be in — the global page, every row of every cell's page held and
+  open, a heavily cabled cell, every type pair on the edge view — is checked
+  for collisions and for running off the panel. This is the test the two
+  overlap bugs (a 2px bar under an 8px row, and a twelve-row list wrapping
+  back over itself on a ten-row page) would have failed.
+- `gridui.lua` — the panel is key-for-key what the sketch it was drawn from
+  says, all four voices are on row 2, both sequencer lanes are centred; a tap
+  opens and closes the settings page on every cell type; `K1`+tap strikes a
+  voice or a drum, grains an exciter, pulses a trigger and toggles a
+  sequencer step, and warns when a voice has no path to an Output; the
+  hold/tap cable gesture and its one-way variant are unharmed by either.
 - `groove.lua` — the Swing/Scatter groove: divisions, lock, Swing ramping in
   and landing off-beats late without moving the grid, bursts triggered on the
   beat, Scatter letting go independently of Swing, and the grid following the
