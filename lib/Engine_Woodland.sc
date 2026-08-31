@@ -321,7 +321,7 @@ Engine_Woodland : CroneEngine {
 			var genv = EnvGen.ar(Env.perc(0.001, (0.04 + (c * 0.08)) * decay), trig);
 			var base = 900 + (c * 3000);
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
-			var sig = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.3) * genv * 2;
+			var sig = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.3) * genv;
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
@@ -371,7 +371,7 @@ Engine_Woodland : CroneEngine {
 			var tail = Decay2.ar(trig, 0.001, (0.15 + (c * 0.3)) * decay) * PinkNoise.ar(1);
 			var base = 2000;
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
-			var sig = BPF.ar(tail, base * (1 + fm), 0.6) * 3;
+			var sig = BPF.ar(tail, base * (1 + fm), 0.6);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
@@ -426,7 +426,7 @@ Engine_Woodland : CroneEngine {
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var trig = Dust.ar(3 + (c * 20));
 			var env = EnvGen.ar(Env.perc(0.0002, (0.002 + (c * 0.004)) * decay), trig);
-			var sig = HPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000)) * env * 3;
+			var sig = HPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000)) * env;
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
@@ -439,7 +439,7 @@ Engine_Woodland : CroneEngine {
 			var sweep = LFNoise1.kr(2 + (c * 10)).range(300, 1400 + (c * 3000));
 			var fm = SinOsc.ar(sweep.max(20) * fmRatio) * fmDepth;
 			var band = BPF.ar(BrownNoise.ar(1), (sweep * (1 + fm)).clip(20, 18000), 0.4);
-			var sig = BRF.ar(band, (sweep * 2.3).clip(20, 18000), 0.5) * 2.5;
+			var sig = BRF.ar(band, (sweep * 2.3).clip(20, 18000), 0.5);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
@@ -453,7 +453,7 @@ Engine_Woodland : CroneEngine {
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var trig = Dust.ar(200 + (c * 1800));
 			var env = Decay2.ar(trig, 0.0002, (0.003 + (c * 0.004)) * decay);
-			var sig = HPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000)) * env * 2.5;
+			var sig = HPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000)) * env;
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
@@ -468,7 +468,7 @@ Engine_Woodland : CroneEngine {
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var sig = LPF.ar(
 				RLPF.ar(BrownNoise.ar(1), (base * (1 + fm)).clip(20, 2000), 0.18),
-				400) * 3;
+				400);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
@@ -517,7 +517,7 @@ Engine_Woodland : CroneEngine {
 			// control-rate LFPulse here would be taking an ar input.
 			var am = Lag.ar(LFPulse.ar(20 + (c * 70), 0, 0.4), 0.002);
 			var sig = BPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000), 0.15)
-				* am * 3;
+				* am;
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
@@ -532,7 +532,7 @@ Engine_Woodland : CroneEngine {
 			var trig = Dust.ar(30 + (c * 180));
 			var env = Decay2.ar(trig, 0.0005, (0.010 + (c * 0.02)) * decay);
 			var sig = BPF.ar(WhiteNoise.ar(1), (base * (1 + fm)).clip(20, 18000), 0.4)
-				* env * 3;
+				* env;
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
@@ -546,8 +546,8 @@ Engine_Woodland : CroneEngine {
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var f1 = (base * (1 + fm)).clip(20, 18000);
 			var air = HPF.ar(PinkNoise.ar(1), 200);
-			var sig = (BPF.ar(air, f1, 0.25) * 2.5)
-				+ (BPF.ar(air, (f1 * 2.6).clip(20, 18000), 0.3) * 1.2);
+			var sig = (BPF.ar(air, f1, 0.25) * 0.8)
+				+ (BPF.ar(air, (f1 * 2.6).clip(20, 18000), 0.3) * 0.4);
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
