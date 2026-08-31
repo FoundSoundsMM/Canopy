@@ -12,10 +12,10 @@
 --       1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
 --  1    .   T   .   S   S   S   S   S   S   S   S   S   S   .   T   .
 --  2    P   V   M   R   R   R   R   R   R   R   R   R   R   P   V   M
---  3    .   O   .   F   H   .   .   .   .   .   .   H   F   .   O   .
+--  3    .   O   .   F   H   .   .  TM  TM   .   .   H   F   .   O   .
 --  4    C   .   C   F   H   .   D   D   D   D   .   H   F   C   .   C
 --  5    C   .   C   F   H   .   D   D   D   D   .   H   F   C   .   C
---  6    .   T   .   F   H   .   .   .   .   .   .   H   F   .   T   .
+--  6    .   T   .   F   H   .   .  TM  TM   .   .   H   F   .   T   .
 --  7    P   V   M   R   R   G   G   G   G   G   G   R   R   P   V   M
 --  8    .   O   .   S   S   S   S   S   S   S   S   S   S   .   O   .
 --
@@ -25,6 +25,8 @@
 --   M  mod in           a stream bends it; a pulse chokes it
 --   O  out              its audio tap, and a pulse every time it is struck
 --   D  pulse-makers (8) free-running gaits (§2.3)
+--   TM Turing Machines (4) 8-bit shift-register sequencers, triggered only --
+--                        no gait of their own (§2.3b)
 --   R  the weave (14)   pulse transforms -- what happens *between* cells
 --   G  percussion (6)   small drum voices, in the middle of the bottom weave
 --                        row -- a cell in its own right, not a socket (§2.7b)
@@ -121,6 +123,29 @@ for _, d in ipairs(D_CELLS) do
     counterpart = "d." .. d.counterpart,
     rooted = (d.gait == "metric" or d.gait == "euclidean" or d.gait == "figure"),
   })
+end
+
+-- 2.3b Turing Machine cells -- TM (4) ---------------------------------------
+-- four independent 8-bit shift-register sequencers, akin to the Music Thing
+-- Modular Turing Machine with its Pulses/Voltages expanders each collapsed
+-- onto one cell (lib/tm.lua). they occupy the four coordinates the original
+-- map left dark directly above Hob and Grim and directly below Spriggan and
+-- Gabriel -- still inside the sealed D-core box, but not pulse-makers
+-- themselves: a TM cell has no phase and no gait of its own, and does
+-- nothing at all until a pulse is cabled into it. counterparts are the
+-- 180-degree rotation, same as everywhere else on the panel.
+
+local TM_CELLS = {
+  {id = "padfoot",    x = 8, y = 3, counterpart = "tatterfoal"},
+  {id = "barghest",   x = 9, y = 3, counterpart = "puck"},
+  {id = "puck",       x = 8, y = 6, counterpart = "barghest"},
+  {id = "tatterfoal", x = 9, y = 6, counterpart = "padfoot"},
+}
+
+for _, t in ipairs(TM_CELLS) do
+  local id = "tm." .. t.id
+  local name = t.id:sub(1, 1):upper() .. t.id:sub(2)
+  reg("TM", id, name, {{t.x, t.y}}, {counterpart = "tm." .. t.counterpart})
 end
 
 -- 2.7 the weave -- R (14) --------------------------------------------------
@@ -372,7 +397,7 @@ end
 -- patch cannot recurse, which rambler.lua and heartwood.lua both need to know
 -- about. it lives here because it is a fact about the map, and putting it in
 -- rambler would mean heartwood reaching into the scheduler mid-load.
-topology.PULSE_TYPES = {D = true, R = true}
+topology.PULSE_TYPES = {D = true, R = true, TM = true}
 
 function topology.is_pulse_cell(cell)
   return (cell and topology.PULSE_TYPES[cell.type]) and true or false

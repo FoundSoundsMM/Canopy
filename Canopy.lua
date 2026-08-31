@@ -78,6 +78,7 @@ local screenui = wl("screenui")
 local bridge   = wl("bridge")
 local voice    = wl("voice")
 local gvoice   = wl("gvoice")
+local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
 local gparam   = wl("gparam")
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
@@ -369,9 +370,12 @@ function enc(n, d)
   if gridui.on_norns_enc(n, d, keystate) then return end
 
   if state.voice_edit then
-    -- §2.7b: a G cell's sound page is the same shape, a smaller PARAMS list.
+    -- §2.7b/§2.3b: a G cell's or a TM cell's sound page is the same shape,
+    -- just a different PARAMS list.
     local cell = topology.get(state.voice_edit)
-    local pm = (cell and cell.type == "G") and gvoice or voice
+    local pm = (cell and cell.type == "G") and gvoice
+               or (cell and cell.type == "TM") and tm
+               or voice
     if n == 1 then
       state.vparam_focus = util.clamp((state.vparam_focus or 1) + d,
                                       1, pm.PARAM_COUNT)

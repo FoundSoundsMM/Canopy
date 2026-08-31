@@ -39,6 +39,7 @@ local grove     = wl("grove")
 local quantise  = wl("quantise")
 local weave     = wl("weave")
 local climate   = wl("climate")
+local tm        = wl("tm")
 
 local rambler = {}
 
@@ -488,6 +489,11 @@ local function deliver(msg, now)
 
   if cell.type == "R" then
     weave.pulse_in(msg.id, msg.w, msg.src, now)
+    return
+  end
+
+  if cell.type == "TM" then
+    tm.pulse_in(msg.id, msg.w, msg.src, now)
     return
   end
 

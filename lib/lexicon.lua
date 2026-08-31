@@ -29,6 +29,12 @@ local DESC = {
   ["d.gabriel"]  = "drifter gait -- fast, free, strongest coupling constant.",
   ["d.hunt"]     = "accelerando gait -- rate ramps across a cycle then resets.",
 
+  -- Turing Machine cells / TM (§2.3b)
+  ["tm.padfoot"]    = "8-bit shift register -- triggered only. tap it: full sound page.",
+  ["tm.barghest"]   = "8-bit shift register -- triggered only. tap it: full sound page.",
+  ["tm.puck"]       = "8-bit shift register -- triggered only. tap it: full sound page.",
+  ["tm.tatterfoal"] = "8-bit shift register -- triggered only. tap it: full sound page.",
+
   -- the weave / R (§2.7)
   ["r.trod"]    = "divide -- lets every Nth pulse through.",
   ["r.ginnel"]  = "mult -- one pulse in, a ratchet of N out.",

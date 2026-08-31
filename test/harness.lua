@@ -144,7 +144,7 @@ function fresh(seed)
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "heartwood", "grove", "climate", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
-                      "gparam"}) do
+                      "gparam", "tm"}) do
     M[n] = wl(n)
   end
   return M

@@ -46,16 +46,16 @@ Coordinates are `(x, y)`, x = column 1..16, y = row 1..8, matching `g.key(x,y,z)
       1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
  1    ·   T   ·   S   S   S   S   S   S   S   S   S   S   ·   T   ·
  2    P   V   M   R   R   R   R   R   R   R   R   R   R   P   V   M
- 3    ·   O   ·   F   H   ·   ·   ·   ·   ·   ·   H   F   ·   O   ·
+ 3    ·   O   ·   F   H   ·   ·  TM  TM   ·   ·   H   F   ·   O   ·
  4    C   ·   C   F   H   ·   D   D   D   D   ·   H   F   C   ·   C
  5    C   ·   C   F   H   ·   D   D   D   D   ·   H   F   C   ·   C
- 6    ·   T   ·   F   H   ·   ·   ·   ·   ·   ·   H   F   ·   T   ·
+ 6    ·   T   ·   F   H   ·   ·  TM  TM   ·   ·   H   F   ·   T   ·
  7    P   V   M   R   R   G   G   G   G   G   G   R   R   P   V   M
  8    ·   O   ·   S   S   S   S   S   S   S   S   S   S   ·   O   ·
 
  V = voice        T = trigger in   P = pitch in   M = mod in   O = out
  D = pulse cell   R = weave cell   G = percussion  S = exciter
- H = heartwood    F = pitch field  C = climate
+ H = heartwood    F = pitch field  C = climate     TM = Turing Machine
  · = unregistered coordinate, dark and inert
 ```
 
@@ -77,8 +77,8 @@ does nothing. Three of them do real work:
   and right edges break into a voice cluster, two climate cells and a voice
   cluster rather than one continuous column.
 
-**Cell counts.** 4 voices + 16 sockets + 8 D + 14 R + 6 G + 20 S + 8 H + 8 F
-+ 8 C = 92 live cells; 36 dark.
+**Cell counts.** 4 voices + 16 sockets + 8 D + 4 TM + 14 R + 6 G + 20 S + 8 H
++ 8 F + 8 C = 96 live cells; 32 dark.
 
 ### 2.1 Voices (4)
 
@@ -191,6 +191,76 @@ quite the same the way a real mallet never repeats itself either. Timing
 itself is untouched — the wobble is on *what* a pulse sounds like, not
 *when* it lands. Timing that is deliberately humanized lives in the weave
 (Blur, Flam, Ghost, Swing) where it is a patchable choice.
+
+### 2.3b Turing Machine cells — TM (4)
+
+Four independent 8-bit shift-register sequencers, akin to the Music Thing
+Modular Turing Machine with its Pulses and Voltages expanders each collapsed
+onto one cell. They sit inside the sealed D-core box, on the four coordinates
+the original map left dark: directly above Hob and Grim, directly below
+Spriggan and Gabriel.
+
+| Cell   | Name       | Counterpart |
+|--------|------------|-------------|
+| (8,3)  | Padfoot    | Tatterfoal  |
+| (9,3)  | Barghest   | Puck        |
+| (8,6)  | Puck       | Barghest    |
+| (9,6)  | Tatterfoal | Padfoot     |
+
+**Unlike a D cell, a TM cell has no phase and no gait of its own.** It never
+runs on its own clock — the only thing that ever moves its register is a
+pulse cabled into it. That is the point: it is meant to be clocked, the way
+the hardware it is named after always is, and it is why the four of them sit
+inside the same box the free-running gaits do without being gaits themselves.
+A TM cell is a pulse cell in the same sense an R cell is (§7.2's "one door
+for every pulse", and the one-tick deferral on pulse-cell-to-pulse-cell
+traffic that makes a cycle through it safe by construction).
+
+**Each incoming pulse is one clock edge**, and does three things:
+
+1. **Shifts the register.** The bit about to fall off the far end is either
+   kept — with its own small chance of flipping anyway (**Drift**, the "the
+   knob past noon still surprises you" character the real module is known
+   for) — or thrown away for a fresh, **Bias**-skewed coin flip. **Prob**
+   decides which: 0 is fully random every step, 1 never lets go of the loop
+   it started with.
+2. **Updates its pitch.** Some number of the register's bits (**Bits**) are
+   summed, binary-weighted, into an offset the same shape as a grove.lua
+   field's degree (§2.6) — scaled by **Range** and snapped to the same minor
+   pentatonic — and pushed to any voice cabled to this cell's P socket, summed
+   in on top of whatever fields are also cabled there rather than blended into
+   their own average: a shift register and a wandering field are different
+   enough instruments to want kept separate, and the P socket's own depth
+   knob scales both alike.
+3. **Answers, maybe.** If the register's **Tap** bit (one of the eight,
+   picked by the knob — the Pulses expander's eight gate outputs collapsed
+   onto the one you choose) reads high, the cell answers with a pulse of its
+   own, weighted by **Level**, exactly the way a G cell or an R cell answers
+   (§2.7b, §2.7) — excluding the cable the triggering pulse arrived on, the
+   same rule every transform on the panel follows.
+
+**Eight parameters, one sound page** (same shape as a voice's or a G cell's,
+§5.5/§2.7b — tap the cell to open it, hold it to peek):
+
+| Row | What it is | Range |
+|-----|-----------|-------|
+| Length | steps in the register's loop | 2 .. 16 |
+| Prob | chance a step keeps the loop rather than drawing fresh | 0 (random) .. 1 (locked) |
+| Drift | chance a kept bit flips anyway | 0 .. 1 |
+| Bias | skews a fresh bit toward 0 or 1 | −1 .. +1 |
+| Range | how far the pitch output roams | 25 cents .. 2 octaves |
+| Bits | how many register bits are summed into the pitch | 1 .. 8 |
+| Tap | which bit gates the outgoing pulse | 1 .. 8 |
+| Level | the outgoing pulse's own weight | 0 .. 1 |
+
+Length, Prob, Drift, Bias and Tap only take effect on the register's next
+step; Range and Bits push the cabled voice's pitch immediately, the same live
+feel Range already has on an F cell (§2.6).
+
+A TM cell has no sound of its own — E3-with-nothing-focused is inert on one,
+same as a D, R, H, F or C cell — and no single E2 character either: like a
+voice or a G cell, its eight parameters live on the sound page instead, so a
+plain hold-and-turn on the grid has nothing to move but a cable's own gain.
 
 ### 2.4 Exciter cells — S (20)
 
@@ -803,6 +873,7 @@ four sockets are *not* interchangeable.
 | **H** cell | enter the lattice and diffuse |
 | **C** cell | nothing, deliberately — see §2.8 |
 | **G** cell | strike the drum directly (same shape as T, above), subject to the same 28 ms refractory — see §2.7b |
+| **TM** cell | clocks the shift register one step; it answers with a pulse of its own if the Tap bit reads high afterward — see §2.3b |
 
 **Streams** (live SC synths for as long as the cable exists):
 
@@ -820,6 +891,7 @@ stream:
 | **F → P socket** | the field tunes that voice; P's knob is the depth, and negative gain inverts the contour |
 | **F → S** | the exciter's Colour rides the field's line |
 | **F ↔ F** | the two fields pull together (apart, at negative gain) |
+| **TM → P socket** | the register's own pitch tunes that voice, summed alongside whatever fields are also cabled there — see §2.3b |
 | **C → anything with a knob** | the weather walks that cell's own knob, bipolar around whatever the player set |
 | **C ↔ C** | one weather sets how fast the other turns |
 
@@ -832,6 +904,15 @@ Notes on the awkward pairs:
   another, bounded by the refractory instead. Do not prevent either loop.
 - **Two O sockets cabled together** is a patch with no meaning; nothing gives
   it one.
+- **A TM cell cabled straight to a P socket carries both halves of §2.3b at
+  once**, and neither shadows the other: the pulse half (this table, above)
+  fires whenever the TM cell's own answering pulse happens to be routed
+  there, flashing the socket and stepping any *fields* also cabled to it,
+  exactly as any other pulse source would; the number half (the row above)
+  is a live, always-on contribution to that voice's tuning, read fresh every
+  time the voice retunes for any reason at all, not only when the TM cell's
+  own pulse lands. One cable, both meanings — the same androgynous-socket
+  idea §1 opens with, just with two different things arriving down it.
 - **D↔D at negative gain** produces anti-phase locking — the most reliable way
   to get a stable interlocking two-part rhythm.
 - **R↔R** is transforms in series, and the chain *is* the pattern. It is
@@ -865,6 +946,8 @@ Canopy/
     rambler.lua             -- D-cell gaits, the phase-coupling scheduler, and
                                the shared pulse bus everything emits through
     weave.lua               -- the fourteen R-cell pulse transforms
+    tm.lua                  -- the four TM-cell shift-register sequencers +
+                               their eight-parameter page (§2.3b)
     climate.lua             -- the eight C-cell slow modulators
     quantise.lua            -- the groove: Swing/Scatter place a gait's emission
     exciter.lua             -- S-cell control layer (audio side lives in SC)
@@ -996,7 +1079,9 @@ end
 
 Graph format: a flat list of `{a_id, b_id, gain, oneway}` plus per-cell
 character values, per-cell rule choices (gait / rule / mode / shape, and the
-rooted and snap flags), and the nine sound-page parameters per voice. Cell ids
+rooted and snap flags), and the sound-page parameters per voice, G cell and TM
+cell (nine, six and eight respectively — `state.vparam` already stores all
+three the same way, so this is one save loop, not three). Cell ids
 are stable strings (`"oak.trig"`, `"d.knocker"`, `"r.sedge"`, `"h.warren"`,
 `"f.cuckoo"`, `"c.moon"`) — never coordinates — which is what let the whole
 panel be re-cut at phase 6 without the format changing. The climate's own
@@ -1204,6 +1289,13 @@ Each phase ends in something testable on the device.
    still reachable by `K1 + E2`. Out of build order for the same reason as
    5b/5c/6b: a control-surface and instrument-shape change, not something
    that depended on 7/8/9 existing first.
+6d. **The Turing Machines.** Four of the D core's dark coordinates — directly
+   above Hob and Grim, directly below Spriggan and Gabriel — become TM cells
+   (§2.3b): 8-bit shift-register sequencers, triggered only, each with its
+   own eight-parameter sound page. Out of build order for the same reason as
+   6c: an instrument-shape addition, not something that depended on 7/8/9
+   existing first, and it lands after 6c because it follows the same
+   "small cell, own sound page, own file" shape 6c's G cells set.
 8. **Life.** Metering back-channel → grid and screen animation. Narrower than
    it was: see §7.4.
 9. **Persistence and polish.** PARAMS, PSET + graph save/load, clock sync,

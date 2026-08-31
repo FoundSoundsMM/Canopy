@@ -24,6 +24,7 @@ local grove     = wl("grove")
 local climate   = wl("climate")
 local voice     = wl("voice")
 local gvoice    = wl("gvoice")
+local tm        = wl("tm")
 local gparam    = wl("gparam")
 local exciter   = wl("exciter")
 
@@ -98,9 +99,9 @@ end
 
 function screenui.draw_voice(id, live)
   local cell = topology.get(id)
-  -- §2.7b: a G cell's sound page is the same shape as a voice's (draw_cell
-  -- routes both here), just a different, smaller PARAMS list.
-  local pm = (cell.type == "G") and gvoice or voice
+  -- §2.7b/§2.3b: a G cell's or a TM cell's sound page is the same shape as a
+  -- voice's (draw_cell routes all three here), just a different PARAMS list.
+  local pm = (cell.type == "G") and gvoice or (cell.type == "TM") and tm or voice
   screen.level(15)
   screen.move(2, 8)
   screen.text(cell.name)
@@ -147,7 +148,7 @@ end
 
 function screenui.draw_cell(id)
   local cell = topology.get(id)
-  if cell.type == "voice" or cell.type == "G" then
+  if cell.type == "voice" or cell.type == "G" or cell.type == "TM" then
     screenui.draw_voice(id, state.voice_edit == id)
     return
   end
@@ -364,10 +365,24 @@ local INTERACTION_DESC = {
   ["F|G"] = "the drum's answering pulse steps the field",
   ["C|G"] = "no meaning: a G cell has no single knob for the weather to walk",
   ["G|G"] = "one drum's answering pulse strikes the next",
+  -- §2.3b: a TM cell is a pulse cell like D and R, but has no gait of its own
+  -- -- every pulse that reaches it is one clock edge for its shift register,
+  -- and its own answering pulse is gated by whichever bit its Tap knob picks.
+  -- on a P socket it is also a pitch source in its own right, summed
+  -- alongside whatever fields are cabled there (§2.6).
+  ["node|TM"] = "pulse strikes / chokes / re-rolls, by socket; on P it also feeds the register's own pitch",
+  ["D|TM"] = "the pulse clocks the register, which answers with a pulse of its own",
+  ["R|TM"] = "the transformed pulse clocks the register, which answers in turn",
+  ["S|TM"] = "the register's answering pulse fires the grain",
+  ["H|TM"] = "a pulse out of the lattice clocks the register",
+  ["F|TM"] = "no meaning: TM takes a trigger, not a field -- cable it to a P socket for pitch instead",
+  ["C|TM"] = "no meaning: a TM cell has no single knob for the weather to walk",
+  ["TM|G"] = "the register's answering pulse strikes the drum, which answers in turn",
+  ["TM|TM"] = "each register's answering pulse clocks the other -- a mutual, evolving loop",
 }
 
 local function interaction_text(ta, tb)
-  local order = {node = 1, D = 2, R = 3, S = 4, H = 5, F = 6, C = 7}
+  local order = {node = 1, D = 2, R = 3, S = 4, H = 5, F = 6, C = 7, TM = 8}
   local a, b = ta, tb
   if (order[a] or 9) > (order[b] or 9) then a, b = b, a end
   return INTERACTION_DESC[a .. "|" .. b] or "no direct interaction defined"

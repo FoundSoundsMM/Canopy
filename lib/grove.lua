@@ -409,13 +409,19 @@ function grove.offset(voice_id)
 end
 
 -- root, plus the sound editor's Tune (§5.5), plus whatever the fields are
--- doing, plus the global Pitch macro, plus whatever per-strike detune the
--- caller passes in -- then, if Scale has selected one, quantised as a whole.
--- voice.lua owns Tune; this is the only place all of them are ever summed.
+-- doing, plus whatever the TM cells (§2.3b, lib/tm.lua) cabled to the same P
+-- socket are doing -- summed in on top of the fields' own average rather than
+-- blended into it, because a shift register and a wandering field are
+-- different enough instruments to want kept separate, and scaled by the same
+-- P-socket depth knob the fields answer to -- plus the global Pitch macro,
+-- plus whatever per-strike detune the caller passes in -- then, if Scale has
+-- selected one, quantised as a whole. voice.lua owns Tune; this is the only
+-- place all of them are ever summed.
 function grove.hz(voice_id, extra_semitones)
   local cell = topology.get(voice_id)
   if not cell or not cell.root then return nil end
-  local st = grove.offset(voice_id) + wl("voice").tune_semitones(voice_id)
+  local st = grove.offset(voice_id) + wl("tm").offset(voice_id) * grove.depth(voice_id)
+             + wl("voice").tune_semitones(voice_id)
              + (state.global.pitch_offset or 0) + (extra_semitones or 0)
   st = grove.quantise_semitones(st)
   return cell.root * (2 ^ (st / 12))
