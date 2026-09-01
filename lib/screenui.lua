@@ -65,6 +65,7 @@ local state      = wl("state")
 local gparam     = wl("gparam")
 local mixer      = wl("mixer")
 local cellparam  = wl("cellparam")
+local lexicon    = wl("lexicon")
 
 local screenui = {}
 
@@ -463,6 +464,32 @@ local function cell_tag(cell)
   return letter
 end
 
+-- "what does this cell do", under the grid rather than instead of it: it
+-- only fits when the page on screen right now leaves its whole second row
+-- empty (four rows or fewer -- D, R, F, E, H, C, O, and a voice's second
+-- page all qualify; TM's eight and a voice's first page do not, and a
+-- GVOICE/GUST page's six leaves it only half empty, so those stay quiet
+-- rather than crowd two free columns). toggle_page (gridui.lua) resets
+-- vparam_focus to 1 on every tap, so this is exactly the state a freshly
+-- opened cell lands on -- it reads once, up front, and gives way the moment
+-- E1 walks onto a page with less room.
+local DESC_Y0 = 44
+local DESC_LINE_H = 9
+local DESC_MAX_LINES = 3
+local DESC_WRAP_CHARS = 30
+
+local function draw_cell_desc(id)
+  local text = lexicon.describe(id)
+  if not text or text == "" then return end
+  screen.level(6)
+  local lines = wrap(text, DESC_WRAP_CHARS)
+  for i, line in ipairs(lines) do
+    if i > DESC_MAX_LINES then break end
+    screen.move(2, DESC_Y0 + (i - 1) * DESC_LINE_H)
+    screen.text(fit(line, 124))
+  end
+end
+
 -- there is no `live` argument any more. the old header said "M · open" for a
 -- latched page and just "M" for a held glance; the tag chip has room for the
 -- letter and nothing else, and the panel now says which it is far more
@@ -490,6 +517,13 @@ function screenui.draw_cell(id)
     draw_param_grid(page_mod.PARAMS, focus,
                     function(p) return p.text(id) end,
                     function(p) return p.get(id) end)
+
+    local page = screenui.page_of(focus)
+    local first = (page - 1) * PL_PER_PAGE + 1
+    local used = math.max(0, math.min(PL_PER_PAGE, count - first + 1))
+    if used <= PL_COLS then
+      draw_cell_desc(id)
+    end
   end
 end
 

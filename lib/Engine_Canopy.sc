@@ -181,6 +181,18 @@ Engine_Canopy : CroneEngine {
 		gustBus = Bus.audio(server, 2);
 		gustSpaceBus = Bus.audio(server, 2);
 
+		// ambBufs/ambSynths hold one buffer and one \wl_amb synth per loop,
+		// filled in as amb_load's async reads land; ambVol is each loop's
+		// last-set fader value so a synth started after amb_volume already
+		// moved the knob comes up at the right level instead of 0. all three
+		// have to exist as arrays before amb_load/amb_volume can index into
+		// them -- without this, `ambSynths[i].notNil` and `ambVol[i] = ...`
+		// were both sent to nil and silently dropped the whole command, so
+		// no loop's synth was ever created no matter how far its fader moved.
+		ambBufs = Array.newClear(nAmb);
+		ambSynths = Array.newClear(nAmb);
+		ambVol = Array.fill(nAmb, { 0 });
+
 		SynthDef(\woodland_voice, {
 			arg tapOut=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
 				freq=110, damp=0.8, bright=0.5, drive=0.2, structure=0.5,

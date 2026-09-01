@@ -32,14 +32,16 @@ do
   -- what a cold load of the real Canopy.lua actually pulls in. an exact list
   -- rather than a count, because a count hides exactly the mistake it is
   -- there to catch: mixer.lua arriving and lexicon.lua dropping out of the
-  -- load (screenui stopped requiring it when the cell page lost its
-  -- description line -- cellparam still fetches it lazily, on the first cell
-  -- page drawn) both happened at once, and left the total unchanged at 21.
+  -- load (screenui had stopped requiring it when the cell page lost its
+  -- description line) both happened at once, and left the total unchanged at
+  -- 21. the cell page's description line is back (screenui.draw_cell), so
+  -- screenui requires lexicon directly again -- cellparam still fetches it
+  -- lazily too, but require() memoises, so this is one module either way.
   local WANT = {
     "bridge", "cellparam", "clockcell", "dispatch", "exciter", "gparam",
-    "gridui", "grove", "gust", "gvoice", "heartwood", "mixer", "patch", "quantise",
-    "rambler", "screenui", "state", "tm", "topology", "voice",
-    "weave",
+    "gridui", "grove", "gust", "gvoice", "heartwood", "lexicon", "mixer",
+    "patch", "quantise", "rambler", "screenui", "state", "tm", "topology",
+    "voice", "weave",
   }
   check("exactly the expected modules, one copy each",
         table.concat(names, ",") == table.concat(WANT, ","),
