@@ -8,7 +8,7 @@
 -- tap a cell: toggle its settings page. tap it again: back to the patch.
 -- hold a cell: glance at that same page until you let go.
 -- hold a cell, E1/E2/E3: pick a row, move it coarse/fine.
--- press a gust (the ten G cells on the bottom two rows): it sounds its note,
+-- press a gust (the twelve G cells on the bottom two rows): it sounds its note,
 --   on the way down. the release still toggles its page like any other cell.
 -- K1 + tap a cell: fire it -- strike a voice or a drum, sound a gust, fire an
 --   exciter, pulse a trigger/transform/register/clock.
@@ -19,16 +19,18 @@
 -- (BPM, Swing, Scatter, Scale, Drops, Decay, Pitch, then the gusts' shared
 -- delay: Space, Delay, Regen), E2/E3 nudge it coarse/fine. K1+E3: master
 -- level.
--- K3: the mixer -- faders for the four soundscape loops and the master. from
--- an open cell page it goes there too, dropping that cell's focus. K3 again
--- goes on to the map page -- every cell, lit if it's cabled, dim if it isn't.
--- holding or tapping a cell open from there still goes straight to that
--- cell's own settings page, same as everywhere else -- letting go or closing
--- it comes back to the map. a third K3 goes back to the mixer, so the two
--- trade places until K2 backs all the way out.
--- K2: back. off the mixer or the map, or out of an open cell page, to the
--- main screen; with nothing to come back from, it freezes the pulse gaits
--- (Still).
+-- K3: forward, one page at a time -- main screen -> mixer (faders for the
+-- four soundscape loops and the master) -> map (every cell, lit if it's
+-- cabled, dim if it isn't) -- and no further: K3 on the map stays on the map,
+-- it does not wrap back to the mixer. from an open cell page it goes to
+-- whichever of those it was opened over, dropping that cell's focus on the
+-- way. holding or tapping a cell open from the map still goes straight to
+-- that cell's own settings page, same as everywhere else -- letting go or
+-- closing it comes back to the map.
+-- K2: back, one page at a time -- map -> mixer -> main screen -- and no
+-- further: K2 on the main screen does not wrap round to the map, it freezes
+-- the pulse gaits instead (Still). out of an open cell page, K2 drops that
+-- cell's focus and lands back on whichever of those it was opened over.
 -- K1+K2 (hold): Regrow -- a seeded patch that already plays.
 -- K1+K3 (hold): Clearing -- cut every cable.
 --
@@ -62,13 +64,17 @@
 -- rain recording, with its own dry level. Scale is pentatonic-only now,
 -- shorthand "Pent".
 -- the gusts (§2.11): the two step-sequencer lanes that briefly sat on the
--- bottom two rows are gone, and their ten cells are ten small drone synths
+-- bottom two rows are gone, and their ten cells became ten small drone synths
 -- instead (lib/gust.lua) -- a folded triangle core with a slow attack and a
 -- slow decay you set per cell, loosely after a Ciat-Lonbarde Deerhorn and
 -- deliberately not a clone of one. press one and it sounds; a pulse cabled
 -- in sounds it too. they are the one family heard without a cable: each is
--- panned by the column it sits in, and all ten share one delay line off the
--- global page. cable two together and they cross-modulate.
+-- panned by the column it sits in, and all twelve (two more were added later,
+-- to fill the top row out to six) share one delay line off the global page.
+-- cable two together and they cross-modulate.
+-- the LFOs (§2.12): four plain sine sources on the row right above the
+-- gusts (lib/lfo.lua) -- cable one anywhere and it bends whatever it lands
+-- on; its own page has one knob, Speed.
 -- the re-cut's re-cut: six of the bottom weave row's R cells become G cells
 -- (lib/gvoice.lua) -- small, plain drum voices (three pinged resonant
 -- filters, three noise-with-decay) with a six-parameter sound page of their
@@ -103,7 +109,8 @@ local screenui = wl("screenui")
 local bridge   = wl("bridge")
 local voice    = wl("voice")
 local gvoice   = wl("gvoice")
-local gust     = wl("gust")   -- §2.11: the ten drone cells on the bottom rows
+local gust     = wl("gust")   -- §2.11: the twelve drone cells on the bottom rows
+local lfo      = wl("lfo")    -- §2.12: the four sine LFOs above the gusts
 local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
 local gparam   = wl("gparam")
 local mixer    = wl("mixer")
@@ -372,23 +379,27 @@ end
 -- press-context flags: was this key pressed alone, with the other two up?
 local k2_solo_press, k3_solo_press = false, false
 
--- K2 is "back" and K3 steps down through the two full-screen pages below the
--- main one -- mixer, then map -- so the two keys are one shallow stack rather
--- than a different pair of jobs per page:
+-- K2 is "back" and K3 is "forward" on one linear stack of three pages --
+-- main screen, mixer, map -- and neither wraps: K3 stops on the map, K2 stops
+-- on the main screen (where it freezes the patch instead, Still).
 --
---   K2   with a cell page open -> the main screen (drops that cell's focus)
---        on the mixer or the map -> the main screen
---        on the main screen    -> Still, which is what it always was
---   K3   on the main screen    -> the mixer, dropping any cell focus with it
---        on the mixer          -> the map
+--   K2   with a cell page open -> whatever page it was opened over (drops
+--        that cell's focus)
 --        on the map            -> the mixer
+--        on the mixer          -> the main screen
+--        on the main screen    -> Still, which is what it always was
+--   K3   with a cell page open -> whatever page it was opened over, stepped
+--        forward one (drops that cell's focus)
+--        on the main screen    -> the mixer
+--        on the mixer          -> the map
+--        on the map            -> the map (no further)
 --
 -- Still keeps K2 because the main screen is the one place with nothing to
 -- come back from, and freezing the patch is a fair reading of "there is
--- nothing above this". K3's old job -- closing a cell page -- is still the
--- first thing K2 checks, along with everything else that means "up one",
--- which is also why that check runs before the mixer/map one below: an open
--- cell page closes first, however it got opened.
+-- nothing above this". closing an open cell page is still the first thing
+-- both keys check, along with everything else that means "move one", which
+-- is also why that check runs before the mixer/map one below: an open cell
+-- page closes first, however it got opened.
 
 function key(n, z)
   if n == 1 then
@@ -403,10 +414,12 @@ function key(n, z)
         local cell = topology.get(state.cell_edit)
         state.cell_edit = nil
         state.set_event((cell and cell.name or "cell") .. ": closed", 1.2)
-      elseif state.view == "mixer" or state.view == "map" then
-        local was = state.view
+      elseif state.view == "map" then
+        state.view = "mixer"
+        state.set_event("mixer", 1.2)
+      elseif state.view == "mixer" then
         state.view = "global"
-        state.set_event(was .. ": closed", 1.2)
+        state.set_event("mixer: closed", 1.2)
       else
         state.global.still = not state.global.still
         state.set_event(state.global.still and "Still" or "resumed", 1.5)
@@ -420,17 +433,17 @@ function key(n, z)
     if z == 0 and #state.held == 0 and k3_solo_press then
       -- one press away from anywhere, an open cell page included -- which it
       -- closes on the way, so the encoders are never pointed at a page the
-      -- screen is not showing. from the main screen that's the mixer; from
-      -- either the mixer or the map it's the other one, so K3 alone walks
-      -- back and forth between them once you're off the main screen.
+      -- screen is not showing. strictly forward and non-wrapping: the main
+      -- screen steps to the mixer, the mixer steps to the map, and the map
+      -- stays put -- there is nothing past it to step on to.
       state.cell_edit = nil
-      if state.view == "mixer" then
-        state.view = "map"
-        state.set_event("map", 1.2)
-      else
+      if state.view == "global" then
         state.view = "mixer"
         state.mparam_focus = state.mparam_focus or 1
         state.set_event("mixer", 1.2)
+      elseif state.view == "mixer" then
+        state.view = "map"
+        state.set_event("map", 1.2)
       end
     end
   end
@@ -571,6 +584,7 @@ function init()
   voice.init()
   gvoice.init()
   gust.init()
+  lfo.init()
   heartwood.init()
   grove.init()
   gparam.init() -- adopts the clock's tempo, pushes the rest (§5.2)

@@ -21,15 +21,16 @@
 --  3    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
 --  4    F   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   H
 --  5    .   F   .   .   .   C   T   T   T   T   C   .   .   .   H   .
---  6    E   .   F   .   .   .   .   .   .   .   .   .   .   H   .   R
---  7    E   E   .   F   .   .   G   G   G   G   .   .   H   .   R   R
+--  6    E   .   F   .   .   .   L   L   L   L   .   .   .   H   .   R
+--  7    E   E   .   F   .   G   G   G   G   G   G   .   H   .   R   R
 --  8    E   E   E   .   .   G   G   G   G   G   G   .   .   R   R   R
 --
 --   O  output (16)     M  voice (4)        F  grove field / percussion-ping
 --   N  percussion-noise TM Turing Machine  C  clock (4)
 --   T  trigger source (8, was D)          H  heartwood (4)
 --   E  exciter (6, was S)                  R  weave (6)
---   G  gust (10, drone synths)             .  unregistered, dark and inert
+--   G  gust (12, drone synths)            L  LFO (4, sine modulators)
+--   .  unregistered, dark and inert
 
 local topology = {}
 
@@ -267,8 +268,8 @@ for i, e in ipairs(E_CELLS) do
   reg("E", id, name, {{e.x, e.y}}, {source = e.source, index = i - 1})
 end
 
--- 2.11 the gusts -- G (10, internally type "GUST") --------------------------
--- ten small drone synths, one per cell, in the two rows the Q4/Q6 step
+-- 2.11 the gusts -- G (12, internally type "GUST") --------------------------
+-- twelve small drone synths, one per cell, in the two rows the Q4/Q6 step
 -- sequencer lanes used to fill. the lanes are gone: what the panel wanted
 -- there was not another way to make a pulse (it already has T, C, R, TM and
 -- the heartwood) but something to *play*.
@@ -285,12 +286,12 @@ end
 --     it reaches an Output cell; a gust is routed to the main mix
 --     automatically, panned by where it physically sits (`pan` below).
 --   * its pitch is not its own. each cell has a `root`, but what actually
---     sounds is that root pulled onto the global Scale (§4.1), so ten cells
---     pressed at random are ten notes of one scale. see lib/gust.lua.
+--     sounds is that root pulled onto the global Scale (§4.1), so twelve
+--     cells pressed at random are twelve notes of one scale. see lib/gust.lua.
 --
 -- pan comes from the column and nothing else, spread across the family's own
 -- six-column span rather than the whole panel -- these cells only occupy
--- columns 6..11, and mapping them over all sixteen would leave ten voices
+-- columns 6..11, and mapping them over all sixteen would leave twelve voices
 -- huddled in the middle third of the stereo field. GUST_PAN_MAX keeps the
 -- outermost pair short of hard left/right so the image still has somewhere
 -- to go.
@@ -299,18 +300,22 @@ local GUST_PAN_MAX = 0.8
 
 -- roots are equal-tempered intervals above lib/gust.lua's 55 Hz reference,
 -- laid out low-to-high left-to-right so the two rows read like a keyboard:
--- the wide bottom row is a bed (A2 up to A3), the narrower top row sits an
--- octave above it. the exact Hz matter -- gust.lua converts them back to
+-- the bottom row is a bed (A2 up to A3), the top row sits roughly an octave
+-- above it. the exact Hz matter -- gust.lua converts them back to
 -- semitones to quantise them -- so they are written out rather than rounded.
 --
 -- `attack`/`decay` are this cell's own envelope times in seconds, the centre
 -- of the two knobs on its page: the low, wide voices swell and fade slowest.
 local GUST_CELLS = {
-  -- the top row (4) -- higher, narrower, quicker to speak
+  -- the top row (6) -- higher, quicker to speak. gale and zephyr are the
+  -- two added to bring this row level with the bed below it -- gale low and
+  -- broad at the left edge, zephyr the highest and quickest at the right.
+  {id = "gale",    x = 6,  y = 7, root = 220.00, attack = 0.50, decay = 2.4},
   {id = "sough",   x = 7,  y = 7, root = 261.63, attack = 0.55, decay = 2.6},
   {id = "eddy",    x = 8,  y = 7, root = 293.66, attack = 0.40, decay = 2.2},
   {id = "whorl",   x = 9,  y = 7, root = 329.63, attack = 0.70, decay = 3.0},
   {id = "flaw",    x = 10, y = 7, root = 392.00, attack = 0.30, decay = 1.8},
+  {id = "zephyr",  x = 11, y = 7, root = 440.00, attack = 0.35, decay = 1.6},
   -- the bottom row (6) -- the bed
   {id = "squall",  x = 6,  y = 8, root = 110.00, attack = 1.40, decay = 6.0},
   {id = "flurry",  x = 7,  y = 8, root = 130.81, attack = 0.90, decay = 4.5},
@@ -332,6 +337,27 @@ for i, gu in ipairs(GUST_CELLS) do
     decay = gu.decay,
     pan = (span * 2 - 1) * GUST_PAN_MAX,
   })
+end
+
+-- 2.12 the LFOs -- L (4, internally type "LFO") -----------------------------
+-- four free-running sine sources, sitting on the row right above the gusts.
+-- each is a plain continuous point, patched like anything else -- what a
+-- cable out of one bends is decided entirely by the cell at its other end
+-- (dispatch.lua), same as an E or H cell's stream; the cable's own gain
+-- decides how much. the cell's own page has exactly one row, Speed, so
+-- "select a destination" is just the ordinary hold/tap cable gesture and
+-- there is nothing else here to set. see lib/lfo.lua.
+local LFO_CELLS = {
+  {id = "flood",  x = 7,  y = 6},
+  {id = "ebb",    x = 8,  y = 6},
+  {id = "neap",   x = 9,  y = 6},
+  {id = "spring", x = 10, y = 6},
+}
+
+for i, l in ipairs(LFO_CELLS) do
+  local id = "lfo." .. l.id
+  local name = l.id:sub(1, 1):upper() .. l.id:sub(2)
+  reg("LFO", id, name, {{l.x, l.y}}, {index = i - 1})
 end
 
 -- lookups -------------------------------------------------------------

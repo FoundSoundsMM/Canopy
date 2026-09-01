@@ -188,6 +188,11 @@ HANDLERS["C"] = function() end
 -- handler had).
 HANDLERS["O"] = function() end
 
+-- -> an LFO cell: nothing. §2.12's sine sources are pure, free-running
+-- continuous sources, the same shape a clock cell is on the pulse side --
+-- there is nothing here for a pulse arriving down a cable to do.
+HANDLERS["LFO"] = function() end
+
 -- fires when `source_id` speaks and has a cable to `target_id`. also the path
 -- a pulse *emerging* from the lattice takes, with the H node standing in for
 -- the source cell.
@@ -381,6 +386,48 @@ local function gust_to_e_specs(gu, e, edge, out)
   end
 end
 
+-- §2.12 an LFO -> a voice: unconditional, one-directional, same shape as
+-- e_to_voice_spec/h_to_voice_spec -- an LFO has no mod input of its own for
+-- the voice's audio to land back on.
+local function lfo_to_voice_spec(l, voice, gain)
+  return {
+    kind = "aa",
+    src = bridge.bus("lfo_out", l.index),
+    dst = bridge.bus("mod_in", voice.index - 1),
+    gain = gain,
+  }
+end
+
+-- an LFO -> an E cell: lands on the same colour-mod bus every other source
+-- feeding an exciter's colour uses, so a sine there behaves exactly like a
+-- gust's or a voice's own audio does -- one shared, well-understood knob.
+local function lfo_to_e_spec(l, e, gain)
+  return {
+    kind = "ak",
+    src = bridge.bus("lfo_out", l.index),
+    dst = bridge.bus("colour_mod", e.index),
+    gain = gain,
+  }
+end
+
+-- an LFO -> the heartwood: pours straight into the lattice, same as a D/E
+-- pulse-maker's own injection.
+local function lfo_to_h_spec(l, h, gain)
+  return {
+    kind = "aa",
+    src = bridge.bus("lfo_out", l.index),
+    dst = bridge.bus("heart_in", h.index),
+    gain = gain,
+  }
+end
+
+-- an LFO -> a gust: lands on the cross-mod input, exactly like a second gust
+-- would (to_gust_mod_spec, defined above) -- the receiving cell's own Cross
+-- knob decides how deeply it is heard.
+local function lfo_to_gust_spec(l, gu, gain)
+  return to_gust_mod_spec(bridge.bus("lfo_out", l.index), gu, gain)
+end
+
 -- a source cell's own audio into an Output row cell -- the only way anything
 -- is ever heard. position along the row sets pan (topology's `pan` field);
 -- the gain is this cable's own, so patching one source into several O cells
@@ -507,6 +554,38 @@ local function specs_for(edge)
     -- ordered() may have swapped them; the one-way rule is written in terms
     -- of the edge's own a/b, so re-derive from those rather than from x/y.
     h_to_h_specs(topology.get(edge.a), topology.get(edge.b), edge, out)
+    return out
+  end
+
+  -- §2.12 the LFOs: pure, one-directional continuous sources -- one spec each,
+  -- same shape E/H already have into a voice.
+  x, y = ordered("LFO", "O")
+  if x then
+    table.insert(out, to_output_spec(bridge.bus("lfo_out", x.index), y, edge.gain))
+    return out
+  end
+
+  x, y = ordered("LFO", "voice")
+  if x then
+    table.insert(out, lfo_to_voice_spec(x, y, edge.gain))
+    return out
+  end
+
+  x, y = ordered("LFO", "E")
+  if x then
+    table.insert(out, lfo_to_e_spec(x, y, edge.gain))
+    return out
+  end
+
+  x, y = ordered("LFO", "H")
+  if x then
+    table.insert(out, lfo_to_h_spec(x, y, edge.gain))
+    return out
+  end
+
+  x, y = ordered("LFO", "GUST")
+  if x then
+    table.insert(out, lfo_to_gust_spec(x, y, edge.gain))
     return out
   end
 

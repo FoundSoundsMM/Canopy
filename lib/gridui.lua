@@ -301,6 +301,8 @@ function gridui.brightness(id, cell)
     return clockcell.level(id, 2)
   elseif cell.type == "GUST" then
     return gust.level_at(id, 2)
+  elseif cell.type == "LFO" then
+    return wl("lfo").level_at(id, 2)
   end
   return 0
 end

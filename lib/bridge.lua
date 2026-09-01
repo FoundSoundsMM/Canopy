@@ -28,6 +28,10 @@ local bridge = {}
 -- panned route to the mix is a separate path inside the engine and is not a
 -- bus anyone here addresses), and `gust_mod` is the sum of everything cabled
 -- *into* it, which is what its Cross knob scales into pitch and fold.
+--
+-- §2.12's LFOs add one more: `lfo_out` is a cell's own sine tap, the only bus
+-- the family needs -- an LFO has no mod input of its own, so unlike a gust it
+-- is a pure source (the same shape a Clock cell is on the pulse side).
 bridge.BUS = {
   exc        = {base = 0,  n = 6},  -- E cell raw outputs
   colour_mod = {base = 6,  n = 6},  -- per-E colour cross-mod sum
@@ -37,8 +41,9 @@ bridge.BUS = {
   heart_in   = {base = 26, n = 4},  -- per-H lattice injection sum
   heart_out  = {base = 30, n = 4},  -- per-H lattice emergence tap
   out        = {base = 34, n = 16}, -- the Output row's 16 fixed-pan buses
-  gust_out   = {base = 50, n = 10}, -- per-GUST audio tap
-  gust_mod   = {base = 60, n = 10}, -- per-GUST cross-mod input sum
+  gust_out   = {base = 50, n = 12}, -- per-GUST audio tap
+  gust_mod   = {base = 62, n = 12}, -- per-GUST cross-mod input sum
+  lfo_out    = {base = 74, n = 4},  -- per-LFO sine tap
 }
 
 function bridge.bus(name, index)
@@ -173,7 +178,7 @@ function bridge.g_amp(index, v)
   engine.g_amp(index, v)
 end
 
--- §2.11 gust cells: the ten drone synths. `gust_note` is the whole gesture
+-- §2.11 gust cells: the twelve drone synths. `gust_note` is the whole gesture
 -- -- pitch and force in one message, the way `strike` is for a voice --
 -- because a key press sets both at once and a gust has no separate mallet to
 -- describe. `gust_pitch` is the same pitch without sounding it, for a Scale
@@ -212,10 +217,16 @@ function bridge.gust_pan(index, v)
   engine.gust_pan(index, v)
 end
 
--- the one delay line all ten gusts are heard through (§4.1's Space / Delay /
+-- the one delay line all twelve gusts are heard through (§4.1's Space / Delay /
 -- Regen rows on the global page). global, not per cell.
 function bridge.gust_space(mix, time, feedback)
   engine.gust_space(mix, time, feedback)
+end
+
+-- §2.12 LFO cells: the one knob. always-on, like a gust's core -- there is no
+-- separate on/off, since a cable can land on it at any time.
+function bridge.lfo_rate(index, hz)
+  engine.lfo_rate(index, hz)
 end
 
 -- §2.4 exciter cells: lazy on/off, Colour (E2), the gated flag (has this S

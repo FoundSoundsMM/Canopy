@@ -42,6 +42,7 @@
 // its mod path.
 //
 // the gusts (§2.11): the Q4/Q6 step-sequencer lanes' ten cells become ten
+// (later grown to twelve)
 // small drone synths (\wl_gust) -- a folded triangle core under a slow
 // attack/slow decay envelope, cross-modulated by whatever is cabled in,
 // loosely after a Ciat-Lonbarde Deerhorn and deliberately not a clone of
@@ -78,6 +79,7 @@ Engine_Canopy : CroneEngine {
 	var ambVol;
 	var gustSynths;
 	var gustSpaceSynth;
+	var lfoSynths;
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
 	// §8 "per-voice defaults" table. keep freq/structureBase/dampBase/decay in
@@ -116,7 +118,8 @@ Engine_Canopy : CroneEngine {
 	];
 
 	classvar nVoices = 4, nExc = 6, nG = 6, nH = 4, nOut = 16, nAmb = 4,
-		nGust = 10;
+		nGust = 12,
+		nLfo = 4;
 
 	// offsets into the single `patchBus` block (§7.3's separate bus families
 	// collapsed into one allocation so the Lua side only needs to add an
@@ -130,11 +133,13 @@ Engine_Canopy : CroneEngine {
 	// addressable tap once they stopped reaching the speakers automatically)
 	// and `outBase` (the Output row -- nothing reaches `woodland_fx` at all
 	// any more except through an ordinary patch cable into one of these
-	// sixteen fixed-pan buses).
+	// sixteen fixed-pan buses). `lfoOutBase` is the newest: one sine tap per
+	// LFO cell, no mod-input bus of its own since the family is a pure source
+	// (see bridge.lua's BUS comment).
 	classvar excBase = 0, colourModBase = 6, modInBase = 12,
 		voiceOutBase = 16, gvoiceOutBase = 20, heartInBase = 26,
 		heartOutBase = 30, outBase = 34, gustOutBase = 50,
-		gustModBase = 60, patchTotal = 70;
+		gustModBase = 62, lfoOutBase = 74, patchTotal = 78;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -172,7 +177,7 @@ Engine_Canopy : CroneEngine {
 		ambBus = Bus.audio(server, 2);
 		// §2.11 the gusts. two stereo buses rather than one, because the
 		// family's automatic route to the mix runs through a delay line and
-		// the delay has to read the sum of all ten before \woodland_fx sees
+		// the delay has to read the sum of all twelve before \woodland_fx sees
 		// any of it: every \wl_gust pans itself into `gustBus`, \wl_gust_space
 		// reads that and writes dry-plus-delayed into `gustSpaceBus`, and
 		// \woodland_fx reads only the second. this is the one signal path on
@@ -376,7 +381,7 @@ Engine_Canopy : CroneEngine {
 			Out.ar(out, sig);
 		}).add;
 
-		// §2.11 a gust: one of the ten small drone synths on the bottom two
+		// §2.11 a gust: one of the twelve small drone synths on the bottom two
 		// rows. loosely a Ciat-Lonbarde Deerhorn voice and deliberately not a
 		// clone of one -- a triangle core, folded rather than filtered into
 		// shape, under a slow attack/slow decay envelope, cross-modulated by
@@ -472,8 +477,8 @@ Engine_Canopy : CroneEngine {
 
 		// §2.11 the one delay line every gust is heard through -- "a globally
 		// defined delayline that gives it space and ambience". one line for
-		// all ten rather than one each: what it is for is putting the family
-		// in a room, and ten rooms is not a room.
+		// all twelve rather than one each: what it is for is putting the family
+		// in a room, and twelve rooms is not a room.
 		//
 		// a plain delay with the feedback path diffused through a short
 		// allpass chain, which is what turns repeats into a tail. the two
@@ -497,6 +502,15 @@ Engine_Canopy : CroneEngine {
 			});
 			LocalOut.ar(LeakDC.ar(wet).tanh);
 			Out.ar(out, dry + (wet * Lag.kr(mix.clip(0, 1), 0.1) * 1.2));
+		}).add;
+
+		// §2.12 an LFO cell: the plainest synth on the panel -- one sine,
+		// always running, written to its own `lfoOutBase` tap. there is no amp
+		// argument: depth is entirely the cable's own gain (dispatch.lua),
+		// same as every other continuous source's cable. `freq` is lagged so a
+		// Speed change is a glide, not a click.
+		SynthDef(\wl_lfo, { arg out=0, freq=0.2;
+			Out.ar(out, SinOsc.ar(Lag.kr(freq.clip(0.02, 20), 0.05)));
 		}).add;
 
 		// the grid overhaul's Output row (§2's `O` cells): the only place
@@ -783,6 +797,17 @@ Engine_Canopy : CroneEngine {
 			], gVoice);
 		});
 
+		// §2.12: always-on, same reasoning as the gusts above -- a free-running
+		// sine has nothing to allocate on the press because there is no press;
+		// it just sits there until something cables into or out of it.
+		// lfo.lua's init() pushes every cell's Speed right after this.
+		lfoSynths = Array.newClear(nLfo);
+		nLfo.do({ |i|
+			lfoSynths[i] = Synth.new(\wl_lfo, [
+				\out, patchBus.index + lfoOutBase + i
+			], gVoice);
+		});
+
 		excSynths = Array.newClear(nExc);
 		patchSynths = Dictionary.new;
 
@@ -1057,10 +1082,16 @@ Engine_Canopy : CroneEngine {
 			};
 		});
 
-		// gust_space(mix, time, feedback) -- the one delay line all ten are
+		// gust_space(mix, time, feedback) -- the one delay line all twelve are
 		// heard through, driven from the global page.
 		this.addCommand("gust_space", "fff", { |msg|
 			gustSpaceSynth.set(\mix, msg[1], \time, msg[2], \fb, msg[3]);
+		});
+
+		// §2.12 lfo_rate(index, hz) -- the one knob an LFO cell has.
+		this.addCommand("lfo_rate", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nLfo }) { lfoSynths[i].set(\freq, msg[2].clip(0.02, 20)) };
 		});
 
 		// exciter_on/off(index) -- §2.4 lazy allocation: an E cell only runs
@@ -1218,6 +1249,7 @@ Engine_Canopy : CroneEngine {
 		gSynths.do({ |s| if (s.notNil) { s.free } });
 		gustSynths.do({ |s| if (s.notNil) { s.free } });
 		if (gustSpaceSynth.notNil) { gustSpaceSynth.free };
+		lfoSynths.do({ |s| if (s.notNil) { s.free } });
 		excSynths.do({ |s| if (s.notNil) { s.free } });
 		patchSynths.do({ |s| if (s.notNil) { s.free } });
 		if (heartSynth.notNil) { heartSynth.free };

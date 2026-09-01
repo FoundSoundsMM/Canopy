@@ -81,6 +81,7 @@ local function fresh_calls()
     gust_note = {}, gust_pitch = {}, gust_attack = {}, gust_decay = {},
     gust_timbre = {}, gust_cross = {}, gust_amp = {}, gust_pan = {},
     gust_space = {},
+    lfo_rate = {},
   }
 end
 CALLS = fresh_calls()
@@ -159,6 +160,8 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.gust_pan, {t = T, index = a[1], v = a[2]})
     elseif k == "gust_space" then
       table.insert(CALLS.gust_space, {t = T, mix = a[1], time = a[2], fb = a[3]})
+    elseif k == "lfo_rate" then
+      table.insert(CALLS.lfo_rate, {t = T, index = a[1], hz = a[2]})
     end
   end
 end})
@@ -185,7 +188,7 @@ function fresh(seed)
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "heartwood", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
-                      "gparam", "mixer", "tm", "gust", "cellparam"}) do
+                      "gparam", "mixer", "tm", "gust", "lfo", "cellparam"}) do
     M[n] = wl(n)
   end
   return M

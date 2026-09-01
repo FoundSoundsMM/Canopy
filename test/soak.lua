@@ -182,10 +182,11 @@ do
   -- one representative of every type against one of every other type, both
   -- ways round, so every branch of the edge view's interaction table is
   -- drawn. "node" is gone -- the socket collapse means a voice is one cable
-  -- endpoint, already covered by "voice" -- and GVOICE, TM, GUST and O are
-  -- new since the re-cut.
+  -- endpoint, already covered by "voice" -- and GVOICE, TM, GUST, O and LFO
+  -- are new since the re-cut.
   local reps = {}
-  for _, kind in ipairs({"voice", "D", "R", "GVOICE", "E", "H", "F", "C", "TM", "GUST", "O"}) do
+  for _, kind in ipairs({"voice", "D", "R", "GVOICE", "E", "H", "F", "C", "TM",
+                         "GUST", "O", "LFO"}) do
     local list = ids_of(kind)
     table.insert(reps, list[1])
   end

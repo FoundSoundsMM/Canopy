@@ -1,5 +1,5 @@
 -- gust.lua
--- §2.11: the ten Gust cells -- a small drone synth per cell, and the settings
+-- §2.11: the twelve Gust cells -- a small drone synth per cell, and the settings
 -- page for one.
 --
 -- what a gust is, in one paragraph. a triangle core, folded at its edges so
@@ -20,13 +20,13 @@
 --   * it is heard uncabled. every other source is silent until it reaches
 --     the Output row; a gust is routed to the main mix by the engine, panned
 --     by where it physically sits (topology's `pan`), through a delay line
---     shared by all ten (gust.SPACE, driven from the global page). a cable
+--     shared by all twelve (gust.SPACE, driven from the global page). a cable
 --     into an Output cell is still allowed and still means what it means --
 --     it just places a second copy rather than being the only way to hear
 --     the first.
 --   * its pitch is not its own. `root` is where the cell sits, Pitch moves
 --     it, and the sum is then pulled onto the global Scale (§4.1) before it
---     is sounded -- so all ten keys land in one scale, whichever notes the
+--     is sounded -- so all twelve keys land in one scale, whichever notes the
 --     player has moved them to.
 --
 -- the page is the same object voice.lua and gvoice.lua expose -- PARAMS with
@@ -281,7 +281,7 @@ function gust.each()
 end
 
 -- the shared delay line (§4.1, the global page's Space / Delay / Regen rows).
--- one line for all ten cells rather than one each: what it is for is putting
+-- one line for all twelve cells rather than one each: what it is for is putting
 -- the family in a room, and ten rooms is not a room. the numbers live on
 -- state.global so a PSET picks them up with everything else.
 gust.SPACE = {

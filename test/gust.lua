@@ -1,7 +1,8 @@
--- topology.lua §2.11 / lib/gust.lua: the ten Gust cells that replaced the
--- Q4/Q6 step-sequencer lanes.
+-- topology.lua §2.11 / lib/gust.lua: the twelve Gust cells that replaced the
+-- Q4/Q6 step-sequencer lanes (originally ten -- two more were added later to
+-- bring the top row level with the bottom one).
 --
--- what this file is actually checking, in order: that the ten cells landed
+-- what this file is actually checking, in order: that the twelve cells landed
 -- where the lanes were and are panned by their columns; that a press sounds
 -- a note and that the note obeys the global Scale and transpose; that the
 -- envelope knobs and the global Decay macro reach the engine in seconds;
@@ -14,7 +15,7 @@ dofile((os.getenv("SP") or "test") .. "/harness.lua")
 
 print("== gust ==")
 
-print("\n-- the ten cells sit where the lanes were, panned by column --")
+print("\n-- the twelve cells sit where the lanes were, panned by column --")
 do
   local M = fresh(1)
   local ids, by_coord = {}, {}
@@ -24,7 +25,7 @@ do
       by_coord[cell.coords[1][1] .. "," .. cell.coords[1][2]] = cell
     end
   end
-  check("there are ten of them", #ids == 10, tostring(#ids))
+  check("there are twelve of them", #ids == 12, tostring(#ids))
   check("no SEQ cell is left on the panel", (function()
     for _, cell in M.topology.each() do
       if cell.type == "SEQ" then return false end
@@ -32,14 +33,14 @@ do
     return true
   end)())
 
-  -- the two rows the lanes filled: four on row 7 (cols 7-10), six on row 8
-  -- (cols 6-11).
+  -- the two rows the lanes filled: six on row 7 (cols 6-11), six on row 8
+  -- (cols 6-11) -- the same span, one directly above the other.
   local row7, row8 = 0, 0
   for _, id in ipairs(ids) do
     local c = M.topology.get(id)
     if c.coords[1][2] == 7 then row7 = row7 + 1 else row8 = row8 + 1 end
   end
-  check("four on row 7, six on row 8", row7 == 4 and row8 == 6,
+  check("six on row 7, six on row 8", row7 == 6 and row8 == 6,
         string.format("%d/%d", row7, row8))
 
   -- pan is the whole reason these are laid out by column, so it is worth an
@@ -61,11 +62,14 @@ do
   end
   check("pan rises strictly left to right along the bottom row", ok)
 
-  -- the top row is inset inside the bottom one, so it should sit inside the
-  -- outer pair rather than duplicating their positions.
-  local inner = by_coord["7,7"]
-  check("the inset row is panned inside the outer pair",
-        inner.pan > left.pan and inner.pan < right.pan, tostring(inner.pan))
+  -- the top row now spans the same six columns as the bottom one, so its own
+  -- outer pair should land at the same hard-left/hard-right pan.
+  local top_left = by_coord["6,7"]
+  local top_right = by_coord["11,7"]
+  check("the top row's outer pair matches the bottom row's pan",
+        math.abs(top_left.pan - left.pan) < 1e-9
+        and math.abs(top_right.pan - right.pan) < 1e-9,
+        top_left.pan .. "/" .. top_right.pan)
 
   check("a gust is not a pulse cell", M.topology.PULSE_TYPES.GUST == nil)
 end
@@ -74,19 +78,19 @@ print("\n-- init pushes every cell's pan, envelope and the shared delay --")
 do
   local M = fresh(2)
   M.gust.init()
-  check("all ten pans went out", #CALLS.gust_pan == 10, tostring(#CALLS.gust_pan))
-  check("all ten attacks went out", #CALLS.gust_attack == 10,
+  check("all twelve pans went out", #CALLS.gust_pan == 12, tostring(#CALLS.gust_pan))
+  check("all twelve attacks went out", #CALLS.gust_attack == 12,
         tostring(#CALLS.gust_attack))
-  check("all ten decays went out", #CALLS.gust_decay == 10,
+  check("all twelve decays went out", #CALLS.gust_decay == 12,
         tostring(#CALLS.gust_decay))
   check("the delay line was pushed once", #CALLS.gust_space == 1,
         tostring(#CALLS.gust_space))
-  -- the engine indexes 0-based; ten cells means 0..9 with none missing.
+  -- the engine indexes 0-based; twelve cells means 0..11 with none missing.
   local seen = {}
   for _, c in ipairs(CALLS.gust_pan) do seen[c.index] = true end
   local all = true
-  for i = 0, 9 do if not seen[i] then all = false end end
-  check("indices 0..9, none missing or doubled", all)
+  for i = 0, 11 do if not seen[i] then all = false end end
+  check("indices 0..11, none missing or doubled", all)
 end
 
 print("\n-- a press sounds a note --")
@@ -131,8 +135,8 @@ do
   check("a scale pulls the note onto a degree", on_scale, tostring(snapped))
   check("and it moved from where the knob was", math.abs(snapped - free) > 0.5)
 
-  -- every cell, not just the one that was moved: ten keys pressed at random
-  -- should be ten notes of one scale, which is the whole point.
+  -- every cell, not just the one that was moved: twelve keys pressed at
+  -- random should be twelve notes of one scale, which is the whole point.
   local all_on = true
   for _, id in ipairs(M.gust.each()) do
     local r = M.gust.note_semitones(id) % 12
@@ -140,14 +144,14 @@ do
     for _, d in ipairs(M.grove.SCALES[2]) do if math.abs(r - d) < 1e-6 then hit = true end end
     if not hit then all_on = false end
   end
-  check("all ten cells land on the scale", all_on)
+  check("all twelve cells land on the scale", all_on)
 
   -- and a transpose moves the lot.
   CALLS = (function() local c = CALLS; return c end)()
   local before = #CALLS.gust_pitch
   M.state.global.pitch_offset = 5
   M.gust.repush_pitch()
-  check("a transpose re-pushes every cell", #CALLS.gust_pitch - before == 10,
+  check("a transpose re-pushes every cell", #CALLS.gust_pitch - before == 12,
         tostring(#CALLS.gust_pitch - before))
 end
 

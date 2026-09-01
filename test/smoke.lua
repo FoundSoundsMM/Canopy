@@ -39,9 +39,9 @@ do
   -- lazily too, but require() memoises, so this is one module either way.
   local WANT = {
     "bridge", "cellparam", "clockcell", "dispatch", "exciter", "gparam",
-    "gridui", "grove", "gust", "gvoice", "heartwood", "lexicon", "mixer",
-    "patch", "quantise", "rambler", "screenui", "state", "tm", "topology",
-    "voice", "weave",
+    "gridui", "grove", "gust", "gvoice", "heartwood", "lexicon", "lfo",
+    "mixer", "patch", "quantise", "rambler", "screenui", "state", "tm",
+    "topology", "voice", "weave",
   }
   check("exactly the expected modules, one copy each",
         table.concat(names, ",") == table.concat(WANT, ","),
@@ -88,7 +88,7 @@ local ok, err = pcall(function()
   -- replaced the step-sequencer lanes -- one from each of their two rows.
   for _, id in ipairs({"oak", "d.hob", "tm.padfoot", "clk.toll", "h.wyrd",
                        "f.cuckoo", "r.thicket", "gv.yaffle", "e.bracken",
-                       "o.1", "gu.sough", "gu.squall"}) do
+                       "o.1", "gu.sough", "gu.squall", "lfo.flood"}) do
     local c = M.topology.get(id)
     gridobj.key(c.coords[1][1], c.coords[1][2], 1); redraw()
     gridobj.key(c.coords[1][1], c.coords[1][2], 0)

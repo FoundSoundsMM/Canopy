@@ -2,10 +2,11 @@
 -- vocabulary that now runs on every cell of it.
 --
 -- covers: (1) the panel matches the sketch it was drawn from -- in particular
--- that all four modal voices sit together on row 2 and that both gust rows
--- are centred; (2) a tap toggles any cell's settings page, whatever its
--- type; (3) K1+tap fires the cell -- a voice or drum strikes, a gust sounds,
--- an exciter grains, a trigger pulses; (4) the hold/tap cable gesture still
+-- that all four modal voices sit together on row 2 and that both gust rows,
+-- and the LFO row above them, are centred; (2) a tap toggles any cell's
+-- settings page, whatever its type; (3) K1+tap fires the cell -- a voice or
+-- drum strikes, a gust sounds, an exciter grains, a trigger pulses; (4) the
+-- hold/tap cable gesture still
 -- works and is not confused by either of those; (5) a gust sounds on the way
 -- DOWN, before the release the page toggle rides on; (6) the Output row is
 -- exclusive -- a source is in one slot, and cabling it to a second one moves
@@ -40,14 +41,15 @@ do
     "................",
     "F..ttCTTTTCtt..H",
     ".F...CTTTTC...H.",
-    "E.F..........H.R",
-    "EE.F..GGGG..H.RR",
+    "E.F...LLLL...H.R",
+    "EE.F.GGGGGG.H.RR",
     "EEE..GGGGGG..RRR",
   }
   -- the letter each type prints on the map above. lower case only to keep the
   -- two-character family (TM) to one column each.
   local LETTER = {O = "O", voice = "M", GVOICE = nil, D = "T", TM = "t",
-                  C = "C", H = "H", E = "E", R = "R", F = "F", GUST = "G"}
+                  C = "C", H = "H", E = "E", R = "R", F = "F", GUST = "G",
+                  LFO = "L"}
   local rows_ok = true
   local first_bad = nil
   for y = 1, 8 do
@@ -84,9 +86,9 @@ do
   for _, y in ipairs(vrows) do if y ~= 2 then all_row2 = false end end
   check("and all four are on row 2, where you can see them at once", all_row2)
 
-  -- §2.11 the gust rows: the narrow one sits symmetrically inside the wide
-  -- one, and both are centred on the panel -- which is what makes the pan
-  -- spread read as a stereo image rather than as an accident of layout.
+  -- §2.11 the gust rows sit exactly on top of each other, both six wide and
+  -- centred -- which is what makes the pan spread read as a stereo image
+  -- rather than as an accident of layout.
   local top, bottom = {}, {}
   for id, cell in M.topology.each() do
     if cell.type == "GUST" then
@@ -95,13 +97,28 @@ do
   end
   table.sort(top)
   table.sort(bottom)
-  check("the top gust row is four wide, centred",
-        #top == 4 and top[1] == 7 and top[4] == 10, table.concat(top, ","))
+  check("the top gust row is six wide, centred",
+        #top == 6 and top[1] == 6 and top[6] == 11, table.concat(top, ","))
   check("the bottom row is six wide, centred",
         #bottom == 6 and bottom[1] == 6 and bottom[6] == 11,
         table.concat(bottom, ","))
   check("with equal margins either side", (bottom[1] - 1) == (16 - bottom[6]),
         (bottom[1] - 1) .. " vs " .. (16 - bottom[6]))
+
+  -- §2.12 the four LFOs sit on the row right above the gusts, centred inside
+  -- their six-column span.
+  local lrow = {}
+  for id, cell in M.topology.each() do
+    if cell.type == "LFO" then table.insert(lrow, cell.coords[1][1]) end
+  end
+  table.sort(lrow)
+  check("the LFO row is four wide, above the gusts",
+        #lrow == 4 and lrow[1] == 7 and lrow[4] == 10, table.concat(lrow, ","))
+  local ly
+  for id, cell in M.topology.each() do
+    if cell.type == "LFO" then ly = cell.coords[1][2] end
+  end
+  check("and sits one row above the top gust row", ly == 6, tostring(ly))
 end
 
 -- 2: a tap toggles the page, on every type -----------------------------------

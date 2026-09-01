@@ -216,24 +216,6 @@ local function tempo_text()
   return string.format("%.0f", bpm)
 end
 
--- how long a message keeps the header's name slot before the page's own name
--- takes it back. long enough to read a sever or a Regrow, short enough that
--- the header is not still reporting it a minute later.
-local EVENT_LINGER = 3.0
-
--- the old list layout kept a whole line for "whatever just happened" -- a
--- cable made, a Regrow, a sever, a knob's new reading. the widget grid has no
--- spare line, and it does not need one: an Elektron box says this sort of
--- thing in its title bar, and so does this. the page's name is the least
--- urgent thing on the screen (you know which page you opened), so the message
--- borrows that slot and gives it back a few seconds later.
-local function header_name(name)
-  if state.last_event ~= "" and state.event_age() < EVENT_LINGER then
-    return state.last_event
-  end
-  return name
-end
-
 -- tag: two or three characters saying what kind of page this is (a cell's
 -- panel letter, "MIX", "G"). name: what it is called. value: the full,
 -- untrimmed value of whatever the cursor is on, which is the one thing on
@@ -263,7 +245,7 @@ function screenui.draw_header(tag, name, value, page, pages)
 
   local region = (128 - tw - 4) - x
   if region > 8 then
-    label_value(x, HDR_BASE, region, header_name(name or ""), value or "", 0, 0)
+    label_value(x, HDR_BASE, region, name or "", value or "", 0, 0)
   end
 end
 
@@ -419,10 +401,11 @@ end
 -- what replaced the network view: E1 walks gparam.PARAMS, E2/E3 nudge the one
 -- under the cursor coarse/fine (Canopy.lua's enc()).
 --
--- the second line the old list kept for "whatever just happened" is gone with
--- the list; the messages themselves are not -- they surface in the header's
--- name slot for a few seconds (header_name above), on every page rather than
--- only on this one.
+-- the header's name slot is always the page's own name now -- an earlier cut
+-- borrowed it for a few seconds to report "whatever just happened", but a
+-- readout of every patch/knob event turned out to be noise nobody read.
+-- state.set_event/state.last_event are unchanged and other code still uses
+-- them; only the screen stopped showing them.
 
 function screenui.draw_global()
   local focus = util.clamp(state.gparam_focus or 1, 1, gparam.PARAM_COUNT)
@@ -654,11 +637,18 @@ local INTERACTION_DESC = {
   -- position, and cabling it to a second Out cell moves it rather than
   -- adding to it. two Out cells together is not a cable at all.
   ["O|O"] = "no meaning: an Output cell is a destination, never a source",
+  -- §2.12 the LFOs: pure continuous sources, same shape a gust/E/H's stream
+  -- already has into these four destinations -- just a sine instead.
+  ["LFO|voice"] = "the sine rides the voice's mod path, bending its pitch/colour",
+  ["LFO|E"] = "the sine drives the exciter's colour",
+  ["LFO|H"] = "the sine pours into the lattice",
+  ["LFO|GUST"] = "the sine bends the gust's core -- pitch and fold together",
+  ["LFO|O"] = "heard directly -- turn Speed up into audio range for a plain tone",
 }
 
 local TYPE_ORDER = {
-  voice = 1, D = 2, R = 3, E = 4, H = 5, F = 6, C = 7, TM = 8, GVOICE = 9,
-  GUST = 10, O = 11,
+  LFO = 0, voice = 1, D = 2, R = 3, E = 4, H = 5, F = 6, C = 7, TM = 8,
+  GVOICE = 9, GUST = 10, O = 11,
 }
 
 local function interaction_text(ta, tb)

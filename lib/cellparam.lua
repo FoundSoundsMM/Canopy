@@ -365,6 +365,7 @@ function cellparam.page(id)
   if cell.type == "voice" then return wl("voice") end
   if cell.type == "GVOICE" then return wl("gvoice") end
   if cell.type == "GUST" then return wl("gust") end
+  if cell.type == "LFO" then return wl("lfo") end
   if cell.type == "TM" then return wl("tm") end
   local p = pages[cell.type]
   if p == nil then

@@ -71,16 +71,24 @@ local DESC = {
   ["h.ley"]     = "heartwood node -- the far end of the chain.",
 
   -- the gusts / G (§2.11)
+  ["gu.gale"]    = "gust -- the top row's low edge, broad and unhurried.",
   ["gu.sough"]   = "gust -- a high, breathy swell. press it: it sounds.",
   ["gu.eddy"]    = "gust -- quick to speak, turns over on itself.",
   ["gu.whorl"]   = "gust -- the slowest of the top row, wide and open.",
   ["gu.flaw"]    = "gust -- the sharpest: fast swell, short fall.",
+  ["gu.zephyr"]  = "gust -- the top row's high edge, quickest of the twelve.",
   ["gu.squall"]  = "gust -- lowest and furthest left, a very long swell.",
   ["gu.flurry"]  = "gust -- low and quick, the bed's moving part.",
   ["gu.snell"]   = "gust -- cold and thin for its register.",
   ["gu.bluster"] = "gust -- the bed's most forward voice.",
   ["gu.buffet"]  = "gust -- broad and slow, sits under the others.",
-  ["gu.haar"]    = "gust -- lowest right, the slowest to arrive of all ten.",
+  ["gu.haar"]    = "gust -- lowest right, the slowest to arrive of all twelve.",
+
+  -- the LFOs / L (§2.12) -- one sine each, sitting right above the gusts.
+  ["lfo.flood"]  = "sine LFO -- cable it anywhere and turn up Speed.",
+  ["lfo.ebb"]    = "sine LFO -- cable it anywhere and turn up Speed.",
+  ["lfo.neap"]   = "sine LFO -- cable it anywhere and turn up Speed.",
+  ["lfo.spring"] = "sine LFO -- cable it anywhere and turn up Speed.",
 
   -- the grove / F (§2.6)
   ["f.cuckoo"]   = "call mode -- two notes back and forth, never quite the same twice.",
