@@ -51,6 +51,12 @@ params = {
 -- call) and only for string concatenation -- nothing here touches disk.
 _path = {code = "/home/we/dust/code/"}
 
+-- norns.state.path: the running script's own directory, trailing slash
+-- included, same as the real norns.state.path (lua/core/script.lua) --
+-- Canopy.lua's mixer.init call is built from this rather than a hardcoded
+-- folder name, so the offline harness needs the same shape.
+norns = {state = {path = _path.code .. "Canopy/"}}
+
 -- screen.text_extents has to return a NUMBER (screenui.lua measures with it
 -- before deciding what fits); everything else on the stub is a no-op. 5px per
 -- character is close enough to norns' variable-width font for the layout

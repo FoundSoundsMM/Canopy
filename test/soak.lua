@@ -313,10 +313,15 @@ do
   M.state.cell_edit = nil
 
   -- ten knobs is the most the widget grid ever draws, and the sound page
-  -- above is exactly that; the mixer's five is the other end of the range.
+  -- above is exactly that; the mixer's eight (four loops, the master, the
+  -- three gust delay-line rows) is the other end of the range. draw_knob's
+  -- two extra move()s (screenui.lua, breaking the stray line cairo_arc
+  -- would otherwise chain in from the previous widget's label) are cheap,
+  -- non-paint calls, but they do move a full page of knobs closer to the
+  -- limit than a five-row mixer ever was.
   M.state.view = "mixer"
   calls, paint = frame()
-  check("the mixer page: under 150 commands", calls < 150, calls .. " calls")
+  check("the mixer page: under 170 commands", calls < 170, calls .. " calls")
   M.state.view = "global"
 
   M.state.held = {"d.hob"}

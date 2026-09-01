@@ -557,7 +557,13 @@ function init()
   -- and starts its \wl_amb once that buffer is ready, holding the fader in
   -- the meantime, so pushing all four levels straight afterwards loses
   -- nothing (lib/mixer.lua).
-  mixer.init(_path.code .. "Canopy/audio/")
+  --
+  -- norns.state.path, not a hardcoded "Canopy/" under _path.code: the
+  -- installed script folder is not guaranteed to be named or cased exactly
+  -- like this repo, and a wrong guess here fails silently -- Buffer.read
+  -- has no error path back to Lua, so a missing loop is indistinguishable
+  -- from its fader being at zero (see Engine_Canopy.sc's amb_load comment).
+  mixer.init(norns.state.path .. "audio/")
   rambler.start()
 end
 

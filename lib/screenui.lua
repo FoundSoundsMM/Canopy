@@ -315,16 +315,29 @@ local KNOB_SWEEP = math.pi * 1.5
 --                is. the pointer alone is legible up close; from across a
 --                room the arc is what you actually see.
 --   the pointer  a radial line, drawn last so it sits over the arc.
+-- screen.circle and screen.arc are both cairo_arc under the hood (norns'
+-- core/screen.lua: `circle(x,y,r)` is just `arc(x,y,r,0,2pi)`), and cairo_arc
+-- has one documented quirk: if the path already has a current point --
+-- which it always does here, left behind by the previous widget's label
+-- text -- it draws a connecting line from that point to the arc's start
+-- before drawing the arc. screen.rect never has this problem (it always
+-- opens with its own move_to), but nothing resets the pen between one
+-- widget's label and the next widget's knob, so every knob was getting a
+-- stray line dragged in from wherever the last bit of text left off.
+-- moving to the arc's own start point first turns that phantom segment into
+-- a zero-length one instead of a line back to the last thing drawn.
 local function draw_knob(cx, cy, frac, on)
   frac = util.clamp(frac or 0, 0, 1)
   local a = KNOB_A0 + frac * KNOB_SWEEP
 
   screen.level(on and 5 or 2)
+  screen.move(cx + KNOB_R - 1, cy)
   screen.circle(cx, cy, KNOB_R - 1)
   screen.stroke()
 
   if frac > 0.005 then
     screen.level(on and 15 or 7)
+    screen.move(cx + math.cos(KNOB_A0) * KNOB_R, cy + math.sin(KNOB_A0) * KNOB_R)
     screen.arc(cx, cy, KNOB_R, KNOB_A0, a)
     screen.stroke()
   end
