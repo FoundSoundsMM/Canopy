@@ -176,4 +176,33 @@ do
   M.state.cell_edit = nil
 end
 
+print("\n-- it pulsates: the level breathes through one sine cycle in real time --")
+do
+  local M = fresh(11)
+  local id = "lfo.spring"
+  M.state.set_vparam(id, "rate", 1.0)      -- RATE_MAX, so one cycle is quick
+  local period = 1 / M.lfo.rate_hz(id)
+
+  local lo, hi = 15, -1
+  for i = 0, 20 do
+    T = i * period / 20
+    local lvl = M.lfo.level_at(id, 2)
+    lo, hi = math.min(lo, lvl), math.max(hi, lvl)
+  end
+  check("it swings across its idle band over one cycle", hi > lo,
+        lo .. ".." .. hi)
+
+  -- a slower cell, sampled at a fixed real-time step, should visibly move --
+  -- this is the one that would have caught a static "brighter while cabled"
+  -- readout that never actually pulses.
+  local M2 = fresh(12)
+  local id2 = "lfo.flood"
+  M2.patch.add("d.hob", id2, 0.5)
+  local before = M2.lfo.level_at(id2, 2)
+  T = T + (1 / M2.lfo.rate_hz(id2)) * 0.25   -- a quarter turn of its own cycle
+  local after = M2.lfo.level_at(id2, 2)
+  check("a quarter turn of its own cycle visibly moves the level",
+        after ~= before, before .. " -> " .. after)
+end
+
 report()

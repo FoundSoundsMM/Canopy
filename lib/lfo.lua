@@ -81,13 +81,50 @@ function lfo.each()
   return ids
 end
 
--- §5.1: brighter cabled, brighter still with its page open -- same shape a
--- GUST cell's idle indicator has, minus the note flash: an LFO never fires a
--- discrete event, so there is nothing to flash on.
+-- §5.1: unlike every other family's indicator, an LFO has no discrete event
+-- to flash on -- what it does instead is never stop, so the grid shouldn't
+-- either. each cell keeps its own running phase, advanced in real time by
+-- its own Speed every time anything asks to see it (gridui polls this at
+-- grid_metro's rate, ~30 Hz) -- so the LED breathes through one full sine
+-- cycle exactly as often as the audio does, at whatever rate the player has
+-- it set to.
+local last_t = {}
+local phase = {}
+
+function lfo.phase(id)
+  local now = util.time()
+  local t0 = last_t[id]
+  if t0 == nil then
+    phase[id] = 0
+  else
+    -- a clock that has gone backwards (a reload, the test harness rewinding
+    -- its virtual time) reads as "no time passed" rather than winding the
+    -- phase back through a negative turn.
+    local dt = math.max(now - t0, 0)
+    phase[id] = (phase[id] + lfo.rate_hz(id) * dt) % 1.0
+  end
+  last_t[id] = now
+  return phase[id]
+end
+
+-- three non-overlapping bands (idle / cabled / open) so "cabled reads
+-- brighter than idle" and "open brighter than cabled" hold at every point in
+-- the cycle, not just at the peak -- and within each band, the sine itself is
+-- what moves the LED, trough to peak and back, once per cycle.
+local function pulse(lo, hi, swing)
+  return util.clamp(math.floor(lo + swing * (hi - lo) + 0.5), 0, 15)
+end
+
 function lfo.level_at(id, base)
   base = base or 2
-  if state.cell_edit == id then return 8 end
-  return wl("patch").degree(id) > 0 and 5 or base
+  local swing = (math.sin(lfo.phase(id) * 2 * math.pi) + 1) / 2
+  if state.cell_edit == id then
+    return pulse(11, 15, swing)
+  elseif wl("patch").degree(id) > 0 then
+    return pulse(base + 5, base + 8, swing)
+  else
+    return pulse(base, base + 2, swing)
+  end
 end
 
 function lfo.init()
