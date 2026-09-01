@@ -527,6 +527,76 @@ function screenui.draw_cell(id)
   end
 end
 
+-- §4.1d the map page (K3, twice) -----------------------------------------
+-- a reference, not a control surface: the same 16x8 layout topology.lua lays
+-- the panel out on (§2's own map, in the comment at the top of that file),
+-- redrawn small under the header. no wires -- a cable's other end is already
+-- one hold away on the real grid -- just which cells are patched at all: lit
+-- if something reaches them, dim (not blank) if not, so an unused cell still
+-- reads as a cell rather than as a gap. an unregistered coordinate (the "."
+-- in topology's map) is skipped outright -- it was never a cell to begin
+-- with, and drawing it at any level would say otherwise.
+--
+-- holding a cell, or tapping one open (state.cell_edit) while this page is
+-- showing, narrows the grid to that cell and whatever is cabled to it -- the
+-- same idea gridui.grid_redraw already uses to dim the physical grid around
+-- an open settings page (§5.1b), just drawn here instead of overriding to
+-- that cell's own numeric page the way every other screen does.
+
+local MAP_COLS = topology.GRID_W
+local MAP_TOP = 14
+local MAP_CELL_W = 128 / MAP_COLS
+local MAP_CELL_H = 6
+local MAP_RECT_W = MAP_CELL_W - 1
+local MAP_RECT_H = MAP_CELL_H - 1
+
+local MAP_ON, MAP_OFF = 13, 2        -- cabled / not, nothing focused
+local MAP_FOCUS, MAP_LINKED = 15, 12 -- the focused cell, and what reaches it
+local MAP_FADE = 1                   -- present, but not part of its neighbourhood
+
+local function map_level(id, linked_set)
+  if linked_set then
+    if linked_set[id] == "focus" then return MAP_FOCUS end
+    if linked_set[id] then return MAP_LINKED end
+    return MAP_FADE
+  end
+  return (patch.degree(id) > 0) and MAP_ON or MAP_OFF
+end
+
+function screenui.draw_map(focus)
+  local fcell = focus and topology.get(focus)
+  local linked_set = nil
+  local name, value
+
+  if fcell then
+    linked_set = {[focus] = "focus"}
+    for _, edge in ipairs(patch.edges_at(focus)) do
+      linked_set[patch.other(edge, focus)] = true
+    end
+    local n = patch.degree(focus)
+    name = fcell.name
+    value = n .. (n == 1 and " cable" or " cables")
+  else
+    local active = 0
+    for id in topology.each() do
+      if patch.degree(id) > 0 then active = active + 1 end
+    end
+    name = "Map"
+    value = active .. "/" .. #topology.order
+  end
+
+  screenui.draw_header("MAP", name, value)
+
+  for id, cell in topology.each() do
+    screen.level(map_level(id, linked_set))
+    for _, c in ipairs(cell.coords) do
+      screen.rect((c[1] - 1) * MAP_CELL_W, MAP_TOP + (c[2] - 1) * MAP_CELL_H,
+                  MAP_RECT_W, MAP_RECT_H)
+      screen.fill()
+    end
+  end
+end
+
 -- edge view (two cells held) -------------------------------------------------
 
 -- the socket collapse means a voice is one point that reacts to whatever's
@@ -681,6 +751,11 @@ function screenui.redraw()
 
   if #state.held == 2 then
     screenui.draw_edge(state.held[1], state.held[2])
+  elseif state.view == "map" and (#state.held == 1 or state.cell_edit) then
+    -- the one place holding or opening a cell does NOT hand the screen to
+    -- that cell's own numeric page: the map page's whole job is showing
+    -- what a cell reaches, so a hold/tap here narrows the map instead.
+    screenui.draw_map(state.held[1] or state.cell_edit)
   elseif #state.held == 1 then
     -- a glance: the same page the tap latches open, for as long as the cell
     -- is down.
@@ -689,6 +764,8 @@ function screenui.redraw()
     screenui.draw_cell(state.cell_edit)
   elseif state.view == "mixer" then
     screenui.draw_mixer()
+  elseif state.view == "map" then
+    screenui.draw_map(nil)
   else
     screenui.draw_global()
   end

@@ -20,9 +20,13 @@
 -- delay: Space, Delay, Regen), E2/E3 nudge it coarse/fine. K1+E3: master
 -- level.
 -- K3: the mixer -- faders for the four soundscape loops and the master. from
--- an open cell page it goes there too, dropping that cell's focus.
--- K2: back. off the mixer, or out of an open cell page, to the main screen;
--- with nothing to come back from, it freezes the pulse gaits (Still).
+-- an open cell page it goes there too, dropping that cell's focus. K3 again
+-- goes on to the map page -- every cell, lit if it's cabled, dim if it isn't;
+-- hold a cell (or tap one open) to see just what reaches it. a third K3 goes
+-- back to the mixer, so the two trade places until K2 backs all the way out.
+-- K2: back. off the mixer or the map, or out of an open cell page, to the
+-- main screen; with nothing to come back from, it freezes the pulse gaits
+-- (Still).
 -- K1+K2 (hold): Regrow -- a seeded patch that already plays.
 -- K1+K3 (hold): Clearing -- cut every cable.
 --
@@ -366,19 +370,23 @@ end
 -- press-context flags: was this key pressed alone, with the other two up?
 local k2_solo_press, k3_solo_press = false, false
 
--- K2 is "back" and K3 is "the mixer", on every screen, in that order of
--- precedence -- so the two keys are one shallow stack rather than a different
--- pair of jobs per page:
+-- K2 is "back" and K3 steps down through the two full-screen pages below the
+-- main one -- mixer, then map -- so the two keys are one shallow stack rather
+-- than a different pair of jobs per page:
 --
---   K2   on the mixer          -> the main screen
---        with a cell page open -> the main screen (drops that cell's focus)
+--   K2   with a cell page open -> the main screen (drops that cell's focus)
+--        on the mixer or the map -> the main screen
 --        on the main screen    -> Still, which is what it always was
---   K3   anywhere              -> the mixer, dropping any cell focus with it
+--   K3   on the main screen    -> the mixer, dropping any cell focus with it
+--        on the mixer          -> the map
+--        on the map            -> the mixer
 --
 -- Still keeps K2 because the main screen is the one place with nothing to
 -- come back from, and freezing the patch is a fair reading of "there is
--- nothing above this". K3's old job -- closing a cell page -- is now K2's,
--- along with everything else that means "up one".
+-- nothing above this". K3's old job -- closing a cell page -- is still the
+-- first thing K2 checks, along with everything else that means "up one",
+-- which is also why that check runs before the mixer/map one below: an open
+-- cell page closes first, however it got opened.
 
 function key(n, z)
   if n == 1 then
@@ -389,13 +397,14 @@ function key(n, z)
     end
     keystate.k2 = (z == 1)
     if z == 0 and #state.held == 0 and k2_solo_press then
-      if state.view == "mixer" then
-        state.view = "global"
-        state.set_event("mixer: closed", 1.2)
-      elseif state.cell_edit then
+      if state.cell_edit then
         local cell = topology.get(state.cell_edit)
         state.cell_edit = nil
         state.set_event((cell and cell.name or "cell") .. ": closed", 1.2)
+      elseif state.view == "mixer" or state.view == "map" then
+        local was = state.view
+        state.view = "global"
+        state.set_event(was .. ": closed", 1.2)
       else
         state.global.still = not state.global.still
         state.set_event(state.global.still and "Still" or "resumed", 1.5)
@@ -407,11 +416,16 @@ function key(n, z)
     end
     keystate.k3 = (z == 1)
     if z == 0 and #state.held == 0 and k3_solo_press then
-      -- the mixer is one press away from anywhere, an open cell page
-      -- included -- which it closes on the way, so the encoders are never
-      -- pointed at a page the screen is not showing.
-      if state.view ~= "mixer" then
-        state.cell_edit = nil
+      -- one press away from anywhere, an open cell page included -- which it
+      -- closes on the way, so the encoders are never pointed at a page the
+      -- screen is not showing. from the main screen that's the mixer; from
+      -- either the mixer or the map it's the other one, so K3 alone walks
+      -- back and forth between them once you're off the main screen.
+      state.cell_edit = nil
+      if state.view == "mixer" then
+        state.view = "map"
+        state.set_event("map", 1.2)
+      else
         state.view = "mixer"
         state.mparam_focus = state.mparam_focus or 1
         state.set_event("mixer", 1.2)
@@ -440,13 +454,23 @@ end
 -- then moved a hair to make it sit. gridui owns the two step sizes now, since
 -- the held glance and the open page have to move a row by the same amount.
 
+-- the map page is a reference: holding a cell, or having one open, narrows
+-- the grid to what it's cabled to (screenui.draw_map) instead of handing the
+-- screen to that cell's own numeric page or the global macros, so there is
+-- nothing on screen for E1/E2/E3 to show happening to either of those while
+-- it's up. two cells held is the exception -- that's still the edge view and
+-- its gain, drawn the same on every page.
+local function map_reference()
+  return state.view == "map" and #state.held < 2
+end
+
 function enc(n, d)
-  if gridui.on_norns_enc(n, d, keystate) then return end
+  if not map_reference() and gridui.on_norns_enc(n, d, keystate) then return end
 
   -- the open settings page, whatever type of cell it belongs to. exactly the
   -- same call the held-cell glance above makes (lib/cellparam.lua hands both
   -- of them the same page object).
-  if state.cell_edit then
+  if not map_reference() and state.cell_edit then
     if gridui.page_enc(state.cell_edit, n, d) then return end
   end
 
@@ -458,6 +482,8 @@ function enc(n, d)
     bridge.master_level(state.global.level)
     return
   end
+
+  if map_reference() then return end
 
   -- §4.1b the mixer page (K3): the same E1-select/E2-E3-nudge shape as the
   -- global page, for the four soundscape loops and the master.

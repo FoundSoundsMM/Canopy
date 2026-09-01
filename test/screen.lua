@@ -40,15 +40,18 @@ local CHAR_W, ASCENT, DESCENT = 5, 5, 1
 local boxes = {}
 local cur = {x = 0, y = 0}
 
-local function record(kind, x, y, w, h, text)
+local function record(kind, x, y, w, h, text, level)
   table.insert(boxes, {kind = kind, x0 = x, y0 = y, x1 = x + w, y1 = y + h,
-                       text = text})
+                       text = text, level = level})
 end
 
 local rec = {}
 rec.clear = function() boxes = {} end
 rec.update = function() end
-rec.level = function() end
+-- the last level set before a shape is drawn -- the geometry checks below
+-- never read it, but the map page test does, the same way test/gridui.lua
+-- reads the physical grid's own led levels.
+rec.level = function(l) cur.level = l end
 rec.aa = function() end
 rec.font_size = function() end
 rec.font_face = function() end
@@ -85,11 +88,13 @@ rec.close = function() end
 -- is a collision whichever way round they are.
 local function flush(rect_kind)
   if cur.rect then
-    record(rect_kind, cur.rect[1], cur.rect[2], cur.rect[3], cur.rect[4])
+    record(rect_kind, cur.rect[1], cur.rect[2], cur.rect[3], cur.rect[4],
+           nil, cur.level)
     cur.rect = nil
   end
   if cur.shape then
-    record("shape", cur.shape[1], cur.shape[2], cur.shape[3], cur.shape[4])
+    record("shape", cur.shape[1], cur.shape[2], cur.shape[3], cur.shape[4],
+           nil, cur.level)
     cur.shape = nil
   end
 end
@@ -224,6 +229,135 @@ do
   params:set("clock_source", 1)
   params:set("clock_tempo", 120)
   M.state.last_event = ""
+end
+
+-- 1d: the map page -------------------------------------------------------
+-- every registered cell is drawn every time -- only its brightness changes
+-- -- so what these check is the level each one gets, the same way
+-- test/gridui.lua reads the physical grid's own led levels rather than
+-- counting how many it called. a map cell is a 7x5 fill (MAP_RECT_W x
+-- MAP_RECT_H in lib/screenui.lua); the header bar and its chips are also
+-- "fill" boxes, but far bigger, and draw before the loop that puts one 7x5
+-- fill per cell down in topology's own registration order -- so zipping
+-- topology.order against just the 7x5 fills, in order, recovers which level
+-- each cell got.
+
+local function fills()
+  local out = {}
+  for _, b in ipairs(boxes) do
+    if b.kind == "fill" and (b.x1 - b.x0) == 7 and (b.y1 - b.y0) == 5 then
+      table.insert(out, b)
+    end
+  end
+  return out
+end
+
+local function cell_levels(M)
+  local out, matched = {}, fills()
+  for i, id in ipairs(M.topology.order) do
+    out[id] = matched[i] and matched[i].level
+  end
+  return out
+end
+
+local function has_text(s)
+  for _, b in ipairs(boxes) do
+    if b.kind == "text" and b.text == s then return true end
+  end
+  return false
+end
+
+print("\n-- the map page --")
+-- uses the top-level M (fresh(1)) rather than a fresh() of its own: screenui
+-- resolved its topology/patch/state/etc. locals once, the first time it was
+-- loaded (module-load-time wl() calls, lib/screenui.lua's own top-of-file
+-- section) -- against whatever fresh() had most recently populated, which by
+-- the time `local screenui = wl("screenui")` runs a few lines up is M's. a
+-- later fresh() (M2/M3 elsewhere in this file) hands back genuinely new
+-- module tables that screenui's already-loaded closure never sees again, so
+-- mutating one of those and expecting it to show up on screen is a no-op --
+-- fine for the sections below that only check generic layout, not fine for
+-- assertions about specific cable/focus content like these.
+do
+  M.state.view = "map"
+
+  screenui.redraw()
+  draws_clean("map, idle")
+  check("map, idle: one box per registered cell",
+        #fills() == #M.topology.order, tostring(#fills()))
+
+  local idle = cell_levels(M)
+  check("map, idle: an uncabled cell is dim but present",
+        idle["oak"] and idle["oak"] > 0 and idle["oak"] < 8,
+        tostring(idle["oak"]))
+
+  for _, other in ipairs({"o.1", "d.hob", "gu.sough"}) do
+    M.patch.add("oak", other, 0.5)
+  end
+  screenui.redraw()
+  draws_clean("map, a live patch")
+  local live = cell_levels(M)
+  check("map, a live patch: a cabled cell lights up",
+        live["oak"] and live["oak"] > idle["oak"],
+        tostring(live["oak"]) .. " vs idle " .. tostring(idle["oak"]))
+  check("map, a live patch: an uncabled cell is unchanged",
+        live["f.bittern"] == idle["f.bittern"],
+        tostring(live["f.bittern"]) .. " vs idle " .. tostring(idle["f.bittern"]))
+
+  -- holding a cell narrows the map instead of opening that cell's numeric
+  -- page -- the header still reads "MAP", not the cell's own tag letter --
+  -- and only the focus and its cable neighbours stay lit.
+  M.state.held = {"oak"}
+  screenui.redraw()
+  draws_clean("map, holding a cabled cell")
+  check("map, held: header stays on the map, not the cell page",
+        has_text("MAP"), tostring(has_text("MAP")))
+  local held = cell_levels(M)
+  check("map, held: the focus is at full", held["oak"] == 15,
+        tostring(held["oak"]))
+  check("map, held: a cabled neighbour is bright",
+        held["o.1"] and held["o.1"] > 8, tostring(held["o.1"]))
+  check("map, held: an unrelated cell fades almost to black",
+        held["f.bittern"] and held["f.bittern"] <= 1,
+        tostring(held["f.bittern"]))
+  M.state.held = {}
+
+  -- opening a cell's settings page while the map is up does the same thing
+  -- (the property-page case), rather than switching to voice.PARAMS.
+  M.state.cell_edit = "oak"
+  screenui.redraw()
+  draws_clean("map, oak's page open")
+  check("map, cell_edit: header stays on the map",
+        has_text("MAP"), tostring(has_text("MAP")))
+  local opened = cell_levels(M)
+  check("map, cell_edit: narrows the same way holding would",
+        opened["oak"] == 15 and opened["f.bittern"] <= 1,
+        opened["oak"] .. "/" .. opened["f.bittern"])
+  M.state.cell_edit = nil
+
+  -- an uncabled cell still focuses on just itself -- "connected to it only"
+  -- means an empty neighbourhood is a valid answer, not a fallback to
+  -- lighting up everything.
+  M.state.held = {"f.bittern"}
+  screenui.redraw()
+  local lonely = cell_levels(M)
+  check("map, an uncabled focus lights only itself",
+        lonely["f.bittern"] == 15 and lonely["oak"] <= 1,
+        lonely["f.bittern"] .. "/" .. lonely["oak"])
+  M.state.held = {}
+
+  -- two cells held is still the edge view (cable gain), on this page same
+  -- as any other.
+  M.state.held = {"oak", "o.1"}
+  screenui.redraw()
+  check("map, two held: falls back to the edge view",
+        has_text("cable") and not has_text("MAP"), "")
+  M.state.held = {}
+
+  -- leave M exactly as the sections below expect to find it: no stray
+  -- cables from this section's patch, back on the main screen.
+  M.patch.clear()
+  M.state.view = "global"
 end
 
 -- 2: every cell's page, held and open ----------------------------------------

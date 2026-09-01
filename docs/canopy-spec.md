@@ -456,8 +456,8 @@ the original design carried (§1) is gone with the socket cluster.
 | E1 | pick one of seven global params (§5.2) |
 | E2 / E3 | nudge the picked param, coarse / fine |
 | K1 + E3 | Master level |
-| K3 | **the mixer** (§4.1b) — from anywhere, including an open cell page, whose focus it drops on the way |
-| K2 | **back** — off the mixer, or out of an open cell page, to the main screen; on the main screen, **Still** |
+| K3 | **the mixer** (§4.1b) — from anywhere, including an open cell page, whose focus it drops on the way; a second K3 goes on to **the map** (§4.1d), and a third back to the mixer |
+| K2 | **back** — off the mixer or the map, or out of an open cell page, to the main screen; on the main screen, **Still** |
 | K1 + K2 | **Regrow** — a seeded patch that already plays (hold to confirm) |
 | K1 + K3 | **Clearing** — cut every cable (hold to confirm) |
 
@@ -466,11 +466,14 @@ Scatter, Scale, Drops, Decay, Pitch. It was nine: Rain and Excite left when
 the one rain loop became four (§4.1b).
 
 **K2 and K3 are one shallow stack**, not a different pair of jobs per page.
-K3 goes down into the mixer from wherever you are; K2 comes back up one
-level. Still keeps K2 because the main screen is the one place with nothing
-to come back from, and freezing the patch is a fair reading of "there is
+K3 steps down from the main screen into the mixer, then the map (§4.1d),
+trading the two back and forth from there rather than adding a third level;
+K2 always comes back up to the main screen in one press, off either one.
+Still keeps K2 because the main screen is the one place with nothing to
+come back from, and freezing the patch is a fair reading of "there is
 nothing above this". K3's old job — closing a cell page — is K2's now, along
-with everything else that means "up one".
+with everything else that means "up one", checked first so an open cell page
+closes before the mixer/map step does.
 
 **Regrow** always wires exactly one Output cable per voice it uses, or a
 freshly regrown patch would strike voices nobody can hear — the whole point
@@ -545,6 +548,27 @@ scheduled/inbox/source queues (`rambler.resync`): `tick()` returns *before*
 those drains while Still, so a stop leaves entries sitting there with
 timestamps already in the past, and without clearing them the first tick
 after a Start would fire the lot in one block.
+
+### 4.1d The map page — K3, again
+
+`K3` a second time (from the mixer) goes on to the map: every registered
+cell in topology's own 16 x 8 layout (§2), drawn small under the header —
+lit if something is cabled to it, dim if it isn't, gone entirely if the
+coordinate was never a cell (the "." squares in §2's own sketch). No wires:
+a cable's other end is one hold away on the real grid, so the map's job is
+only "is this cell doing anything", not "to what".
+
+Holding a cell here — or tapping one open, same as anywhere else — narrows
+the map to that cell and whatever reaches it, the same idea §5.1b already
+uses to dim the physical grid around an open settings page, just drawn on
+the screen instead of handing it to that cell's own numeric page the way
+every other view does. Letting go, or closing the page, brings the rest of
+the map back. Two cells held is unchanged — that's still the edge view
+(§3's "hold A, hold B") and its gain, on this page same as any other.
+
+A third `K3` goes back to the mixer: once off the main screen, `K3` alone
+walks back and forth between the two rather than stacking a third level, and
+`K2` still comes all the way back up to the main screen from either one.
 
 ### 4.2 Holding a grid cell
 
@@ -645,7 +669,9 @@ fits on one page.
 
 Every full-screen page in the script — global (§5.2), mixer (§4.1b), and
 every cell page (§5.3, §5.5) — is drawn by one routine in `lib/screenui.lua`,
-and it is not a list any more.
+and it is not a list any more. The map page (§4.1d) shares the same header
+but not the widget grid below it — there is no list to walk, just the
+16 x 8 layout redrawn small.
 
 It used to be: a two-column list of `label ....... value` rows with a
 hairline bar under each. That was compact, and it read like a settings menu —
@@ -873,7 +899,7 @@ Canopy/
     mixer.lua                 -- the four soundscape loops + master (§4.1b)
     gridui.lua                -- grid render + hold/tap state machine
     screenui.lua              -- the widget grid (§5.2b): global / mixer /
-                                 cell / edge views
+                                 cell / edge views, plus the map (§4.1d)
     bridge.lua                -- engine command wrapper
   lib/Engine_Canopy.sc      -- SC: modal voices, GVOICE drums, exciters, patch
                                matrix, heartwood, the four ambience loops,
