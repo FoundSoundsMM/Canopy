@@ -558,13 +558,11 @@ coordinate was never a cell (the "." squares in §2's own sketch). No wires:
 a cable's other end is one hold away on the real grid, so the map's job is
 only "is this cell doing anything", not "to what".
 
-Holding a cell here — or tapping one open, same as anywhere else — narrows
-the map to that cell and whatever reaches it, the same idea §5.1b already
-uses to dim the physical grid around an open settings page, just drawn on
-the screen instead of handing it to that cell's own numeric page the way
-every other view does. Letting go, or closing the page, brings the rest of
-the map back. Two cells held is unchanged — that's still the edge view
-(§3's "hold A, hold B") and its gain, on this page same as any other.
+Holding a cell here, or tapping one open, does exactly what it does on every
+other screen: the screen goes to that cell's own settings page (§5.3/§5.5),
+not a filtered version of the map. Letting go, or closing the page, comes
+back to the map. Two cells held is unchanged either way — that's still the
+edge view (§3's "hold A, hold B") and its gain.
 
 A third `K3` goes back to the mixer: once off the main screen, `K3` alone
 walks back and forth between the two rather than stacking a third level, and

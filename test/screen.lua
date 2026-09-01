@@ -304,47 +304,34 @@ do
         live["f.bittern"] == idle["f.bittern"],
         tostring(live["f.bittern"]) .. " vs idle " .. tostring(idle["f.bittern"]))
 
-  -- holding a cell narrows the map instead of opening that cell's numeric
-  -- page -- the header still reads "MAP", not the cell's own tag letter --
-  -- and only the focus and its cable neighbours stay lit.
+  -- holding a cell from the map still goes straight to that cell's own
+  -- settings page -- same as from any other screen -- rather than staying on
+  -- the map. the header carries the cell's own tag, not "MAP", and there are
+  -- no 7x5 map fills at all: this is voice.PARAMS' widget grid.
   M.state.held = {"oak"}
   screenui.redraw()
-  draws_clean("map, holding a cabled cell")
-  check("map, held: header stays on the map, not the cell page",
-        has_text("MAP"), tostring(has_text("MAP")))
-  local held = cell_levels(M)
-  check("map, held: the focus is at full", held["oak"] == 15,
-        tostring(held["oak"]))
-  check("map, held: a cabled neighbour is bright",
-        held["o.1"] and held["o.1"] > 8, tostring(held["o.1"]))
-  check("map, held: an unrelated cell fades almost to black",
-        held["f.bittern"] and held["f.bittern"] <= 1,
-        tostring(held["f.bittern"]))
+  draws_clean("map, holding a cell")
+  check("map, held: goes to the cell's own page, not the map",
+        not has_text("MAP") and #fills() == 0,
+        tostring(has_text("MAP")) .. "/" .. tostring(#fills()))
   M.state.held = {}
 
-  -- opening a cell's settings page while the map is up does the same thing
-  -- (the property-page case), rather than switching to voice.PARAMS.
+  -- letting go comes back to the map -- state.view was never touched.
+  screenui.redraw()
+  check("map, after letting go: back on the map",
+        has_text("MAP"), tostring(has_text("MAP")))
+
+  -- tapping a cell open (state.cell_edit) does the same thing.
   M.state.cell_edit = "oak"
   screenui.redraw()
   draws_clean("map, oak's page open")
-  check("map, cell_edit: header stays on the map",
-        has_text("MAP"), tostring(has_text("MAP")))
-  local opened = cell_levels(M)
-  check("map, cell_edit: narrows the same way holding would",
-        opened["oak"] == 15 and opened["f.bittern"] <= 1,
-        opened["oak"] .. "/" .. opened["f.bittern"])
+  check("map, cell_edit: goes to the cell's own page, not the map",
+        not has_text("MAP") and #fills() == 0,
+        tostring(has_text("MAP")) .. "/" .. tostring(#fills()))
   M.state.cell_edit = nil
-
-  -- an uncabled cell still focuses on just itself -- "connected to it only"
-  -- means an empty neighbourhood is a valid answer, not a fallback to
-  -- lighting up everything.
-  M.state.held = {"f.bittern"}
   screenui.redraw()
-  local lonely = cell_levels(M)
-  check("map, an uncabled focus lights only itself",
-        lonely["f.bittern"] == 15 and lonely["oak"] <= 1,
-        lonely["f.bittern"] .. "/" .. lonely["oak"])
-  M.state.held = {}
+  check("map, after closing: back on the map",
+        has_text("MAP"), tostring(has_text("MAP")))
 
   -- two cells held is still the edge view (cable gain), on this page same
   -- as any other.

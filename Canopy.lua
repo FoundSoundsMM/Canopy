@@ -21,9 +21,11 @@
 -- level.
 -- K3: the mixer -- faders for the four soundscape loops and the master. from
 -- an open cell page it goes there too, dropping that cell's focus. K3 again
--- goes on to the map page -- every cell, lit if it's cabled, dim if it isn't;
--- hold a cell (or tap one open) to see just what reaches it. a third K3 goes
--- back to the mixer, so the two trade places until K2 backs all the way out.
+-- goes on to the map page -- every cell, lit if it's cabled, dim if it isn't.
+-- holding or tapping a cell open from there still goes straight to that
+-- cell's own settings page, same as everywhere else -- letting go or closing
+-- it comes back to the map. a third K3 goes back to the mixer, so the two
+-- trade places until K2 backs all the way out.
 -- K2: back. off the mixer or the map, or out of an open cell page, to the
 -- main screen; with nothing to come back from, it freezes the pulse gaits
 -- (Still).
@@ -454,23 +456,13 @@ end
 -- then moved a hair to make it sit. gridui owns the two step sizes now, since
 -- the held glance and the open page have to move a row by the same amount.
 
--- the map page is a reference: holding a cell, or having one open, narrows
--- the grid to what it's cabled to (screenui.draw_map) instead of handing the
--- screen to that cell's own numeric page or the global macros, so there is
--- nothing on screen for E1/E2/E3 to show happening to either of those while
--- it's up. two cells held is the exception -- that's still the edge view and
--- its gain, drawn the same on every page.
-local function map_reference()
-  return state.view == "map" and #state.held < 2
-end
-
 function enc(n, d)
-  if not map_reference() and gridui.on_norns_enc(n, d, keystate) then return end
+  if gridui.on_norns_enc(n, d, keystate) then return end
 
   -- the open settings page, whatever type of cell it belongs to. exactly the
   -- same call the held-cell glance above makes (lib/cellparam.lua hands both
   -- of them the same page object).
-  if not map_reference() and state.cell_edit then
+  if state.cell_edit then
     if gridui.page_enc(state.cell_edit, n, d) then return end
   end
 
@@ -483,7 +475,12 @@ function enc(n, d)
     return
   end
 
-  if map_reference() then return end
+  -- the map page itself is a reference, not a control surface -- nothing on
+  -- it for E1/E2/E3 to move. by this point a held cell or an open one would
+  -- already have consumed the turn above (that's a real settings page, same
+  -- as on every other screen), so reaching here with view == "map" means
+  -- there is genuinely nothing under the cursor.
+  if state.view == "map" then return end
 
   -- §4.1b the mixer page (K3): the same E1-select/E2-E3-nudge shape as the
   -- global page, for the four soundscape loops and the master.
