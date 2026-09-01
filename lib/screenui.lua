@@ -494,7 +494,6 @@ local INTERACTION_DESC = {
   ["D|voice"] = "the pulse strikes the voice, which answers out of its own point",
   ["R|voice"] = "the transformed pulse strikes the voice, which answers in turn",
   ["TM|voice"] = "the pulse clocks the register and strikes the voice; also feeds its pitch",
-  ["SEQ|voice"] = "an active step's pulse strikes the voice",
   ["C|voice"] = "the clock's pulse strikes the voice",
   ["E|voice"] = "the stream drives the voice's mod path (Balance decides how)",
   ["H|voice"] = "the lattice returns into the voice's mod path",
@@ -547,17 +546,21 @@ local INTERACTION_DESC = {
   ["C|H"] = "the clock's pulse enters the lattice",
   ["C|F"] = "each clock pulse steps the field to a new degree",
   ["C|TM"] = "the clock's pulse clocks the register",
-  ["C|SEQ"] = "the clock drives the lane, or fires one step directly",
-  -- Q4/Q6 lanes: a pulse on the last cell of a lane advances the shared
-  -- playhead; a pulse on any other cell fires that step directly.
-  ["D|SEQ"] = "the pulse drives the lane, or fires one step directly",
-  ["R|SEQ"] = "the transformed pulse drives the lane, or fires one step",
-  ["TM|SEQ"] = "the register's answering pulse drives the lane, or fires one step",
-  ["GVOICE|SEQ"] = "the drum's answering pulse drives the lane, or fires one step",
-  ["H|SEQ"] = "a pulse out of the lattice drives the lane, or fires one step",
-  ["SEQ|SEQ"] = "one lane's firing step can drive or fire a step in the other",
-  ["E|SEQ"] = "no meaning: an exciter has no pulse of its own to send",
-  ["F|SEQ"] = "no meaning: a field never emits a pulse",
+  ["C|GUST"] = "the clock's pulse sounds the gust's note",
+  -- §2.11 the gusts: a pulse sounds the note, and the gust answers with a
+  -- pulse of its own the way a drum does. a continuous cable lands on its
+  -- cross-mod input instead, where the cell's own Cross knob scales it into
+  -- pitch and fold -- which is why two gusts together read as modulation.
+  ["D|GUST"] = "the pulse sounds the note, which answers with a pulse of its own",
+  ["R|GUST"] = "the transformed pulse sounds the note, which answers in turn",
+  ["TM|GUST"] = "the register's answering pulse sounds the note",
+  ["GVOICE|GUST"] = "the drum's answering pulse sounds the note",
+  ["H|GUST"] = "a pulse out of the lattice sounds it; the lattice also bends its core",
+  ["GUST|GUST"] = "cross-modulation: each bends the other's pitch and fold",
+  ["voice|GUST"] = "the gust drives the voice's mod path; the voice bends the gust's core",
+  ["E|GUST"] = "the stream bends the gust's core; the gust rides the exciter's colour",
+  ["F|GUST"] = "no meaning: a gust takes its pitch from the Scale, not a field",
+  ["GUST|O"] = "a second copy at this cell's pan, on top of its automatic one",
   -- the Output row is exclusive (patch.lua): a source sits at one pan
   -- position, and cabling it to a second Out cell moves it rather than
   -- adding to it. two Out cells together is not a cable at all.
@@ -566,7 +569,7 @@ local INTERACTION_DESC = {
 
 local TYPE_ORDER = {
   voice = 1, D = 2, R = 3, E = 4, H = 5, F = 6, C = 7, TM = 8, GVOICE = 9,
-  SEQ = 10, O = 11,
+  GUST = 10, O = 11,
 }
 
 local function interaction_text(ta, tb)

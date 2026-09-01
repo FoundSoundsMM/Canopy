@@ -22,6 +22,12 @@ local bridge = {}
 -- reason: the six percussion cells used to reach the speakers through a
 -- fixed always-on mix; now they need an addressable tap of their own, same
 -- shape as a voice's.
+--
+-- §2.11's gusts add two more families of the same shape: `gust_out` is one
+-- cell's own mono tap (what a cable *out* of it carries -- its automatic,
+-- panned route to the mix is a separate path inside the engine and is not a
+-- bus anyone here addresses), and `gust_mod` is the sum of everything cabled
+-- *into* it, which is what its Cross knob scales into pitch and fold.
 bridge.BUS = {
   exc        = {base = 0,  n = 6},  -- E cell raw outputs
   colour_mod = {base = 6,  n = 6},  -- per-E colour cross-mod sum
@@ -31,6 +37,8 @@ bridge.BUS = {
   heart_in   = {base = 26, n = 4},  -- per-H lattice injection sum
   heart_out  = {base = 30, n = 4},  -- per-H lattice emergence tap
   out        = {base = 34, n = 16}, -- the Output row's 16 fixed-pan buses
+  gust_out   = {base = 50, n = 10}, -- per-GUST audio tap
+  gust_mod   = {base = 60, n = 10}, -- per-GUST cross-mod input sum
 }
 
 function bridge.bus(name, index)
@@ -163,6 +171,51 @@ end
 
 function bridge.g_amp(index, v)
   engine.g_amp(index, v)
+end
+
+-- §2.11 gust cells: the ten drone synths. `gust_note` is the whole gesture
+-- -- pitch and force in one message, the way `strike` is for a voice --
+-- because a key press sets both at once and a gust has no separate mallet to
+-- describe. `gust_pitch` is the same pitch without sounding it, for a Scale
+-- or transpose change that has to reach a cell already ringing.
+function bridge.gust_note(index, hz, force)
+  engine.gust_note(index, hz, force)
+end
+
+function bridge.gust_pitch(index, hz)
+  engine.gust_pitch(index, hz)
+end
+
+function bridge.gust_attack(index, seconds)
+  engine.gust_attack(index, seconds)
+end
+
+function bridge.gust_decay(index, seconds)
+  engine.gust_decay(index, seconds)
+end
+
+function bridge.gust_timbre(index, v)
+  engine.gust_timbre(index, v)
+end
+
+function bridge.gust_cross(index, v)
+  engine.gust_cross(index, v)
+end
+
+function bridge.gust_amp(index, v)
+  engine.gust_amp(index, v)
+end
+
+-- where this gust sits in the stereo field. fixed by the cell's column
+-- (topology's `pan`) and pushed once at init -- there is no knob for it.
+function bridge.gust_pan(index, v)
+  engine.gust_pan(index, v)
+end
+
+-- the one delay line all ten gusts are heard through (§4.1's Space / Delay /
+-- Regen rows on the global page). global, not per cell.
+function bridge.gust_space(mix, time, feedback)
+  engine.gust_space(mix, time, feedback)
 end
 
 -- §2.4 exciter cells: lazy on/off, Colour (E2), the gated flag (has this S

@@ -1,6 +1,6 @@
 -- mixer.lua
 -- §4.1b the mixer page: a fader for each of the four always-on soundscape
--- loops, plus the master.
+-- loops, the master, and the gusts' shared delay line.
 --
 -- Rain used to be one entry on the global page and one hard-coded sample
 -- path in Canopy.lua's init. it is four now -- rain, cicada, thunder, sea --
@@ -14,6 +14,10 @@
 -- inside, not exciters. lib/exciter.lua's six E cells are still the panel's
 -- excitation sources and are unaffected.
 --
+-- it also carries the gusts' shared delay line (§2.11) -- see the comment
+-- above those three rows for why it belongs here rather than on the global
+-- page.
+--
 -- the page object is the same shape as gparam's and every cell page's --
 -- PARAMS with get/set/text/frac/push, E1 to pick, E2/E3 to move coarse/fine
 -- -- so screenui and Canopy.lua drive it through the code path they already
@@ -21,8 +25,9 @@
 -- key handler); there is nothing modal about it beyond which page the
 -- encoders are pointed at.
 --
--- five slots: the four loop faders fill the widget grid's top row (§5.2b),
--- with the master underneath the first of them. one screen, no paging.
+-- eight slots, which is exactly one screen: the four loop faders fill the
+-- widget grid's top row (§5.2b), and the master plus the gusts' three
+-- delay-line rows fill the second. no paging.
 
 local state  = wl("state")
 local bridge = wl("bridge")
@@ -69,7 +74,8 @@ function mixer.set_level(key, v)
 end
 
 -- the page --------------------------------------------------------------------
--- five rows: Rain, Cicada, Thunder, Sea, Master.
+-- eight rows: Rain, Cicada, Thunder, Sea, Master, then the gusts' Space,
+-- Delay and Regen.
 
 local COARSE, FINE = 1 / 80, 1 / 500
 
@@ -107,6 +113,47 @@ table.insert(mixer.PARAMS, {
   push = function() bridge.master_level(state.global.level or 0.8) end,
 })
 
+-- §2.11 the gusts' one shared delay line -- "a globally defined delayline
+-- that gives it space and ambience". it lands here rather than on the global
+-- page for two reasons. it is the same kind of thing the four rows above it
+-- are: a level and a room, not a macro that reaches into every voice's
+-- parameters. and the arithmetic agrees -- four loops, the master and these
+-- three is exactly eight, which is one screen (screenui.PARAMS_PER_PAGE),
+-- where putting them on the global page would have pushed a seven-row list
+-- onto a second page for the sake of three rows.
+--
+-- the numbers themselves live in lib/gust.lua, which owns their defaults and
+-- their ranges; this is only the face.
+local function space_row(key, label, text_fn, frac_fn, coarse, fine)
+  return {
+    key = "gust_" .. key, label = label, coarse = coarse, fine = fine,
+    get = function() return wl("gust").get_space(key) end,
+    set = function(v) wl("gust").set_space(key, v) end,
+    text = text_fn, frac = frac_fn,
+    push = function() wl("gust").push_space() end,
+  }
+end
+
+table.insert(mixer.PARAMS, space_row("space", "Space",
+  function() return string.format("%.2f", wl("gust").get_space("space")) end,
+  function() return wl("gust").get_space("space") end,
+  COARSE, FINE))
+
+-- in milliseconds, not a 0..1 knob: a delay time is a number you want to
+-- read, and often one you want to match to the tempo by eye.
+table.insert(mixer.PARAMS, space_row("delay", "Delay",
+  function() return string.format("%.0f ms", wl("gust").get_space("delay") * 1000) end,
+  function()
+    local g = wl("gust")
+    return (g.get_space("delay") - g.DELAY_MIN) / (g.DELAY_MAX - g.DELAY_MIN)
+  end,
+  0.01, 0.002))
+
+table.insert(mixer.PARAMS, space_row("regen", "Regen",
+  function() return string.format("%.2f", wl("gust").get_space("regen")) end,
+  function() local g = wl("gust"); return g.get_space("regen") / g.REGEN_MAX end,
+  COARSE, FINE))
+
 mixer.PARAM_COUNT = #mixer.PARAMS
 
 function mixer.param(i)
@@ -114,7 +161,9 @@ function mixer.param(i)
 end
 
 -- the same nudge contract gparam has: `coarse`/`fine` are the step in the
--- param's own units, and every row here is a plain 0..1 knob.
+-- param's own units. the five faders are plain 0..1 knobs and clamp here;
+-- the three delay rows have ranges of their own and clamp inside
+-- gust.set_space, so they carry no min/max and this leaves them alone.
 function mixer.nudge(i, delta, is_coarse)
   local p = mixer.param(i)
   local step = (is_coarse and p.coarse or p.fine) or p.coarse

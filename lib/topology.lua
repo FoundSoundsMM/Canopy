@@ -9,9 +9,11 @@
 -- reused for a small Clock family; the six percussion cells become two
 -- three-cell groups (the ping ones read "F", the noise ones read "N");
 -- Turing Machines are unchanged; the weave/heartwood/exciter families keep
--- their mechanics with a smaller, curated set of default seats; and two new
--- step-sequencer lanes (Q4, Q6) join the panel. `cell.letter` is a *display*
--- override only -- code that needs the mechanic still reads `cell.type`.
+-- their mechanics with a smaller, curated set of default seats; and the two
+-- bottom rows carry ten Gust cells -- small drone synths, one per cell (the
+-- Q4/Q6 step-sequencer lanes that were briefly there are gone; see §2.11).
+-- `cell.letter` is a *display* override only -- code that needs the mechanic
+-- still reads `cell.type`.
 --
 --       1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
 --  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
@@ -20,14 +22,14 @@
 --  4    F   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   H
 --  5    .   F   .   .   .   C   T   T   T   T   C   .   .   .   H   .
 --  6    E   .   F   .   .   .   .   .   .   .   .   .   .   H   .   R
---  7    E   E   .   F   .   .  Q4  Q4  Q4  Q4   .   .   H   .   R   R
---  8    E   E   E   .   .   Q6  Q6  Q6  Q6  Q6  Q6   .   .   R   R   R
+--  7    E   E   .   F   .   .   G   G   G   G   .   .   H   .   R   R
+--  8    E   E   E   .   .   G   G   G   G   G   G   .   .   R   R   R
 --
 --   O  output (16)     M  voice (4)        F  grove field / percussion-ping
 --   N  percussion-noise TM Turing Machine  C  clock (4)
 --   T  trigger source (8, was D)          H  heartwood (4)
 --   E  exciter (6, was S)                  R  weave (6)
---   Q4/Q6 step sequencers                  .  unregistered, dark and inert
+--   G  gust (10, drone synths)             .  unregistered, dark and inert
 
 local topology = {}
 
@@ -265,34 +267,71 @@ for i, e in ipairs(E_CELLS) do
   reg("E", id, name, {{e.x, e.y}}, {source = e.source, index = i - 1})
 end
 
--- 2.10 step sequencers -- Q4 / Q6 (10, internally type "SEQ") ---------------
--- no phase of their own, like a TM cell -- only a pulse cabled in moves them.
--- one lane is four physical cells, the other six; each is its own cable
--- endpoint and its own tap-toggle step, and the *last* cell of a lane is the
--- "driver": a pulse there advances the shared playhead, a pulse on any other
--- cell in the lane fires that one step directly, independent of the
--- playhead. see the new lib/sequencer.lua.
+-- 2.11 the gusts -- G (10, internally type "GUST") --------------------------
+-- ten small drone synths, one per cell, in the two rows the Q4/Q6 step
+-- sequencer lanes used to fill. the lanes are gone: what the panel wanted
+-- there was not another way to make a pulse (it already has T, C, R, TM and
+-- the heartwood) but something to *play*.
+--
+-- a gust is loosely a Ciat-Lonbarde Deerhorn voice: a triangle core with a
+-- slow swell and a slow decay, raw at the edges, and cross-modulated by
+-- whatever is patched into it. it is not a clone -- there is no antenna
+-- here, so the grid key is what an approaching hand was: press a cell and
+-- that gust sounds its note.
+--
+-- two things make this family unlike every other sound on the panel:
+--
+--   * it is heard without being cabled. every other source is silent until
+--     it reaches an Output cell; a gust is routed to the main mix
+--     automatically, panned by where it physically sits (`pan` below).
+--   * its pitch is not its own. each cell has a `root`, but what actually
+--     sounds is that root pulled onto the global Scale (§4.1), so ten cells
+--     pressed at random are ten notes of one scale. see lib/gust.lua.
+--
+-- pan comes from the column and nothing else, spread across the family's own
+-- six-column span rather than the whole panel -- these cells only occupy
+-- columns 6..11, and mapping them over all sixteen would leave ten voices
+-- huddled in the middle third of the stereo field. GUST_PAN_MAX keeps the
+-- outermost pair short of hard left/right so the image still has somewhere
+-- to go.
+local GUST_X_MIN, GUST_X_MAX = 6, 11
+local GUST_PAN_MAX = 0.8
 
--- both lanes are centred on the 16-column panel: a 4-cell lane starts at
--- column 7, a 6-cell lane at column 6, so Q4 sits symmetrically inside Q6.
-local SEQ_LANES = {
-  {group = "q4", coords = {{7, 7}, {8, 7}, {9, 7}, {10, 7}}},
-  {group = "q6", coords = {{6, 8}, {7, 8}, {8, 8}, {9, 8}, {10, 8}, {11, 8}}},
+-- roots are equal-tempered intervals above lib/gust.lua's 55 Hz reference,
+-- laid out low-to-high left-to-right so the two rows read like a keyboard:
+-- the wide bottom row is a bed (A2 up to A3), the narrower top row sits an
+-- octave above it. the exact Hz matter -- gust.lua converts them back to
+-- semitones to quantise them -- so they are written out rather than rounded.
+--
+-- `attack`/`decay` are this cell's own envelope times in seconds, the centre
+-- of the two knobs on its page: the low, wide voices swell and fade slowest.
+local GUST_CELLS = {
+  -- the top row (4) -- higher, narrower, quicker to speak
+  {id = "sough",   x = 7,  y = 7, root = 261.63, attack = 0.55, decay = 2.6},
+  {id = "eddy",    x = 8,  y = 7, root = 293.66, attack = 0.40, decay = 2.2},
+  {id = "whorl",   x = 9,  y = 7, root = 329.63, attack = 0.70, decay = 3.0},
+  {id = "flaw",    x = 10, y = 7, root = 392.00, attack = 0.30, decay = 1.8},
+  -- the bottom row (6) -- the bed
+  {id = "squall",  x = 6,  y = 8, root = 110.00, attack = 1.40, decay = 6.0},
+  {id = "flurry",  x = 7,  y = 8, root = 130.81, attack = 0.90, decay = 4.5},
+  {id = "snell",   x = 8,  y = 8, root = 146.83, attack = 1.10, decay = 5.0},
+  {id = "bluster", x = 9,  y = 8, root = 164.81, attack = 0.75, decay = 4.0},
+  {id = "buffet",  x = 10, y = 8, root = 196.00, attack = 1.00, decay = 4.8},
+  {id = "haar",    x = 11, y = 8, root = 220.00, attack = 1.60, decay = 6.5},
 }
 
-for _, lane in ipairs(SEQ_LANES) do
-  local len = #lane.coords
-  for step, xy in ipairs(lane.coords) do
-    local id = lane.group .. "." .. step
-    local name = lane.group:upper() .. " " .. step
-    reg("SEQ", id, name, {xy}, {
-      letter = "Q" .. len,
-      group = lane.group,
-      len = len,
-      step = step,
-      driver = (step == len),
-    })
-  end
+for i, gu in ipairs(GUST_CELLS) do
+  local id = "gu." .. gu.id
+  local name = gu.id:sub(1, 1):upper() .. gu.id:sub(2)
+  local span = (gu.x - GUST_X_MIN) / (GUST_X_MAX - GUST_X_MIN)
+  reg("GUST", id, name, {{gu.x, gu.y}}, {
+    letter = "G",
+    index = i,
+    root = gu.root,
+    attack = gu.attack,
+    decay = gu.decay,
+    pan = (span * 2 - 1) * GUST_PAN_MAX,
+  })
 end
 
 -- lookups -------------------------------------------------------------
@@ -317,13 +356,15 @@ function topology.each()
   end
 end
 
--- the types that carry a pulse of their own -- a phase (D), a rule (R), a
--- register (TM) or a sequencer step (SEQ). traffic between two of them is
--- deferred a scheduler tick so a cycle in the patch cannot recurse, which
--- rambler.lua and heartwood.lua both need to know about. a CLOCK cell is
--- deliberately not a member: it is a pure source, never a pulse target, the
--- same shape climate used to be.
-topology.PULSE_TYPES = {D = true, R = true, TM = true, SEQ = true}
+-- the types that carry a pulse of their own -- a phase (D), a rule (R) or a
+-- register (TM). traffic between two of them is deferred a scheduler tick so
+-- a cycle in the patch cannot recurse, which rambler.lua and heartwood.lua
+-- both need to know about. a CLOCK cell is deliberately not a member: it is
+-- a pure source, never a pulse target, the same shape climate used to be.
+-- neither is a GUST cell: it answers a pulse with a sound, exactly the way a
+-- voice or a GVOICE cell does, so it is dispatch's business and not the
+-- scheduler's.
+topology.PULSE_TYPES = {D = true, R = true, TM = true}
 
 function topology.is_pulse_cell(cell)
   return (cell and topology.PULSE_TYPES[cell.type]) and true or false

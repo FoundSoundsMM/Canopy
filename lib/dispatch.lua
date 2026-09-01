@@ -6,12 +6,13 @@
 -- `on_pulse` -- event-driven, fires when a pulse-carrying cell speaks. it
 -- covers everything a pulse can land on: a voice (always a strike -- the
 -- socket collapse dropped the discrete choke gesture, see below), a GVOICE
--- cell (strike, same as a voice), an E cell (fire a grain) and an H cell
--- (into the lattice). pulse-cell to pulse-cell traffic (D/R/TM/SEQ) never
--- comes here -- that is rambler's inbox, because it is coupling rather than
--- delivery. a CLOCK cell never receives one either: it is a pure source, the
--- same shape climate used to be. neither does an O cell -- it is a source's
--- destination, not something with a reaction of its own.
+-- cell (strike, same as a voice), a GUST cell (play its note, §2.11), an E
+-- cell (fire a grain) and an H cell (into the lattice). pulse-cell to
+-- pulse-cell traffic (D/R/TM) never comes here -- that is rambler's inbox,
+-- because it is coupling rather than delivery. a CLOCK cell never receives
+-- one either: it is a pure source, the same shape climate used to be.
+-- neither does an O cell -- it is a source's destination, not something with
+-- a reaction of its own.
 --
 -- `resync_matrix` -- graph-driven, not event-driven: continuous pairs are
 -- just live SC synths for as long as the cable exists, so there is no
@@ -126,6 +127,22 @@ HANDLERS["GVOICE"] = function(source_id, target_id, edge, weight)
 
   if patch.degree(target_id) > 1 then
     wl("rambler").post_source(target_id, wForce, source_id)
+  end
+end
+
+-- -> a GUST cell: §2.11, the same shape as a GVOICE cell's -- the cell is
+-- the trigger, so a pulse landing on it plays its note, and it answers out
+-- of that same id a tick later, excluding the cable the pulse arrived on.
+-- the refractory is gust.lua's own and much shorter than a drum head's: a
+-- gust's attack is seconds long, so retriggering one part-way up its swell
+-- is a musical thing to do rather than a machine-gun to be guarded against,
+-- and the engine lags the restart so it lifts rather than clicks.
+HANDLERS["GUST"] = function(source_id, target_id, edge, weight)
+  local force = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
+  if not wl("gust").play(target_id, wobble(force, 0.04, 0, 1)) then return end
+
+  if patch.degree(target_id) > 1 then
+    wl("rambler").post_source(target_id, force, source_id)
   end
 end
 
@@ -295,6 +312,75 @@ local function voice_to_voice_specs(a, b, edge, out)
   if not edge.oneway then link(b, a) end
 end
 
+-- anything continuous into a gust's cross-mod input (§2.11). the receiving
+-- cell's own Cross knob decides how deeply it is heard, so this is a plain
+-- pass at the cable's gain and nothing more -- the panel's usual division of
+-- labour, where the cable says how much and the cell says what of.
+local function to_gust_mod_spec(src_bus, gu, gain)
+  return {
+    kind = "aa", src = src_bus,
+    dst = bridge.bus("gust_mod", gu.index - 1), gain = gain,
+  }
+end
+
+-- a gust <-> a gust: the Deerhorn gesture, and the reason a gust has a Cross
+-- knob at all. each one's audio lands on the other's mod input, where it
+-- bends pitch and opens the fold at once -- so the pair is genuinely
+-- cross-modulating rather than merely summed. symmetric, like voice<->voice;
+-- a one-way cable only sends from the a-side (§3), which is how you get one
+-- gust colouring another without being coloured back.
+local function gust_to_gust_specs(a, b, edge, out)
+  local function link(from, to)
+    table.insert(out, to_gust_mod_spec(bridge.bus("gust_out", from.index - 1), to, edge.gain))
+  end
+  link(a, b)
+  if not edge.oneway then link(b, a) end
+end
+
+-- a gust <-> a voice: two different meanings, one per direction, gated
+-- independently the way voice<->E already is. the gust colours the voice's
+-- mod path; the voice colours the gust's core.
+local function gust_to_voice_specs(gu, v, edge, out)
+  if (not edge.oneway) or edge.a == gu.id then
+    table.insert(out, {
+      kind = "aa", src = bridge.bus("gust_out", gu.index - 1),
+      dst = bridge.bus("mod_in", v.index - 1), gain = edge.gain,
+    })
+  end
+  if (not edge.oneway) or edge.a == v.id then
+    table.insert(out, to_gust_mod_spec(bridge.bus("voice_out", v.index - 1), gu, edge.gain))
+  end
+end
+
+-- a gust <-> an H node, same shape again: the gust pouring into the wood and
+-- the lattice coming back into its core.
+local function gust_to_h_specs(gu, h, edge, out)
+  if (not edge.oneway) or edge.a == gu.id then
+    table.insert(out, {
+      kind = "aa", src = bridge.bus("gust_out", gu.index - 1),
+      dst = bridge.bus("heart_in", h.index), gain = edge.gain,
+    })
+  end
+  if (not edge.oneway) or edge.a == h.id then
+    table.insert(out, to_gust_mod_spec(bridge.bus("heart_out", h.index), gu, edge.gain))
+  end
+end
+
+-- a gust <-> an E cell: the exciter's texture into the gust's core, and the
+-- gust's own tone riding the exciter's colour. same two-halves-one-cable
+-- shape voice<->E has, and for the same reason.
+local function gust_to_e_specs(gu, e, edge, out)
+  if (not edge.oneway) or edge.a == e.id then
+    table.insert(out, to_gust_mod_spec(bridge.bus("exc", e.index), gu, edge.gain))
+  end
+  if (not edge.oneway) or edge.a == gu.id then
+    table.insert(out, {
+      kind = "ak", src = bridge.bus("gust_out", gu.index - 1),
+      dst = bridge.bus("colour_mod", e.index), gain = edge.gain,
+    })
+  end
+end
+
 -- a source cell's own audio into an Output row cell -- the only way anything
 -- is ever heard. position along the row sets pan (topology's `pan` field);
 -- the gain is this cable's own, so patching one source into several O cells
@@ -333,6 +419,43 @@ local function specs_for(edge)
   x, y = ordered("GVOICE", "O")
   if x then
     table.insert(out, to_output_spec(bridge.bus("gvoice_out", x.index - 1), y, edge.gain))
+    return out
+  end
+
+  -- a gust is the one source already reaching the speakers without a cable
+  -- (§2.11: the engine pans it by its own column and mixes it in). an
+  -- Output cable is therefore an *addition* rather than the only route --
+  -- a second, deliberately-placed copy at whatever gain and pan position
+  -- the player wants, alongside the automatic one.
+  x, y = ordered("GUST", "O")
+  if x then
+    table.insert(out, to_output_spec(bridge.bus("gust_out", x.index - 1), y, edge.gain))
+    return out
+  end
+
+  x, y = ordered("GUST", "GUST")
+  if x then
+    -- ordered() may have swapped them and the one-way rule is written in
+    -- terms of the edge's own a/b, so re-derive from those (same as H<->H).
+    gust_to_gust_specs(topology.get(edge.a), topology.get(edge.b), edge, out)
+    return out
+  end
+
+  x, y = ordered("GUST", "voice")
+  if x then
+    gust_to_voice_specs(x, y, edge, out)
+    return out
+  end
+
+  x, y = ordered("GUST", "E")
+  if x then
+    gust_to_e_specs(x, y, edge, out)
+    return out
+  end
+
+  x, y = ordered("GUST", "H")
+  if x then
+    gust_to_h_specs(x, y, edge, out)
     return out
   end
 

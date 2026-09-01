@@ -6,8 +6,10 @@
 --
 -- it was nine rows; it is seven. Rain and Excite left for the mixer page
 -- (§4.1b, lib/mixer.lua) when the one rain loop became four, and took their
--- bridge pushes with them -- everything still here is a macro over the whole
--- patch rather than one sound source's fader.
+-- bridge pushes with them -- and the gusts' shared delay line (§2.11) went
+-- there rather than here for the same reason: it is a level and a room, not
+-- a macro over the patch. everything still here reaches every voice at
+-- once.
 --
 -- each entry stores in whatever unit is natural to it (0..1 for a plain
 -- knob, real semitones/bpm for the ones that are), rather than forcing
@@ -79,19 +81,21 @@ local function voices()
   return ids
 end
 
--- the global Decay macro (below) reaches the GVOICE cells too -- gvoice.lua's
--- decay_seconds() already folds voice.decay_mult_ratio() in, same as
--- voice.lua's own does, so this is the only other place that needs to know
--- they exist as well as the four corner voices.
+-- the global Decay macro (below) reaches the GVOICE and GUST cells too --
+-- each of their decay_seconds() already folds voice.decay_mult_ratio() in,
+-- same as voice.lua's own does, so this is the only other place that needs
+-- to know they exist as well as the four corner voices.
 local function sounding_cells()
   local ids = {}
   for id, cell in topology.each() do
-    if cell.type == "voice" or cell.type == "GVOICE" then table.insert(ids, id) end
+    if cell.type == "voice" or cell.type == "GVOICE" or cell.type == "GUST" then
+      table.insert(ids, id)
+    end
   end
   return ids
 end
 
--- the nine, in E1 order ------------------------------------------------------
+-- the seven, in E1 order ------------------------------------------------------
 -- `frac` is the screen's bar position, 0..1, kept separate from `get` since
 -- bpm/scale/pitch don't store in 0..1 themselves.
 
@@ -157,6 +161,10 @@ gparam.PARAMS = {
       -- rather than waiting for the next strike/step.
       local grove = wl("grove")
       for _, id in ipairs(voices()) do grove.push_voice_now(id) end
+      -- §2.11: a gust's note is quantised to this scale too, and unlike a
+      -- voice it is not retuned by the next strike -- it is holding a pitch
+      -- right now. so all ten are re-pushed rather than left stale.
+      wl("gust").repush_pitch()
     end,
   },
   {
@@ -196,6 +204,9 @@ gparam.PARAMS = {
     push = function()
       local grove = wl("grove")
       for _, id in ipairs(voices()) do grove.push_voice_now(id) end
+      -- a gust holds its pitch between presses rather than being retuned on
+      -- the next strike, so a transpose has to be pushed to all ten now.
+      wl("gust").repush_pitch()
     end,
   },
 }

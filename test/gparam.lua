@@ -24,6 +24,15 @@ do
   check("seven params", n == 7, "#" .. n)
   check("bpm is first", M.gparam.PARAMS[1].key == "bpm")
   check("pitch is last", M.gparam.PARAMS[n].key == "pitch")
+  -- the gusts' delay line is deliberately NOT here: it is a level and a
+  -- room, so it went to the mixer page with the other four (mixer.lua).
+  check("and the gusts' delay line is not on this page",
+        (function()
+          for _, p in ipairs(M.gparam.PARAMS) do
+            if p.key:match("^gust") then return false end
+          end
+          return true
+        end)())
   check("and no soundscape rows are left here",
         (function()
           for _, p in ipairs(M.gparam.PARAMS) do

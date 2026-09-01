@@ -37,8 +37,8 @@ do
   -- page drawn) both happened at once, and left the total unchanged at 21.
   local WANT = {
     "bridge", "cellparam", "clockcell", "dispatch", "exciter", "gparam",
-    "gridui", "grove", "gvoice", "heartwood", "mixer", "patch", "quantise",
-    "rambler", "screenui", "sequencer", "state", "tm", "topology", "voice",
+    "gridui", "grove", "gust", "gvoice", "heartwood", "mixer", "patch", "quantise",
+    "rambler", "screenui", "state", "tm", "topology", "voice",
     "weave",
   }
   check("exactly the expected modules, one copy each",
@@ -82,10 +82,11 @@ local ok, err = pcall(function()
   gridobj.key(2, 2, 1); redraw()              -- edge view
   gridobj.key(2, 2, 0); gridobj.key(7, 4, 0)
   -- one representative of every current cell type, including the ones the
-  -- re-cut added (O, GVOICE/E rename, C-as-clock, SEQ).
+  -- re-cut added (O, GVOICE/E rename, C-as-clock) and the gusts (§2.11) that
+  -- replaced the step-sequencer lanes -- one from each of their two rows.
   for _, id in ipairs({"oak", "d.hob", "tm.padfoot", "clk.toll", "h.wyrd",
                        "f.cuckoo", "r.thicket", "gv.yaffle", "e.bracken",
-                       "o.1", "q4.1", "q6.1"}) do
+                       "o.1", "gu.sough", "gu.squall"}) do
     local c = M.topology.get(id)
     gridobj.key(c.coords[1][1], c.coords[1][2], 1); redraw()
     gridobj.key(c.coords[1][1], c.coords[1][2], 0)

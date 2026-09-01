@@ -40,7 +40,6 @@ local quantise  = wl("quantise")
 local weave     = wl("weave")
 local clockcell = wl("clockcell")
 local tm        = wl("tm")
-local sequencer = wl("sequencer")
 
 local rambler = {}
 
@@ -520,11 +519,6 @@ local function deliver(msg, now)
 
   if cell.type == "TM" then
     tm.pulse_in(msg.id, msg.w, msg.src, now)
-    return
-  end
-
-  if cell.type == "SEQ" then
-    sequencer.pulse_in(msg.id, msg.w, msg.src, now)
     return
   end
 

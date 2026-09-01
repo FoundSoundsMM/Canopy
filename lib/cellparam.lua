@@ -3,7 +3,7 @@
 --
 -- voice/GVOICE/TM cells each kept their own PARAMS list (voice.lua,
 -- gvoice.lua, tm.lua) because each is a real instrument with its own units.
--- everything else on the panel -- T, R, F, E, H, C, Q4/Q6, Out -- used to
+-- everything else on the panel -- T, R, F, E, H, C, Out -- used to
 -- have its settings scattered across gestures instead: E2 for "the one knob",
 -- K1+E2 to cycle a bank, K1+tap to flip a boolean, E3-with-nothing-focused
 -- for decay. that meant the same physical gesture did a different thing (or
@@ -289,59 +289,6 @@ PAGES.C = {
   end),
 }
 
--- Q4/Q6 cells. `Step` is deliberately row one: it is the thing you reach for
--- most, so opening the page and turning E2 is enough to put a step in or take
--- it out. (K1 + tap on the cell itself does the same thing without opening
--- anything -- see gridui.act.)
-PAGES.SEQ = {
-  flag_row("Step", "on", "off",
-           function(id) return wl("sequencer").is_active(id) end,
-           function(id, on) state.step_active[id] = on end),
-  {
-    key = "place", label = "Place",
-    get = function(id)
-      local info = wl("sequencer").info(id)
-      return info and (info.step / info.len) or 0
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("sequencer").info(id)
-      if not info then return "-" end
-      return string.format("%d/%d", info.step, info.len)
-    end,
-    push = function() end,
-  },
-  {
-    key = "role", label = "Role",
-    get = function(id)
-      local info = wl("sequencer").info(id)
-      return (info and info.driver) and 1 or 0
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("sequencer").info(id)
-      if not info then return "-" end
-      return info.driver and "drives" or "step"
-    end,
-    push = function() end,
-  },
-  {
-    key = "playhead", label = "Head",
-    get = function(id)
-      local info = wl("sequencer").info(id)
-      return info and (info.playhead / info.len) or 0
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("sequencer").info(id)
-      if not info then return "-" end
-      if info.playhead == 0 then return "idle" end
-      return tostring(info.playhead) .. (info.playhead == info.step and " here" or "")
-    end,
-    push = function() end,
-  },
-}
-
 -- Out cells: nothing to set -- position along the row *is* the pan -- so the
 -- page is two readouts. it still exists, and still opens on a tap, because
 -- "some cells have a page and some don't" is the inconsistency this file is
@@ -409,14 +356,15 @@ local function build(kind)
   return page
 end
 
--- the one entry point. voice/GVOICE/TM keep their own modules; everything
--- else lands here. returns nil only for a type with nothing at all to show,
--- which no registered type currently is.
+-- the one entry point. voice/GVOICE/TM/GUST keep their own modules;
+-- everything else lands here. returns nil only for a type with nothing at
+-- all to show, which no registered type currently is.
 function cellparam.page(id)
   local cell = topology.get(id)
   if not cell then return nil end
   if cell.type == "voice" then return wl("voice") end
   if cell.type == "GVOICE" then return wl("gvoice") end
+  if cell.type == "GUST" then return wl("gust") end
   if cell.type == "TM" then return wl("tm") end
   local p = pages[cell.type]
   if p == nil then

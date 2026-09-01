@@ -2,14 +2,14 @@
 -- vocabulary that now runs on every cell of it.
 --
 -- covers: (1) the panel matches the sketch it was drawn from -- in particular
--- that all four modal voices sit together on row 2 and that both sequencer
--- lanes are centred; (2) a tap toggles any cell's settings page, whatever its
--- type; (3) K1+tap fires the cell -- a voice or drum strikes, an exciter
--- grains, a trigger pulses, a sequencer step goes in or out; (4) the hold/tap
--- cable gesture still works and is not confused by either of those; (5) the
--- sequencer lanes are visibly different in their three states; (6) the Output
--- row is exclusive -- a source is in one slot, and cabling it to a second one
--- moves it; (7) an open cell page dims the rest of the panel down to it.
+-- that all four modal voices sit together on row 2 and that both gust rows
+-- are centred; (2) a tap toggles any cell's settings page, whatever its
+-- type; (3) K1+tap fires the cell -- a voice or drum strikes, a gust sounds,
+-- an exciter grains, a trigger pulses; (4) the hold/tap cable gesture still
+-- works and is not confused by either of those; (5) a gust sounds on the way
+-- DOWN, before the release the page toggle rides on; (6) the Output row is
+-- exclusive -- a source is in one slot, and cabling it to a second one moves
+-- it; (7) an open cell page dims the rest of the panel down to it.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -41,13 +41,13 @@ do
     "F..ttCTTTTCtt..H",
     ".F...CTTTTC...H.",
     "E.F..........H.R",
-    "EE.F..qqqq..H.RR",
-    "EEE..pppppp..RRR",
+    "EE.F..GGGG..H.RR",
+    "EEE..GGGGGG..RRR",
   }
   -- the letter each type prints on the map above. lower case only to keep the
-  -- two-character families (TM, Q4, Q6) to one column each.
+  -- two-character family (TM) to one column each.
   local LETTER = {O = "O", voice = "M", GVOICE = nil, D = "T", TM = "t",
-                  C = "C", H = "H", E = "E", R = "R", F = "F"}
+                  C = "C", H = "H", E = "E", R = "R", F = "F", GUST = "G"}
   local rows_ok = true
   local first_bad = nil
   for y = 1, 8 do
@@ -58,8 +58,6 @@ do
       if cell then
         if cell.type == "GVOICE" then
           got = cell.letter          -- F for the pings, N for the noises
-        elseif cell.type == "SEQ" then
-          got = (cell.len == 4) and "q" or "p"
         else
           got = LETTER[cell.type] or "?"
         end
@@ -86,20 +84,24 @@ do
   for _, y in ipairs(vrows) do if y ~= 2 then all_row2 = false end end
   check("and all four are on row 2, where you can see them at once", all_row2)
 
-  local q4x = {}
+  -- §2.11 the gust rows: the narrow one sits symmetrically inside the wide
+  -- one, and both are centred on the panel -- which is what makes the pan
+  -- spread read as a stereo image rather than as an accident of layout.
+  local top, bottom = {}, {}
   for id, cell in M.topology.each() do
-    if cell.type == "SEQ" and cell.len == 4 then
-      table.insert(q4x, cell.coords[1][1])
+    if cell.type == "GUST" then
+      table.insert(cell.coords[1][2] == 7 and top or bottom, cell.coords[1][1])
     end
   end
-  table.sort(q4x)
-  check("the 4-step lane is centred on the panel",
-        q4x[1] == 7 and q4x[4] == 10,
-        table.concat(q4x, ","))
-  -- centred means the same margin either side, which is the thing that was
-  -- one column out.
-  check("with equal margins", (q4x[1] - 1) == (16 - q4x[4]),
-        (q4x[1] - 1) .. " vs " .. (16 - q4x[4]))
+  table.sort(top)
+  table.sort(bottom)
+  check("the top gust row is four wide, centred",
+        #top == 4 and top[1] == 7 and top[4] == 10, table.concat(top, ","))
+  check("the bottom row is six wide, centred",
+        #bottom == 6 and bottom[1] == 6 and bottom[6] == 11,
+        table.concat(bottom, ","))
+  check("with equal margins either side", (bottom[1] - 1) == (16 - bottom[6]),
+        (bottom[1] - 1) .. " vs " .. (16 - bottom[6]))
 end
 
 -- 2: a tap toggles the page, on every type -----------------------------------
@@ -134,11 +136,11 @@ print("\n-- a slow tap still counts as a tap --")
 do
   local M = fresh(3)
   local gridui = wl("gridui")
-  local x, y = xy(M, "q4.2")
+  local x, y = xy(M, "r.tangle")
   gridui.on_grid_key(x, y, 1, NONE)
   T = T + 0.35                     -- unhurried, but not a hold
   gridui.on_grid_key(x, y, 0, NONE)
-  check("0.35 s is under the tap threshold", M.state.cell_edit == "q4.2",
+  check("0.35 s is under the tap threshold", M.state.cell_edit == "r.tangle",
         tostring(M.state.cell_edit))
 end
 
@@ -203,35 +205,54 @@ do
         #CALLS.strike == 1, "#" .. #CALLS.strike)
 end
 
-print("\n-- K1 + tap puts a sequencer step in and takes it out --")
+print("\n-- §2.11 a gust sounds on the way DOWN --")
 do
+  -- this is the one gesture on the panel that does not wait for the release,
+  -- and it has to be: a key that sounds when you let go is not a key. the
+  -- release still toggles the page like every other cell, so nothing in the
+  -- vocabulary is lost -- both things happen on the one press.
   local M = fresh(8)
   local gridui = wl("gridui")
-  local sequencer = wl("sequencer")
-  local x, y = xy(M, "q6.3")
-  check("a step starts armed", sequencer.is_active("q6.3"))
-  tap(gridui, x, y, K1)
-  check("K1+tap takes it out", not sequencer.is_active("q6.3"))
-  tap(gridui, x, y, K1)
-  check("and puts it back", sequencer.is_active("q6.3"))
-  check("without opening anything", M.state.cell_edit == nil,
+  local x, y = xy(M, "gu.whorl")
+
+  gridui.on_grid_key(x, y, 1, NONE)
+  check("the note is already out before the release", #CALLS.gust_note == 1,
+        "#" .. #CALLS.gust_note)
+  check("and nothing has opened yet", M.state.cell_edit == nil)
+
+  T = T + 0.05
+  gridui.on_grid_key(x, y, 0, NONE)
+  check("the release still opens its page", M.state.cell_edit == "gu.whorl",
         tostring(M.state.cell_edit))
-  check("and without touching its neighbour", sequencer.is_active("q6.4"))
+  check("and did not sound it a second time", #CALLS.gust_note == 1,
+        "#" .. #CALLS.gust_note)
+
+  -- and it is that cell's own note, not a fixed one.
+  local hz = CALLS.gust_note[1].hz
+  check("at the cell's own pitch",
+        math.abs(hz - M.topology.get("gu.whorl").root) < 0.01, tostring(hz))
 end
 
-print("\n-- and the Step row on the page does the same thing --")
+print("\n-- K1 + tap sounds a gust too, through the same path a cable uses --")
 do
   local M = fresh(9)
   local gridui = wl("gridui")
-  local sequencer = wl("sequencer")
-  local x, y = xy(M, "q4.1")
-  tap(gridui, x, y)                       -- open the page
-  M.state.vparam_focus = 1                -- Step is row one, deliberately
-  for _ = 1, 3 do gridui.page_enc("q4.1", 2, -1) end
-  check("turning the Step row down takes the step out",
-        not sequencer.is_active("q4.1"))
-  for _ = 1, 3 do gridui.page_enc("q4.1", 2, 1) end
-  check("and turning it up puts it back", sequencer.is_active("q4.1"))
+  local x, y = xy(M, "gu.flurry")
+  -- the press itself sounds it, then dispatch sounds it again through the
+  -- synthetic cable -- except the refractory is in the way, which is exactly
+  -- what it is there for. step past it so the K1 half is what is measured.
+  gridui.on_grid_key(x, y, 1, K1)
+  local after_press = #CALLS.gust_note
+  T = T + 0.05
+  gridui.on_grid_key(x, y, 0, K1)
+  check("K1+tap sounds it a second time", #CALLS.gust_note > after_press,
+        "#" .. #CALLS.gust_note)
+  check("and did not open the page", M.state.cell_edit == nil,
+        tostring(M.state.cell_edit))
+  -- a gust routes itself to the mix, so "no output cable" is its normal
+  -- state and must NOT be reported as a problem the way a voice's is.
+  check("and never warns about a missing Output cable",
+        M.state.last_event:find("no output") == nil, M.state.last_event)
 end
 
 -- 4: the cable gesture is unharmed -------------------------------------------
@@ -380,41 +401,53 @@ do
   M.state.held = {}
 end
 
--- 5: the lanes are legible ---------------------------------------------------
+-- 5: the gust rows are legible ------------------------------------------------
 
-print("\n-- the sequencer lanes read at a glance --")
+print("\n-- the gust rows read at a glance --")
 do
   local M = fresh(11)
-  local sequencer = wl("sequencer")
+  local gust = wl("gust")
   local gridui = wl("gridui")
 
-  M.state.step_active["q6.1"] = false
-  local off = sequencer.level("q6.1", 2)
-  M.state.step_active["q6.1"] = true
-  local on = sequencer.level("q6.1", 2)
-  check("an armed step is clearly brighter than an empty one", on - off >= 4,
-        off .. " -> " .. on)
+  local idle = gust.level_at("gu.squall", 2)
+  M.patch.add("d.hob", "gu.squall", 1.0)
+  local cabled = gust.level_at("gu.squall", 2)
+  check("a cabled gust is brighter than an idle one", cabled > idle,
+        idle .. " -> " .. cabled)
 
-  -- drive the lane one step and check the playhead outruns both
-  M.patch.add("d.hob", "q6.6", 1.0)       -- q6.6 is the lane's driver
-  sequencer.pulse_in("q6.6", 1.0, "d.hob", T)
-  check("the playhead moved", sequencer.playhead("q6") == 1,
-        tostring(sequencer.playhead("q6")))
-  local head = sequencer.level("q6.1", 2)
-  check("and the cell it is on is brighter still", head > on,
-        on .. " -> " .. head)
-  check("bright enough to see across a room", head >= 12, tostring(head))
+  M.state.cell_edit = "gu.squall"
+  local open = gust.level_at("gu.squall", 2)
+  check("and an open page is brighter still", open > cabled,
+        cabled .. " -> " .. open)
+  M.state.cell_edit = nil
 
-  -- every level the lane can produce is a legal grid level
+  -- pressing one flashes it, over whatever it was already doing.
+  gust.press("gu.squall")
+  local flashed = gust.level_at("gu.squall", 2)
+  check("a press lights it up", flashed > cabled, cabled .. " -> " .. flashed)
+  check("bright enough to see across a room", flashed >= 12, tostring(flashed))
+
+  -- every level the family can produce is a legal grid level, flash and all
   local legal = true
-  for _, id in ipairs({"q4.1", "q4.4", "q6.1", "q6.6"}) do
-    for _, active in ipairs({true, false}) do
-      M.state.step_active[id] = active
-      local lvl = sequencer.level(id, 2)
+  for _, id in ipairs(gust.each()) do
+    for _, t in ipairs({0, 0.05, 0.2}) do
+      T = T + t
+      local lvl = gust.level_at(id, 2)
       if lvl < 0 or lvl > 15 or lvl ~= math.floor(lvl) then legal = false end
     end
   end
   check("and every level it produces is a legal one", legal)
+
+  -- and the whole panel still renders with the new family on it
+  local levels = {}
+  local g = {all = function() end, refresh = function() end,
+             led = function(_, x, y, l) levels[x .. "," .. y] = l end}
+  gridui.grid_redraw(g)
+  local all_legal = true
+  for _, l in pairs(levels) do
+    if l < 0 or l > 15 or l ~= math.floor(l) then all_legal = false end
+  end
+  check("the panel renders legal levels everywhere", all_legal)
 end
 
 report()

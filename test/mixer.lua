@@ -3,12 +3,13 @@
 --
 -- covers: (1) the four soundscape loops are declared once and load once, at
 -- the engine indices the .sc file expects; (2) each fader is an independent
--- 0..1 knob that reaches the engine, and the master is the fifth; (3) K3 and
+-- 0..1 knob that reaches the engine, the master is the fifth, and the gusts'
+-- shared delay line (§2.11) fills the page out to exactly one screen; (3) K3 and
 -- K2 move between the main screen, an open cell page and the mixer in the
 -- shape Canopy.lua's header describes -- including K3 dropping a cell's
 -- focus on the way; (4) an external Start/Stop freezes and unfreezes the
--- patch and puts the sequencer lanes back, and drops -- rather than floods
--- out -- the taps a Stop froze in the scheduler and in the weave.
+-- patch, and drops -- rather than floods out -- the taps a Stop froze in the
+-- scheduler and in the weave.
 --
 -- this one drives the real Canopy.lua rather than the modules directly,
 -- because half of what it is testing IS Canopy.lua -- key(), enc(), and the
@@ -72,10 +73,17 @@ end
 
 -- 2: the faders --------------------------------------------------------------
 
-print("\n-- five faders: four loops and the master --")
+print("\n-- eight rows: four loops, the master, and the gusts' delay line --")
 do
-  check("five rows", mixer.PARAM_COUNT == 5, tostring(mixer.PARAM_COUNT))
-  check("the master is the last", mixer.PARAMS[5].key == "master")
+  -- eight is exactly one screen (screenui.PARAMS_PER_PAGE), which is why the
+  -- gusts' shared delay line (§2.11) lives here rather than pushing the
+  -- seven-row global page onto a second page.
+  check("eight rows", mixer.PARAM_COUNT == 8, tostring(mixer.PARAM_COUNT))
+  check("the master closes the faders", mixer.PARAMS[5].key == "master")
+  check("then Space, Delay and Regen",
+        mixer.PARAMS[6].key == "gust_space"
+        and mixer.PARAMS[7].key == "gust_delay"
+        and mixer.PARAMS[8].key == "gust_regen")
 
   check("every loop starts silent",
         mixer.get_level("rain") == 0 and mixer.get_level("sea") == 0)
@@ -169,7 +177,7 @@ do
   check("E1 walks the mixer's own focus", state.mparam_focus == 4,
         tostring(state.mparam_focus))
   enc(1, 99)
-  check("clamped to the five faders", state.mparam_focus == 5,
+  check("clamped to the last row", state.mparam_focus == 8,
         tostring(state.mparam_focus))
   local before = state.global.bpm
   enc(2, 5)
@@ -182,19 +190,12 @@ end
 
 print("\n-- an external Start and Stop --")
 do
-  local sequencer = M.sequencer
   params:set("clock_source", 2)          -- MIDI
 
   state.global.still = false
   state.held = {}
   state.cell_edit = nil
-
-  -- put the lanes somewhere other than the top
   patch.clear()
-  sequencer.pulse_in("q6.6", 1.0, "d.hob", T)
-  sequencer.pulse_in("q6.6", 1.0, "d.hob", T)
-  check("the lane has moved off step 1", sequencer.playhead("q6") == 2,
-        tostring(sequencer.playhead("q6")))
 
   state.global.still = false
   clock.transport.stop()
@@ -208,14 +209,22 @@ do
 
   clock.transport.start()
   check("a Start unfreezes them", state.global.still == false)
-  check("and put the lanes back to the top", sequencer.playhead("q6") == 0,
-        tostring(sequencer.playhead("q6")))
 
-  -- a song-position jump with no stop: lanes reset, nothing freezes
-  sequencer.pulse_in("q6.6", 1.0, "d.hob", T)
+  -- a song-position jump with no stop: the queues clear, nothing freezes.
+  -- there is no playhead left on the panel to put back -- the step lanes are
+  -- gone and the gusts that replaced them hold a pitch, not a position.
   clock.transport.reset()
-  check("a reset puts the lanes back without stopping anything",
-        sequencer.playhead("q6") == 0 and state.global.still == false)
+  check("a reset clears the queues without stopping anything",
+        state.global.still == false)
+
+  -- and a ringing gust is left ringing: a transport message is about time,
+  -- and a swell that is part-way through is not a queue to be flushed.
+  local before = #CALLS.gust_note
+  M.gust.press("gu.haar")
+  clock.transport.reset()
+  clock.transport.start()
+  check("neither a reset nor a Start re-sounds or silences one",
+        #CALLS.gust_note == before + 1, tostring(#CALLS.gust_note - before))
 
   -- the resume must not flush a backlog. freeze with a clock-rooted trigger
   -- cabled to a voice, let wall time run past several of its beats, and

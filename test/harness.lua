@@ -72,6 +72,9 @@ local function fresh_calls()
     amb_load = {}, amb_volume = {},
     g_strike = {}, g_pitch = {}, g_decay = {}, g_tone = {}, g_punch = {},
     g_drive = {}, g_amp = {},
+    gust_note = {}, gust_pitch = {}, gust_attack = {}, gust_decay = {},
+    gust_timbre = {}, gust_cross = {}, gust_amp = {}, gust_pan = {},
+    gust_space = {},
   }
 end
 CALLS = fresh_calls()
@@ -132,6 +135,24 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.g_drive, {t = T, index = a[1], v = a[2]})
     elseif k == "g_amp" then
       table.insert(CALLS.g_amp, {t = T, index = a[1], v = a[2]})
+    elseif k == "gust_note" then
+      table.insert(CALLS.gust_note, {t = T, index = a[1], hz = a[2], force = a[3]})
+    elseif k == "gust_pitch" then
+      table.insert(CALLS.gust_pitch, {t = T, index = a[1], hz = a[2]})
+    elseif k == "gust_attack" then
+      table.insert(CALLS.gust_attack, {t = T, index = a[1], secs = a[2]})
+    elseif k == "gust_decay" then
+      table.insert(CALLS.gust_decay, {t = T, index = a[1], secs = a[2]})
+    elseif k == "gust_timbre" then
+      table.insert(CALLS.gust_timbre, {t = T, index = a[1], v = a[2]})
+    elseif k == "gust_cross" then
+      table.insert(CALLS.gust_cross, {t = T, index = a[1], v = a[2]})
+    elseif k == "gust_amp" then
+      table.insert(CALLS.gust_amp, {t = T, index = a[1], v = a[2]})
+    elseif k == "gust_pan" then
+      table.insert(CALLS.gust_pan, {t = T, index = a[1], v = a[2]})
+    elseif k == "gust_space" then
+      table.insert(CALLS.gust_space, {t = T, mix = a[1], time = a[2], fb = a[3]})
     end
   end
 end})
@@ -158,7 +179,7 @@ function fresh(seed)
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "heartwood", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
-                      "gparam", "mixer", "tm", "sequencer", "cellparam"}) do
+                      "gparam", "mixer", "tm", "gust", "cellparam"}) do
     M[n] = wl(n)
   end
   return M

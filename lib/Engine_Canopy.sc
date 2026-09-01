@@ -41,6 +41,15 @@
 // excited only by its own strike burst and by whatever is cabled into
 // its mod path.
 //
+// the gusts (§2.11): the Q4/Q6 step-sequencer lanes' ten cells become ten
+// small drone synths (\wl_gust) -- a folded triangle core under a slow
+// attack/slow decay envelope, cross-modulated by whatever is cabled in,
+// loosely after a Ciat-Lonbarde Deerhorn and deliberately not a clone of
+// one. they are the single exception to "nothing is heard without a cable":
+// each pans itself by its cell's column into a shared bus, that bus runs
+// through one global delay line (\wl_gust_space), and \woodland_fx reads the
+// result alongside the Output row and the ambience loops.
+//
 // the grid overhaul changes \woodland_fx more than anything since build
 // phase 6: there is no automatic mix left at all. a voice's or percussion
 // cell's own tap bus, an exciter, and a heartwood node's emergence all used
@@ -56,7 +65,7 @@
 
 Engine_Canopy : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
-	var patchBus, excMeterBus, ambBus;
+	var patchBus, excMeterBus, ambBus, gustBus, gustSpaceBus;
 	var voiceSynths;
 	var gSynths;
 	var excSynths;
@@ -67,6 +76,8 @@ Engine_Canopy : CroneEngine {
 	var ambBufs;
 	var ambSynths;
 	var ambVol;
+	var gustSynths;
+	var gustSpaceSynth;
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
 	// §8 "per-voice defaults" table. keep freq/structureBase/dampBase/decay in
@@ -104,7 +115,8 @@ Engine_Canopy : CroneEngine {
 		\wl_g_noise, \wl_g_noise, \wl_g_noise
 	];
 
-	classvar nVoices = 4, nExc = 6, nG = 6, nH = 4, nOut = 16, nAmb = 4;
+	classvar nVoices = 4, nExc = 6, nG = 6, nH = 4, nOut = 16, nAmb = 4,
+		nGust = 10;
 
 	// offsets into the single `patchBus` block (§7.3's separate bus families
 	// collapsed into one allocation so the Lua side only needs to add an
@@ -121,7 +133,8 @@ Engine_Canopy : CroneEngine {
 	// sixteen fixed-pan buses).
 	classvar excBase = 0, colourModBase = 6, modInBase = 12,
 		voiceOutBase = 16, gvoiceOutBase = 20, heartInBase = 26,
-		heartOutBase = 30, outBase = 34, patchTotal = 50;
+		heartOutBase = 30, outBase = 34, gustOutBase = 50,
+		gustModBase = 60, patchTotal = 70;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -157,6 +170,16 @@ Engine_Canopy : CroneEngine {
 		// block with nothing writing here is just a block of zeros, not
 		// stale data.
 		ambBus = Bus.audio(server, 2);
+		// §2.11 the gusts. two stereo buses rather than one, because the
+		// family's automatic route to the mix runs through a delay line and
+		// the delay has to read the sum of all ten before \woodland_fx sees
+		// any of it: every \wl_gust pans itself into `gustBus`, \wl_gust_space
+		// reads that and writes dry-plus-delayed into `gustSpaceBus`, and
+		// \woodland_fx reads only the second. this is the one signal path on
+		// the panel a cable is not required to complete -- everything else
+		// reaches the speakers through an Output-row cell or not at all.
+		gustBus = Bus.audio(server, 2);
+		gustSpaceBus = Bus.audio(server, 2);
 
 		SynthDef(\woodland_voice, {
 			arg tapOut=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
@@ -341,6 +364,129 @@ Engine_Canopy : CroneEngine {
 			Out.ar(out, sig);
 		}).add;
 
+		// §2.11 a gust: one of the ten small drone synths on the bottom two
+		// rows. loosely a Ciat-Lonbarde Deerhorn voice and deliberately not a
+		// clone of one -- a triangle core, folded rather than filtered into
+		// shape, under a slow attack/slow decay envelope, cross-modulated by
+		// whatever is cabled in.
+		//
+		// unlike every other source here it writes to TWO places: its own
+		// mono tap (`out`, the gustOutBase range -- what a cable out of the
+		// cell carries), and a panned copy into the shared `spaceOut` stereo
+		// bus, which is the automatic route to the mix that makes a gust
+		// audible with nothing patched at all. `pan` is fixed by the cell's
+		// column on the Lua side and pushed once at init.
+		//
+		// InFeedback on the mod bus, not In: this lives in gVoice, which runs
+		// after gPatch, but a gust cabled to another gust is a cycle -- there
+		// is no node order that resolves it, so one block of latency is the
+		// answer, exactly as it is for \wl_patch_aa and the heartwood.
+		SynthDef(\wl_gust, {
+			arg out=0, spaceOut=0, modIn=0, t_trig=0, force=0.8,
+				freq=220, atk=0.8, dcy=3.0, timbre=0.35, cross=0.3,
+				amp=0.7, pan=0;
+
+			var x = cross.clip(0, 1);
+			var modRaw = InFeedback.ar(modIn, 1);
+			// soft-limited before it is used for anything: a cross-mod loop
+			// between two gusts is a legal patch and this is what stops it
+			// from being a runaway one. the mod signal is deliberately kept
+			// bipolar (no rectification) so a negative-gain cable pulls the
+			// pitch the other way, the same as everywhere else on the panel.
+			var mod = modRaw.tanh * x;
+
+			// the two things a cable does to a gust, and the reason cabling
+			// two of them together reads as cross-modulation rather than as
+			// a mix: it bends the pitch (a fifth either way at full Cross,
+			// through .midiratio so the bend is musical rather than linear)
+			// and it opens the fold (below), so a modulating gust is heard
+			// in this one's timbre as well as in its tuning.
+			var fmSemis = mod * 7;
+			// the tuned pitch, lagged so an OSC retune is a move rather than
+			// a step, and then the modulated one on top of it. the two are
+			// kept apart because only the oscillators want the modulated
+			// version -- see the filter below.
+			var fBase = Lag.kr(freq, 0.04);
+			var f = (fBase * fmSemis.midiratio).clip(8, 8000);
+
+			// a slow swell and a slow fall. the curves matter more than the
+			// times do: \sin-ish rise (curve 3) is the shape of something
+			// arriving rather than a ramp, and the -4 fall keeps a long
+			// decay from sitting at half volume for most of its length.
+			//
+			// Lag on the envelope, not on the output: re-pressing a key
+			// part-way up a swell restarts Env.perc from zero, and a 5 ms
+			// lag turns the discontinuity that would be into a lift. it is
+			// short enough not to soften the attack itself, which is seconds
+			// long by design.
+			var env = Lag.ar(
+				EnvGen.ar(Env.perc(atk.clip(0.01, 12), dcy.clip(0.05, 30), 1, [3, -4]), t_trig),
+				0.005
+			) * force.clip(0, 1);
+
+			// the core. a triangle, and then folded -- Ciat-Lonbarde
+			// oscillators are raw at the edges and a bandlimited saw
+			// crossfade would sound like a synth pretending to be one. the
+			// fold amount rides on Timbre and on whatever is modulating it,
+			// so a cross-modulated gust buzzes on the peaks of the modulator
+			// and settles between them.
+			var foldAmt = (timbre.clip(0, 1) + (mod.abs * 0.6)).clip(0, 1.4);
+			var tri = LFTri.ar(f);
+			var folded = (tri * (1 + (foldAmt * 3.5))).fold2(1);
+			// a second triangle a hair off the first, so a single held gust
+			// beats slowly against itself instead of sitting perfectly
+			// still. this is the whole difference between "a drone" and "an
+			// oscillator that is on".
+			var shimmer = LFTri.ar(f * 1.0037) * 0.35;
+			var core = (folded + shimmer) / 1.35;
+
+			// the fold makes the bright end harsh at exactly the wrong
+			// moment, so the low pass opens with Timbre but never all the
+			// way: this is a wind instrument, not a filter sweep.
+			//
+			// tracked off `fBase`, not `f`: LPF only reads its cutoff once
+			// per block, so handing it the audio-rate modulated pitch would
+			// not sweep the filter smoothly -- it would sample the modulator
+			// at the block rate and alias it into a stepped, zippering
+			// cutoff. the filter tracks where the note is tuned; the
+			// oscillators do the modulating.
+			var cutoff = (fBase * (3 + (timbre.clip(0, 1) * 9))).clip(200, 12000);
+			var toned = LPF.ar(core, cutoff);
+			var sig = LeakDC.ar(toned) * env * amp.clip(0, 1) * 0.3;
+
+			Out.ar(out, sig);
+			Out.ar(spaceOut, Pan2.ar(sig, pan.clip(-1, 1)));
+		}).add;
+
+		// §2.11 the one delay line every gust is heard through -- "a globally
+		// defined delayline that gives it space and ambience". one line for
+		// all ten rather than one each: what it is for is putting the family
+		// in a room, and ten rooms is not a room.
+		//
+		// a plain delay with the feedback path diffused through a short
+		// allpass chain, which is what turns repeats into a tail. the two
+		// channels run at slightly different times so the tail widens as it
+		// decays rather than staying where the dry signal was. the line's own
+		// time is lagged hard: moving a delay time is a tape effect, and an
+		// instant jump is a click.
+		SynthDef(\wl_gust_space, {
+			arg in=0, out=0, mix=0.35, time=0.38, fb=0.45;
+			var dry = In.ar(in, 2);
+			var t = Lag.kr(time.clip(0.02, 2.0), 0.5);
+			var back = LocalIn.ar(2);
+			var wet = DelayC.ar(dry + (back * fb.clip(0, 0.92)), 2.1, [t, t * 1.37]);
+			// damped in the loop, so each repeat is darker than the last --
+			// without this a long feedback setting builds rather than decays.
+			wet = LPF.ar(wet, 3200);
+			// three allpasses, times chosen mutually prime-ish so the smear
+			// does not develop a pitch of its own.
+			[0.0131, 0.0271, 0.0353].do({ |dt|
+				wet = AllpassC.ar(wet, 0.05, [dt, dt * 1.19], 0.9);
+			});
+			LocalOut.ar(LeakDC.ar(wet).tanh);
+			Out.ar(out, dry + (wet * Lag.kr(mix.clip(0, 1), 0.1) * 1.2));
+		}).add;
+
 		// the grid overhaul's Output row (§2's `O` cells): the only place
 		// audio reaches the speakers, and the only thing left in this synth
 		// that reads anything other than the ambience bus. by default nothing is
@@ -358,7 +504,7 @@ Engine_Canopy : CroneEngine {
 		// cable's own gain (patch.lua's ordinary bipolar gain), the same way
 		// several cables landing on one mod-path bus already sum.
 		SynthDef(\woodland_fx, {
-			arg outBus=0, out=0, level=0.8, ambIn=0;
+			arg outBus=0, out=0, level=0.8, ambIn=0, gustIn=0;
 			var chans = In.ar(outBus, nOut);
 			var panPos = Array.fill(nOut, { |i| -1 + (2 * i / (nOut - 1)) });
 			var dry = Mix.ar(Array.fill(nOut, { |i| Pan2.ar(chans[i], panPos[i]) }));
@@ -369,7 +515,13 @@ Engine_Canopy : CroneEngine {
 			// doesn't sit hotter in the mix than a voice at the same knob
 			// position.
 			var ambDry = In.ar(ambIn, 2) * 0.35;
-			var sig = (dry + ambDry) * level;
+			// §2.11 the gusts, already panned by cell position and already
+			// through their shared delay line -- the one thing here that
+			// arrives without a cable. it carries the same 0.35 headroom
+			// factor as everything else so a gust at Level 1 sits alongside
+			// a voice at Level 1 rather than over it.
+			var gustDry = In.ar(gustIn, 2) * 0.35;
+			var sig = (dry + ambDry + gustDry) * level;
 			Out.ar(out, sig);
 		}).add;
 
@@ -604,6 +756,21 @@ Engine_Canopy : CroneEngine {
 			gSynths[i] = Synth.new(def, [\out, patchBus.index + gvoiceOutBase + i], gVoice);
 		});
 
+		// §2.11: always-on, like the voices and the percussion cells. a gust
+		// is an instrument that is silent until it is played, not a stream
+		// that only exists while cabled -- and its envelope is seconds long,
+		// so a synth allocated on the press would be allocated far more
+		// often than it would be free. gust.lua's init() pushes every cell's
+		// pitch/attack/decay/timbre/cross/level/pan right after this.
+		gustSynths = Array.newClear(nGust);
+		nGust.do({ |i|
+			gustSynths[i] = Synth.new(\wl_gust, [
+				\out, patchBus.index + gustOutBase + i,
+				\modIn, patchBus.index + gustModBase + i,
+				\spaceOut, gustBus.index
+			], gVoice);
+		});
+
 		excSynths = Array.newClear(nExc);
 		patchSynths = Dictionary.new;
 
@@ -622,10 +789,19 @@ Engine_Canopy : CroneEngine {
 		// \woodland_fx reads only the Output row now (outBase) -- see its
 		// SynthDef comment above. gFx runs after gPatch (the group that
 		// writes outBus), so a plain In.ar there sees this block's data.
+		// gTap runs after gVoice (where the gusts are) and before gFx (which
+		// reads what this writes), which is exactly the order this delay
+		// needs -- plain In.ar on both sides, no feedback bus required.
+		gustSpaceSynth = Synth.new(\wl_gust_space, [
+			\in, gustBus.index,
+			\out, gustSpaceBus.index
+		], gTap);
+
 		fxSynth = Synth.new(\woodland_fx, [
 			\outBus, patchBus.index + outBase,
 			\out, context.out_b.index,
-			\ambIn, ambBus.index
+			\ambIn, ambBus.index,
+			\gustIn, gustSpaceBus.index
 		], gFx);
 
 		// gTap: after gVoice (so the exciter meters below share the group
@@ -815,6 +991,66 @@ Engine_Canopy : CroneEngine {
 			if (i >= 0 and: { i < nG }) { gSynths[i].set(\amp, msg[2]) };
 		});
 
+		// §2.11 the gusts. gust_note is the whole key press in one message
+		// -- pitch and force together, because that is what a press is --
+		// and gust_pitch is the same pitch without sounding it, for a Scale
+		// or transpose change that has to reach a cell mid-swell.
+		this.addCommand("gust_note", "iff", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) {
+				gustSynths[i].set(\freq, msg[2], \force, msg[3], \t_trig, 1);
+			};
+		});
+
+		this.addCommand("gust_pitch", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) { gustSynths[i].set(\freq, msg[2]) };
+		});
+
+		this.addCommand("gust_attack", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) {
+				gustSynths[i].set(\atk, msg[2].clip(0.01, 12));
+			};
+		});
+
+		this.addCommand("gust_decay", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) {
+				gustSynths[i].set(\dcy, msg[2].clip(0.05, 30));
+			};
+		});
+
+		this.addCommand("gust_timbre", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) { gustSynths[i].set(\timbre, msg[2]) };
+		});
+
+		this.addCommand("gust_cross", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) { gustSynths[i].set(\cross, msg[2]) };
+		});
+
+		this.addCommand("gust_amp", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) { gustSynths[i].set(\amp, msg[2]) };
+		});
+
+		// gust_pan(index, v) -- fixed by the cell's column on the Lua side
+		// and pushed once at init; there is no knob for it.
+		this.addCommand("gust_pan", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) {
+				gustSynths[i].set(\pan, msg[2].clip(-1, 1));
+			};
+		});
+
+		// gust_space(mix, time, feedback) -- the one delay line all ten are
+		// heard through, driven from the global page.
+		this.addCommand("gust_space", "fff", { |msg|
+			gustSpaceSynth.set(\mix, msg[1], \time, msg[2], \fb, msg[3]);
+		});
+
 		// exciter_on/off(index) -- §2.4 lazy allocation: an E cell only runs
 		// while it has at least one cable, rather than being an always-on
 		// noise source burning CPU for nothing.
@@ -968,6 +1204,8 @@ Engine_Canopy : CroneEngine {
 	free {
 		voiceSynths.do({ |s| if (s.notNil) { s.free } });
 		gSynths.do({ |s| if (s.notNil) { s.free } });
+		gustSynths.do({ |s| if (s.notNil) { s.free } });
+		if (gustSpaceSynth.notNil) { gustSpaceSynth.free };
 		excSynths.do({ |s| if (s.notNil) { s.free } });
 		patchSynths.do({ |s| if (s.notNil) { s.free } });
 		if (heartSynth.notNil) { heartSynth.free };
@@ -978,6 +1216,8 @@ Engine_Canopy : CroneEngine {
 		patchBus.free;
 		excMeterBus.free;
 		ambBus.free;
+		gustBus.free;
+		gustSpaceBus.free;
 		gFx.free;
 		gTap.free;
 		gVoice.free;

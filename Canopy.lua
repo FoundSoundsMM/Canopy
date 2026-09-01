@@ -8,15 +8,17 @@
 -- tap a cell: toggle its settings page. tap it again: back to the patch.
 -- hold a cell: glance at that same page until you let go.
 -- hold a cell, E1/E2/E3: pick a row, move it coarse/fine.
--- K1 + tap a cell: fire it -- strike a voice or a drum, fire an exciter,
---   pulse a trigger/transform/register/clock, put a sequencer step in or
---   take it out.
+-- press a gust (the ten G cells on the bottom two rows): it sounds its note,
+--   on the way down. the release still toggles its page like any other cell.
+-- K1 + tap a cell: fire it -- strike a voice or a drum, sound a gust, fire an
+--   exciter, pulse a trigger/transform/register/clock.
 -- hold a cell, tap another: patch them together.
 -- hold a cell, tap a connected one: unpatch them.
 -- hold two cells together: read/set that edge's gain on E3.
--- E1/E2/E3 with nothing held: the global param page -- E1 picks one of seven
--- (BPM, Swing, Scatter, Scale, Drops, Decay, Pitch), E2/E3 nudge it
--- coarse/fine. K1+E3: master level.
+-- E1/E2/E3 with nothing held: the global param page -- E1 picks one of ten
+-- (BPM, Swing, Scatter, Scale, Drops, Decay, Pitch, then the gusts' shared
+-- delay: Space, Delay, Regen), E2/E3 nudge it coarse/fine. K1+E3: master
+-- level.
 -- K3: the mixer -- faders for the four soundscape loops and the master. from
 -- an open cell page it goes there too, dropping that cell's focus.
 -- K2: back. off the mixer, or out of an open cell page, to the main screen;
@@ -53,6 +55,14 @@
 -- Scatter, freeing "Rain" for something literal: an always-on loop of a real
 -- rain recording, with its own dry level. Scale is pentatonic-only now,
 -- shorthand "Pent".
+-- the gusts (§2.11): the two step-sequencer lanes that briefly sat on the
+-- bottom two rows are gone, and their ten cells are ten small drone synths
+-- instead (lib/gust.lua) -- a folded triangle core with a slow attack and a
+-- slow decay you set per cell, loosely after a Ciat-Lonbarde Deerhorn and
+-- deliberately not a clone of one. press one and it sounds; a pulse cabled
+-- in sounds it too. they are the one family heard without a cable: each is
+-- panned by the column it sits in, and all ten share one delay line off the
+-- global page. cable two together and they cross-modulate.
 -- the re-cut's re-cut: six of the bottom weave row's R cells become G cells
 -- (lib/gvoice.lua) -- small, plain drum voices (three pinged resonant
 -- filters, three noise-with-decay) with a six-parameter sound page of their
@@ -87,6 +97,7 @@ local screenui = wl("screenui")
 local bridge   = wl("bridge")
 local voice    = wl("voice")
 local gvoice   = wl("gvoice")
+local gust     = wl("gust")   -- §2.11: the ten drone cells on the bottom rows
 local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
 local gparam   = wl("gparam")
 local mixer    = wl("mixer")
@@ -288,6 +299,39 @@ local function do_regrow()
     patch.add(voices[1], voices[2], gain(0.2, 0.5), true)
   end
 
+  -- §2.11 a gust or two, hung off a pulse-maker that is already running.
+  -- no Output cable is drawn for them and none is needed -- a gust routes
+  -- itself -- so this is the cheapest way for a regrown patch to arrive with
+  -- something sustained under the percussion. the pair, when there is one,
+  -- is cabled to each other rather than to anything else: two gusts
+  -- cross-modulating is the most characteristic thing this family does, and
+  -- a Regrow that never showed it would be hiding the good part.
+  local gucells = shuffled(ids_of("GUST"))
+  if #used_d > 0 and math.random() < 0.65 then
+    local n_gu = (math.random() < 0.5) and 2 or 1
+    local first
+    for _ = 1, n_gu do
+      local gu = take(gucells)
+      if not gu then break end
+      -- a long swell under a drum part, not a stab: bias the two envelope
+      -- knobs upward from centre and keep the level modest.
+      state.set_vparam(gu, "attack", 0.45 + math.random() * 0.4)
+      state.decay[gu] = 0.5 + math.random() * 0.35
+      state.set_vparam(gu, "timbre", 0.15 + math.random() * 0.45)
+      state.set_vparam(gu, "level", 0.4 + math.random() * 0.25)
+      -- seeding a cell's state is only half of it: unlike a gait or a rule,
+      -- these numbers mean nothing until they reach the engine, and a gust
+      -- is not re-pushed by being played.
+      gust.push_all(gu)
+      patch.add(used_d[math.random(#used_d)], gu, gain(0.5, 1.0), false)
+      if first then
+        patch.add(first, gu, gain(0.25, 0.6), false)
+      else
+        first = gu
+      end
+    end
+  end
+
   -- into the wood, and out of it somewhere else.
   if #used_d > 0 and math.random() < 0.4 then
     local h = take(hcells)
@@ -461,12 +505,10 @@ end
 -- the only way the two can never disagree.
 
 local function transport_reset()
-  -- both sequencer lanes go back to before their first step, so a Start
-  -- lands on step 1 rather than wherever the last run left the playhead; and
   -- every queue that froze mid-flight is dropped rather than flushed
-  -- (rambler.resync, which also resyncs the weave, the lattice and the
-  -- clock cells).
-  wl("sequencer").reset()
+  -- (rambler.resync, which also resyncs the weave, the lattice and the clock
+  -- cells). nothing else on the panel keeps a playhead to put back -- the
+  -- gusts hold a pitch, not a position, and a ringing one is left to ring.
   rambler.resync()
 end
 
@@ -484,7 +526,7 @@ end
 
 -- sent on its own by a source that has jumped its song position without
 -- stopping (MIDI Song Position Pointer, Link's beat origin moving). the
--- patch is still running; only the lanes need to be put back.
+-- patch is still running; only the scheduler's queues need clearing.
 function clock.transport.reset()
   transport_reset()
 end
@@ -505,6 +547,7 @@ function init()
 
   voice.init()
   gvoice.init()
+  gust.init()
   heartwood.init()
   grove.init()
   gparam.init() -- adopts the clock's tempo, pushes the rest (§5.2)

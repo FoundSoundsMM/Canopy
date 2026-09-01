@@ -70,6 +70,18 @@ local DESC = {
   ["h.wyrd"]    = "heartwood node -- passes energy along the chain.",
   ["h.ley"]     = "heartwood node -- the far end of the chain.",
 
+  -- the gusts / G (§2.11)
+  ["gu.sough"]   = "gust -- a high, breathy swell. press it: it sounds.",
+  ["gu.eddy"]    = "gust -- quick to speak, turns over on itself.",
+  ["gu.whorl"]   = "gust -- the slowest of the top row, wide and open.",
+  ["gu.flaw"]    = "gust -- the sharpest: fast swell, short fall.",
+  ["gu.squall"]  = "gust -- lowest and furthest left, a very long swell.",
+  ["gu.flurry"]  = "gust -- low and quick, the bed's moving part.",
+  ["gu.snell"]   = "gust -- cold and thin for its register.",
+  ["gu.bluster"] = "gust -- the bed's most forward voice.",
+  ["gu.buffet"]  = "gust -- broad and slow, sits under the others.",
+  ["gu.haar"]    = "gust -- lowest right, the slowest to arrive of all ten.",
+
   -- the grove / F (§2.6)
   ["f.cuckoo"]   = "call mode -- two notes back and forth, never quite the same twice.",
   ["f.nightjar"] = "drone mode -- stays on the root; only the last few cents move.",
@@ -80,16 +92,12 @@ local DESC = {
 function lexicon.describe(id)
   local cell = topology.get(id)
   if not cell then return nil end
-  if cell.type == "SEQ" then
-    return (cell.driver and "drives the lane -- advances the shared playhead"
-            or "an independent step -- tap to toggle, cable to override")
-  end
   return DESC[id] or "(no description)"
 end
 
 -- §4.2 "the one thing that matters about that cell" --------------------
 -- a voice has no single one: it has the sound editor instead (§5.5), which
--- is why there is no `voice` row here. GVOICE, TM and SEQ are the same way.
+-- is why there is no `voice` row here. GVOICE, TM and GUST are the same way.
 
 local CHARACTER = {
   D = {label = "rate",  lo = 0, hi = 1, note = "rate / clock relation (gait-dependent)"},

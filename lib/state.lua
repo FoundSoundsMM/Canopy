@@ -55,6 +55,10 @@ state.global = {
   -- lib/mixer.lua owns the defaulting, so this starts empty rather than
   -- naming four loops this file has no other business knowing about.
   amb_level = {},    -- loop key -> dry level in the mix. all off by default.
+  -- §2.11 the gusts' one shared delay line -- mix / time / feedback. same
+  -- arrangement: lib/gust.lua owns the defaults and the ranges, this only
+  -- holds the numbers so a PSET picks them up with everything else.
+  gust_space = nil,
 }
 
 -- grid hold tracking
@@ -71,8 +75,7 @@ state.rooted = {}      -- D id -> locked to the norns clock? (the Clock row)
 state.rule = {}        -- R id -> weave rule key (the Rule row)
 state.mode = {}        -- F id -> pitch-field mode key (the Mode row)
 state.snap = {}        -- F id -> quantised to the scale? (the Snap row)
-state.vparam = {}      -- voice/GVOICE/TM id -> {key -> 0..1}
-state.step_active = {} -- SEQ id -> step on/off (the Step row, and K1+tap)
+state.vparam = {}      -- voice/GVOICE/TM/GUST id -> {key -> 0..1}
 
 -- 0.5 is "whatever this sound's own default is"; the knob is symmetrical
 -- around it in both directions. voice.lua and exciter.lua own the mapping
@@ -89,8 +92,9 @@ end
 -- them, diffuse energy, choose pitches and track the clock -- and their
 -- E3-with-nothing-focused is deliberately inert rather than quietly storing
 -- a number nothing reads. a GVOICE cell is a sound of its own, same as a
--- voice or an E cell.
-local DECAY_TYPES = {voice = true, GVOICE = true, E = true}
+-- voice or an E cell -- and so is a GUST cell, whose Decay row is the fall
+-- half of its envelope (§2.11).
+local DECAY_TYPES = {voice = true, GVOICE = true, E = true, GUST = true}
 
 function state.decay_target(cell)
   if not cell or not DECAY_TYPES[cell.type] then return nil end

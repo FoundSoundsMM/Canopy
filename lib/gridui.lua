@@ -6,15 +6,18 @@
 --   tap a cell                 toggle its settings page open / closed
 --   hold a cell                glance at the same page, until you let go
 --   hold, then E1 / E2 / E3    pick a row, move it coarse / fine
+--   press a GUST cell          it sounds, on the way down -- a key that waits
+--                              for the release is not a key (§2.11). the
+--                              release still toggles its page like any other
 --   K1 + tap a cell            do the thing that cell does: strike a voice or
---                              a drum, fire an exciter, pulse a trigger, put a
---                              sequencer step in or take it out
+--                              a drum, sound a gust, fire an exciter, pulse a
+--                              trigger
 --   hold one, tap another      cable them (K1 held: one-way)
 --   hold two                   E3 sets that cable's gain
 --   K2 + K3 while holding      sever every cable at that cell
 --
 -- what this replaced: only voice/GVOICE/TM cells had a page and a tap that
--- opened it; a tap on a SEQ cell toggled a step instead; K1+tap flipped a
+-- opened it; K1+tap flipped a
 -- boolean on D and F cells and did nothing anywhere else; K1+E2 cycled a bank
 -- on D/R/F and stored a number nothing read on everything else; E1 walked a
 -- cable list only visible one row at a time. every one of those is now a
@@ -27,7 +30,7 @@ local rambler    = wl("rambler")
 local heartwood  = wl("heartwood")
 local grove      = wl("grove")
 local clockcell  = wl("clockcell")
-local sequencer  = wl("sequencer")
+local gust       = wl("gust")
 local weave      = wl("weave")
 local cellparam  = wl("cellparam")
 
@@ -43,9 +46,8 @@ gridui.FINE = 1 / 500
 -- cell's settings page. at or above it, the press was a deliberate hold --
 -- a glance at the page, or a two-cell inspection (§3 row 3) -- and the
 -- release does not also toggle. 0.3 s turned out to be short enough that an
--- unhurried tap missed it and appeared to do nothing at all, which is most of
--- why sequencer steps felt uninputtable; this is the implementation's call
--- and 0.45 is a more forgiving one.
+-- unhurried tap missed it and appeared to do nothing at all; this is the
+-- implementation's call and 0.45 is a more forgiving one.
 gridui.TAP_THRESHOLD = 0.45
 
 local sever_fired = false
@@ -59,6 +61,14 @@ function gridui.on_grid_key(x, y, z, keystate)
   if z == 1 then
     table.insert(state.held, id)
     state.held_t[id] = util.time()
+    -- §2.11: a gust is a key, and a key sounds when it goes down. this is
+    -- the whole of the "press a button, it plays a note" gesture -- nothing
+    -- else about the release changes, so the same press still toggles the
+    -- cell's page on the way up, and holding it still glances at that page.
+    -- it also means auditioning a gust while patching it is free: you hear
+    -- the cell you are holding.
+    local down = topology.get(id)
+    if down and down.type == "GUST" then gust.press(id) end
   else
     local press_t = state.held_t[id]
     local held_dur = press_t and (util.time() - press_t) or math.huge
@@ -163,12 +173,6 @@ local EMITTERS = {D = true, R = true, TM = true, C = true}
 -- would have used -- no second, subtly different audition path to keep in
 -- step with the first.
 function gridui.act(id, cell)
-  if cell.type == "SEQ" then
-    local active = sequencer.toggle_step(id)
-    state.set_event(cell.name .. (active and ": step on" or ": step off"), 1.2)
-    return
-  end
-
   if cell.type == "O" then
     state.set_event(cell.name .. ": " .. patch.degree(id) .. " in", 1.2)
     return
@@ -182,6 +186,9 @@ function gridui.act(id, cell)
   end
 
   wl("dispatch").on_pulse(id, id, {id = -1, a = id, b = id, gain = 1.0}, 1.0)
+  -- a GUST cell is deliberately not in this check: §2.11 routes it to the
+  -- mix by itself, so "no output cable" is its normal state rather than the
+  -- confusing one this warning exists for.
   if (cell.type == "voice" or cell.type == "GVOICE") and not reaches_output(id) then
     state.set_event(cell.name .. ": no output cable", 2.0)
   else
@@ -292,8 +299,8 @@ function gridui.brightness(id, cell)
     return grove.level(id, 2)
   elseif cell.type == "C" then
     return clockcell.level(id, 2)
-  elseif cell.type == "SEQ" then
-    return sequencer.level(id, 2)
+  elseif cell.type == "GUST" then
+    return gust.level_at(id, 2)
   end
   return 0
 end

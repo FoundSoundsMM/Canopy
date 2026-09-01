@@ -1,8 +1,9 @@
 arg = {os.getenv("ROOT")}
 dofile(os.getenv("SP") .. "/harness.lua")
 -- the re-cut's population: 16 O + 4 voice + 8 D + 4 TM + 4 C(clock) + 4 H +
--- 4 F(grove) + 6 R + 6 GVOICE + 6 E + 10 SEQ = 72 live cells (Climate, and
--- its 8 cells, are gone entirely).
+-- 4 F(grove) + 6 R + 6 GVOICE + 6 E + 10 GUST = 72 live cells (Climate, and
+-- its 8 cells, are gone entirely; the ten cells that were the Q4/Q6 step
+-- lanes are the gusts now, §2.11).
 local function bench(label, setup, scatter)
   local M = fresh(2)
   if scatter then M.state.global.scatter = scatter end
@@ -120,12 +121,17 @@ bench("clock, all 4 at full rate", function(M)
   M.patch.add("d.gabriel", "oak", 0.9)
 end)
 
--- the step sequencers are the other new thing: two lanes, ten cells between
--- them, a driver in each firing the shared playhead at the fastest rate a D
--- cell can push it.
-bench("sequencer, both lanes driven", function(M)
-  M.patch.add("d.gabriel", "q4.4", 0.9)  -- q4's driver
-  M.patch.add("d.hunt", "q6.6", 0.9)     -- q6's driver
-  M.patch.add("q4.4", "oak", 0.8)
-  M.patch.add("q6.6", "rowan", 0.8)
+-- the gusts are the other new thing (§2.11). the expensive case is not one
+-- of them playing -- that is an OSC message and nothing else -- but a chain
+-- of them driven fast, since each one that sounds answers with a pulse of
+-- its own, and cross-mod cables between them are live SC synths the Lua side
+-- has to keep in step. so: two fast triggers into four gusts, wired into
+-- each other and back out to a voice.
+bench("gusts, four driven and cross-modulating", function(M)
+  M.patch.add("d.gabriel", "gu.sough", 0.9)
+  M.patch.add("d.hunt", "gu.squall", 0.9)
+  M.patch.add("gu.sough", "gu.eddy", 0.7)
+  M.patch.add("gu.squall", "gu.flurry", 0.7)
+  M.patch.add("gu.eddy", "gu.flurry", 0.5)
+  M.patch.add("gu.flurry", "oak", 0.8)
 end)
