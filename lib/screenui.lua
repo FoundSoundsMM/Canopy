@@ -66,6 +66,7 @@ local gparam     = wl("gparam")
 local mixer      = wl("mixer")
 local cellparam  = wl("cellparam")
 local lexicon    = wl("lexicon")
+local glyph      = wl("glyph")
 
 local screenui = {}
 
@@ -123,11 +124,21 @@ local function label_value(x, y, w, label, value, label_lvl, value_lvl)
   screen.text(fit(label, w - vw - GAP))
 end
 
+-- `lvl` is optional: a caller that has already set the level (every glyph
+-- does, since brightness is how focus is drawn) passes nothing rather than
+-- spending a second screen.level on the same value.
 local function centred(cx, y, str, lvl)
   if str == nil or str == "" then return end
-  screen.level(lvl)
+  if lvl then screen.level(lvl) end
   screen.move(cx - text_w(str) / 2, y)
   screen.text(str)
+end
+
+-- lib/glyph.lua's `word` is the only shape that draws text, and the text
+-- metrics live here (screen.text_extents, with the offline fallback). rather
+-- than keep two copies of the measuring code, hand it this one.
+glyph.centred = function(cx, y, str, limit)
+  centred(cx, y, clip(str, limit))
 end
 
 -- naive word wrap for the small screen font
@@ -147,67 +158,68 @@ local function wrap(str, max_chars)
 end
 
 -- the header bar --------------------------------------------------------------
--- inverted: a filled bar with the text knocked out of it, which is what makes
--- it read as a title rather than as one more row of the page. it is 11px
--- tall, so a baseline at 8 sits its 5px ascenders at 3 and its 1px descenders
--- at 9 -- clear of both edges.
+-- §5.2c. this used to be an 11px inverted slab: a filled rectangle spanning
+-- the whole panel with the text knocked out of it, two boxed chips inside it
+-- (the cell tag on the left, the tempo on the right), and the focused
+-- parameter's full value in the middle. that is a sixth of a 64px screen lit
+-- solid, permanently, to say "Oak" -- and on a display with no colour, the
+-- brightest thing on the panel is the thing the eye goes to first. it was
+-- going to the title.
+--
+-- so: 8px, no fill, no chips, and a 1px rule underneath. the same five things
+-- are still on it (transport, tag, name, page dots, tempo) as plain text at
+-- three different levels, which is enough hierarchy on a 16-level display and
+-- costs nothing. the value readout is gone entirely -- every widget now draws
+-- its own value, so the header no longer has to choose between showing a name
+-- and showing a number.
+--
+-- a baseline at 6 puts the font's 5px ascenders at 1 and its 1px descenders
+-- at 7; the rule sits at 7.5 and the first widget row starts at 9.
 
-local HDR_H = 11
-local HDR_BASE = 8
+local HDR_H = 8
+local HDR_BASE = 6
 
--- an inverted box: the bar's own polarity, flipped back. used for the two
--- boxed readouts the Digitakt puts at either end of its title bar (the
--- machine tag on the left, the tempo on the right).
-local function chip(x, w, text)
-  screen.level(0)
-  screen.rect(x, 1, w, HDR_H - 2)
-  screen.fill()
-  centred(x + w / 2, HDR_BASE, text, 15)
-end
-
-local function chip_w(text)
-  return text_w(text) + 6
-end
-
--- the transport, in five pixels: a filled triangle when the patch is running
--- and a filled square when it is frozen. Still (K2) and an external MIDI
--- Stop are the same state (§4.3), so this one glyph reports both.
+-- the transport, in five pixels: a filled square when the patch is frozen and
+-- a triangle when it is running. Still (K2) and an external MIDI Stop are the
+-- same state (§4.3), so this one glyph reports both.
 local function draw_transport(x)
-  screen.level(0)
+  screen.level(12)
   if state.global.still then
-    screen.rect(x, 3, 5, 5)
+    screen.rect(x, 2, 4, 4)
     screen.fill()
   else
-    screen.move(x, 3)
-    screen.line(x + 5, 5.5)
-    screen.line(x, 8)
+    screen.move(x, 1)
+    screen.line(x + 4, 3.5)
+    screen.line(x, 6)
     screen.close()
     screen.fill()
   end
 end
 
 -- how many pages this list has, as dots: filled for the one you are on. the
--- Digitakt's own way of saying "there is more of this", and it costs eight
--- pixels rather than the twenty a "1/2" would.
+-- unlit ones accumulate into a single path and paint once (see the frame
+-- budget note in lib/glyph.lua) rather than costing a fill each.
 local function draw_page_dots(x, page, pages)
-  local w = 0
+  local w = pages * 4 - 1
+  screen.level(4)
+  local any = false
   for i = 1, pages do
-    screen.level(0)
-    if i == page then
-      screen.rect(x + w, 4, 3, 3)
-      screen.fill()
-    else
-      screen.rect(x + w + 1, 5, 1, 1)
-      screen.fill()
+    if i ~= page then
+      screen.rect(x + (i - 1) * 4 + 1, 3, 1, 1)
+      any = true
     end
-    w = w + 4
   end
+  if any then screen.fill() end
+  screen.level(13)
+  screen.rect(x + (page - 1) * 4, 2, 3, 3)
+  screen.fill()
   return w
 end
 
 -- the tempo, which is on screen on every page whatever the page is about --
--- it is the one number the whole patch is hung off. "ext" when something
--- else is deciding it (§4.3).
+-- it is the one number the whole patch is hung off, and the one number that
+-- survived §5.2c's cull, because it is not a parameter any widget draws.
+-- "ext" when something else is deciding it (§4.3).
 local function tempo_text()
   local bpm = gparam.tempo and gparam.tempo() or (state.global.bpm or 120)
   if gparam.external_clock and gparam.external_clock() then
@@ -217,184 +229,125 @@ local function tempo_text()
 end
 
 -- tag: two or three characters saying what kind of page this is (a cell's
--- panel letter, "MIX", "G"). name: what it is called. value: the full,
--- untrimmed value of whatever the cursor is on, which is the one thing on
--- the screen that must never be abbreviated.
-function screenui.draw_header(tag, name, value, page, pages)
-  screen.level(15)
-  screen.rect(0, 0, 128, HDR_H)
-  screen.fill()
+-- panel letter, "MIX", "MAP", "G"), dim, in front of the name. it is the one
+-- thing the name alone cannot tell you -- "Bittern" does not say whether it
+-- is a field or a drum, and the panel letter does.
+function screenui.draw_header(tag, name, page, pages)
+  draw_transport(1)
 
-  local x = 2
-  draw_transport(x)
-  x = x + 7
-
-  if tag and tag ~= "" then
-    local w = chip_w(tag)
-    chip(x, w, tag)
-    x = x + w + 3
-  end
+  -- laid out from the right, because the two things on that side (tempo, page
+  -- dots) have known widths and the name is what gives way.
+  local right = 127
+  local tempo = tempo_text()
+  screen.level(9)
+  screen.move(right, HDR_BASE)
+  screen.text_right(tempo)
+  right = right - text_w(tempo) - 5
 
   if pages and pages > 1 then
-    x = x + draw_page_dots(x, page or 1, pages) + 2
+    right = right - draw_page_dots(right - (pages * 4 - 1), page or 1, pages) - 4
   end
 
-  local tempo = tempo_text()
-  local tw = chip_w(tempo)
-  chip(128 - tw - 1, tw, tempo)
-
-  local region = (128 - tw - 4) - x
-  if region > 8 then
-    label_value(x, HDR_BASE, region, name or "", value or "", 0, 0)
+  local x = 7
+  if tag and tag ~= "" then
+    screen.level(6)
+    screen.move(x, HDR_BASE)
+    screen.text(tag)
+    x = x + text_w(tag) + 3
   end
+
+  screen.level(15)
+  screen.move(x, HDR_BASE)
+  screen.text(fit(name or "", right - x))
+
+  screen.level(3)
+  screen.move(0, HDR_H - 0.5)
+  screen.line(128, HDR_H - 0.5)
+  screen.stroke()
 end
 
 -- the widget grid ---------------------------------------------------------------
--- five columns, two rows, ten to a page; a longer list paginates rather than
--- wrapping back over itself, and E1's focus decides which page you are on so
--- the widget you are turning is always one you can see.
+-- four columns, two rows, eight to a page; a longer list paginates rather
+-- than wrapping back over itself, and E1's focus decides which page you are
+-- on so the widget you are turning is always one you can see.
+--
+-- §5.2c re-cut the block. it was: an 11px gauge, the label under it, and the
+-- value under that -- 25px, under an 11px header. it is now a 19px SHAPE and
+-- the label, under an 8px header. the seven pixels the value line gave back
+-- and the three the header gave back are both spent on the same thing, which
+-- is height for the drawing: eight identical circles told you a quantity but
+-- never which quantity, so you read the eight words underneath every time and
+-- the grid was a list wearing a costume. lib/glyph.lua explains what replaced
+-- them and what that costs.
 
 local PL_COLS = 4
 local PL_ROWS = 2
 local PL_PER_PAGE = PL_COLS * PL_ROWS
 
--- the panel is 128 wide and 64 tall; the header takes the top eleven, which
--- leaves two 25px blocks with a pixel to spare. within a block the widget is
--- centred eleven pixels down and the label's baseline is fourteen below that
--- -- the font's 5px ascenders then start exactly where the widget stops.
+-- the panel is 128 wide and 64 tall; the header takes the top eight, which
+-- leaves two 27px blocks with two pixels to spare. within a block the shape
+-- occupies the first nineteen rows and the label's baseline is at 26 -- so
+-- the font's 5px ascenders start two pixels below where the shape stops, and
+-- the bottom row's descenders land on 63.
 local COL_W = 32
 local COL_X0 = 0                    -- left edge of column 1
-local BLOCK_TOP = {12, 37}          -- top of each widget row
-local KNOB_DY = 11                  -- widget centre, from the block's top
-local KNOB_R = 9
-local LABEL_DY = 25                 -- label baseline, from the block's top
+local BLOCK_TOP = {9, 37}           -- top of each widget row
+local BLOCK_H = 27
+local GLYPH_W, GLYPH_H = glyph.W, glyph.H
+local GLYPH_DX = math.floor((COL_W - GLYPH_W) / 2)
+local LABEL_DY = 26                 -- label baseline, from the block's top
 
 screenui.PARAMS_PER_PAGE = PL_PER_PAGE
+screenui.BLOCK_TOP = BLOCK_TOP
+screenui.BLOCK_H = BLOCK_H
+screenui.HEADER_H = HDR_H
 
 -- 1-based page number a given row lives on.
 function screenui.page_of(i)
   return math.floor((i - 1) / PL_PER_PAGE) + 1
 end
 
-local function col_centre(col)
-  return COL_X0 + (col - 1) * COL_W + COL_W / 2
-end
-
--- the gauge: 270 degrees with the gap at the bottom, the way a panel knob's
--- travel is drawn everywhere. cairo's angles run clockwise with y down, so
--- 0.75pi is the bottom-left end of the sweep and 1.5pi of sweep lands the
--- other end at the bottom-right.
-local KNOB_A0 = math.pi * 0.75
-local KNOB_SWEEP = math.pi * 1.5
-
--- three strokes, and no more than three: at fifteen frames a second, ten of
--- these plus a header is the whole screen budget (test/soak.lua counts them),
--- and every extra flourish here is paid for ten times over.
+-- one widget: the shape, then the name. nothing else -- see lib/glyph.lua.
 --
---   the body     a plain circle, so a knob at zero still reads as a knob
---                rather than as a gap in the row. this is the Digitakt's
---                whole knob glyph.
---   the travel   a bright arc from the start of the sweep to where the value
---                is. the pointer alone is legible up close; from across a
---                room the arc is what you actually see.
---   the pointer  a radial line, drawn last so it sits over the arc.
--- screen.circle and screen.arc are both cairo_arc under the hood (norns'
--- core/screen.lua: `circle(x,y,r)` is just `arc(x,y,r,0,2pi)`), and cairo_arc
--- has one documented quirk: if the path already has a current point --
--- which it always does here, left behind by the previous widget's label
--- text -- it draws a connecting line from that point to the arc's start
--- before drawing the arc. screen.rect never has this problem (it always
--- opens with its own move_to), but nothing resets the pen between one
--- widget's label and the next widget's knob, so every knob was getting a
--- stray line dragged in from wherever the last bit of text left off.
--- moving to the arc's own start point first turns that phantom segment into
--- a zero-length one instead of a line back to the last thing drawn.
-local function draw_knob(cx, cy, frac, on)
-  frac = util.clamp(frac or 0, 0, 1)
-  local a = KNOB_A0 + frac * KNOB_SWEEP
-
-  screen.level(on and 5 or 2)
-  screen.move(cx + KNOB_R - 1, cy)
-  screen.circle(cx, cy, KNOB_R - 1)
-  screen.stroke()
-
-  if frac > 0.005 then
-    screen.level(on and 15 or 7)
-    screen.move(cx + math.cos(KNOB_A0) * KNOB_R, cy + math.sin(KNOB_A0) * KNOB_R)
-    screen.arc(cx, cy, KNOB_R, KNOB_A0, a)
-    screen.stroke()
-  end
-
-  screen.level(on and 15 or 8)
-  screen.move(cx + math.cos(a) * (KNOB_R - 6), cy + math.sin(a) * (KNOB_R - 6))
-  screen.line(cx + math.cos(a) * KNOB_R, cy + math.sin(a) * KNOB_R)
-  screen.stroke()
-end
-
--- a value that is a word rather than a number: a pointer angle says nothing
--- about "euclidean" or "snapped", so those get the Digitakt's other widget --
--- a box with the reading inside it. clipped to the box; the header has it in
--- full.
-local BOX_W, BOX_H = 30, 15
-
-local function draw_box(cx, cy, text, on)
-  local x, y = cx - BOX_W / 2, cy - BOX_H / 2
-  if on then
-    screen.level(15)
-    screen.rect(x, y, BOX_W, BOX_H)
-    screen.fill()
-    centred(cx, cy + 3, clip(text, BOX_W - 4), 0)
-  else
-    screen.level(3)
-    screen.rect(x + 0.5, y + 0.5, BOX_W - 1, BOX_H - 1)
-    screen.stroke()
-    centred(cx, cy + 3, clip(text, BOX_W - 4), 8)
-  end
-end
-
--- which of the two a parameter gets. anything whose reading starts with a
--- number (or an "x", for the decay multiplier's "x1.00") is a quantity and
--- draws as a knob; everything else is a word and draws as a box. deciding it
--- from the text rather than from a flag on the parameter means voice.lua,
--- gvoice.lua, tm.lua, gparam.lua, mixer.lua and cellparam.lua all keep the
--- one contract they already share, and a row that changes from a number to a
--- word (Scale's "free" at position zero) changes widget with it.
-local function is_quantity(text)
-  return text ~= nil and text:match("^%s*[%+%-x]?%d") ~= nil
-end
-
-local function draw_widget(slot, label, text, frac, on)
-  local col = (slot % PL_COLS) + 1
+-- the label is clipped rather than fitted: a trailing full stop costs a whole
+-- character here and says nothing the widget's position in the grid does not.
+-- the four pixels held back are the gutter -- at the full column width two
+-- long labels in neighbouring columns run into each other.
+local function draw_widget(slot, p, text, frac, on, data)
+  local col = slot % PL_COLS
   local row = math.floor(slot / PL_COLS) + 1
   local top = BLOCK_TOP[row]
-  local cx = col_centre(col)
+  local x = COL_X0 + col * COL_W + GLYPH_DX
 
-  if is_quantity(text) then
-    draw_knob(cx, top + KNOB_DY, frac, on)
-  else
-    draw_box(cx, top + KNOB_DY, text, on)
-  end
+  glyph.draw(p.glyph, x, top, GLYPH_W, GLYPH_H, frac, on, text, data)
 
-  -- clipped, not fitted: a trailing full stop costs a whole character here
-  -- and says nothing the widget's position in the grid does not. the four
-  -- pixels held back are the gutter -- at the full column width two long
-  -- labels in neighbouring columns run into each other.
-  centred(cx, top + LABEL_DY, clip(label, COL_W - 4), on and 15 or 5)
+  screen.level(on and 15 or 6)
+  centred(x + GLYPH_W / 2, top + LABEL_DY, clip(p.label, COL_W - 4))
 end
 
--- draw one page of a PARAMS list. `text_fn`/`frac_fn` adapt the two calling
--- conventions in the codebase (a cell page's take an id, a global page's take
--- nothing) so this routine never learns which kind of list it has.
-local function draw_param_grid(params, focus, text_fn, frac_fn)
+-- draw one page of a PARAMS list. `text_fn`/`frac_fn`/`data_fn` adapt the two
+-- calling conventions in the codebase (a cell page's take an id, a global
+-- page's take nothing) so this routine never learns which kind of list it has.
+-- `data_fn` is the extras a few shapes need -- a bank position, a shift
+-- register -- and is nil for every row that does not declare glyph_data.
+local function draw_param_grid(params, focus, text_fn, frac_fn, data_fn)
   local page = screenui.page_of(focus)
   local first = (page - 1) * PL_PER_PAGE + 1
   for slot = 0, PL_PER_PAGE - 1 do
     local p = params[first + slot]
     if p then
-      draw_widget(slot, p.label, text_fn(p), frac_fn(p), (first + slot) == focus)
+      draw_widget(slot, p, text_fn(p), frac_fn(p), (first + slot) == focus,
+                  data_fn and data_fn(p) or nil)
     end
   end
   return page, math.max(1, math.ceil(#params / PL_PER_PAGE))
+end
+
+-- how many of the eight slots a page actually uses, which is what decides
+-- whether the second block is free for a scope (see draw_cell_scope).
+local function slots_used(count, focus)
+  local first = (screenui.page_of(focus) - 1) * PL_PER_PAGE + 1
+  return math.max(0, math.min(PL_PER_PAGE, count - first + 1))
 end
 
 -- §5.2 global param page (nothing held, no cell page open) --------------------
@@ -411,11 +364,11 @@ function screenui.draw_global()
   local focus = util.clamp(state.gparam_focus or 1, 1, gparam.PARAM_COUNT)
   local p = gparam.param(focus)
   local pages = math.ceil(gparam.PARAM_COUNT / PL_PER_PAGE)
-  screenui.draw_header("G", "Canopy", p and p.text() or "",
-                       screenui.page_of(focus), pages)
+  screenui.draw_header("G", "Canopy", screenui.page_of(focus), pages)
   draw_param_grid(gparam.PARAMS, focus,
                   function(q) return q.text() end,
-                  function(q) return q.frac() end)
+                  function(q) return q.frac() end,
+                  function(q) return q.glyph_data and q.glyph_data() or nil end)
 end
 
 -- §4.1b the mixer page (K3, back with K2) --------------------------------------
@@ -427,11 +380,11 @@ function screenui.draw_mixer()
   local focus = util.clamp(state.mparam_focus or 1, 1, mixer.PARAM_COUNT)
   local p = mixer.param(focus)
   local pages = math.ceil(mixer.PARAM_COUNT / PL_PER_PAGE)
-  screenui.draw_header("MIX", "Mixer", p and p.text() or "",
-                       screenui.page_of(focus), pages)
+  screenui.draw_header("MIX", "Mixer", screenui.page_of(focus), pages)
   draw_param_grid(mixer.PARAMS, focus,
                   function(q) return q.text() end,
-                  function(q) return q.frac() end)
+                  function(q) return q.frac() end,
+                  function(q) return q.glyph_data and q.glyph_data() or nil end)
 end
 
 -- the cell page (one cell held, or one cell tapped open) ----------------------
@@ -473,6 +426,134 @@ local function draw_cell_desc(id)
   end
 end
 
+-- §5.2c the scopes -----------------------------------------------------------
+-- what the free block is actually for. a page of four rows or fewer leaves
+-- the whole second block empty, and until now that filled with three wrapped
+-- lines from the lexicon -- a sentence you read once on the first day and
+-- then never again, sitting in the best display real estate on the panel
+-- while the thing you are listening to went undrawn.
+--
+-- so: one live display per cell type, keyed below. every one of these is
+-- drawn from state that already exists in Lua and is already being read at
+-- frame rate for the grid LEDs -- lfo.phase(id) and rambler.info(id).phase
+-- both cost nothing here that gridui was not already paying. a type with no
+-- entry falls back to the prose, so this lands one family at a time.
+--
+-- the block is 128 x 27 at y = 37. the frame is four corner pixels and
+-- nothing else: a full box would be 4 more commands and would fence off the
+-- one part of the screen that wants to feel open.
+
+local SCOPE_Y = 37
+local SCOPE_H = 27
+
+local function scope_corners()
+  screen.level(3)
+  screen.rect(0, SCOPE_Y, 1, 1)
+  screen.rect(127, SCOPE_Y, 1, 1)
+  screen.rect(0, SCOPE_Y + SCOPE_H - 1, 1, 1)
+  screen.rect(127, SCOPE_Y + SCOPE_H - 1, 1, 1)
+  screen.fill()
+end
+
+local SCOPES = {}
+
+-- an LFO is a sine and the screen never once showed a sine. the wave scrolls
+-- and the right-hand edge is now; the current value is carried out to the
+-- margin as a 3px dot, which is the only part of it that matters when you are
+-- listening rather than looking.
+--
+-- sampled, not curved: the phase moves every frame, and a cubic's control
+-- points would have to be re-derived per frame anyway. 26 samples across 92
+-- pixels is one command each -- affordable here precisely because an LFO page
+-- has one widget on it and the whole frame is nowhere near the budget.
+SCOPES.LFO = function(id)
+  local phase = wl("lfo").phase(id)
+  local my = SCOPE_Y + SCOPE_H / 2
+  local amp = SCOPE_H / 2 - 4
+  local L, R = 4, 118
+  local N = 26
+
+  screen.level(2)
+  screen.move(L, my)
+  screen.line(R, my)
+  screen.stroke()
+
+  local function at(t)
+    return my - math.sin((t * 2 + phase) * 2 * math.pi) * amp
+  end
+
+  screen.level(13)
+  screen.move(L, at(0))
+  for i = 1, N do
+    local t = i / N
+    screen.line(L + t * (R - L), at(t))
+  end
+  screen.stroke()
+
+  -- the writing head, and the value it is writing
+  local ey = at(1)
+  screen.level(5)
+  screen.move(R + 3, SCOPE_Y + 2)
+  screen.line(R + 3, SCOPE_Y + SCOPE_H - 3)
+  screen.stroke()
+  screen.level(15)
+  screen.rect(R + 2, ey - 1, 3, 3)
+  screen.fill()
+  screen.move(R + 6, ey)
+  screen.line(126, ey)
+  screen.stroke()
+end
+
+-- a D cell's phase, which is the gait. a metric gait sweeps evenly and a
+-- swung or euclidean one does not, so the bar itself tells you which you are
+-- on without reading the word -- and the reset is the pulse.
+SCOPES.D = function(id)
+  local info = wl("rambler").info(id)
+  if not info then return end
+  local phase = util.clamp(info.phase or 0, 0, 1)
+  local base = SCOPE_Y + SCOPE_H - 6
+  local L, R = 4, 123
+
+  -- the cycle, with its quarters ticked
+  screen.level(3)
+  for i = 0, 4 do
+    local px = L + (R - L) * i / 4
+    screen.rect(px, base - 2, 1, 3)
+  end
+  screen.rect(L, base, R - L, 1)
+  screen.fill()
+
+  -- how far through it we are
+  screen.level(11)
+  screen.rect(L, base - 6, (R - L) * phase, 5)
+  screen.fill()
+
+  -- and the head, which is where the next pulse comes from
+  screen.level(15)
+  screen.rect(L + (R - L) * phase - 1, base - 9, 2, 11)
+  screen.fill()
+
+  if info.grid then
+    screen.level(5)
+    screen.move(L, SCOPE_Y + 8)
+    screen.text(fit(info.grid, 120))
+  end
+end
+
+-- the block under a cell page: a scope if this type has one and the page
+-- leaves the room, the lexicon's sentence otherwise.
+local function draw_cell_scope(id, cell)
+  local f = SCOPES[cell.type]
+  if f then
+    scope_corners()
+    f(id)
+  else
+    draw_cell_desc(id)
+  end
+end
+
+screenui.SCOPES = SCOPES
+
 -- there is no `live` argument any more. the old header said "M · open" for a
 -- latched page and just "M" for a held glance; the tag chip has room for the
 -- letter and nothing else, and the panel now says which it is far more
@@ -487,25 +568,17 @@ function screenui.draw_cell(id)
   local focus = util.clamp(state.vparam_focus or 1, 1, math.max(1, count))
   local pages = math.max(1, math.ceil(count / PL_PER_PAGE))
 
-  local value = ""
-  if page_mod and count > 0 then
-    local p = page_mod.param(focus)
-    if p then value = p.text(id) end
-  end
-
-  screenui.draw_header(cell_tag(cell), cell.name, value,
+  screenui.draw_header(cell_tag(cell), cell.name,
                        screenui.page_of(focus), pages)
 
   if page_mod then
     draw_param_grid(page_mod.PARAMS, focus,
                     function(p) return p.text(id) end,
-                    function(p) return p.get(id) end)
+                    function(p) return p.get(id) end,
+                    function(p) return p.glyph_data and p.glyph_data(id) or nil end)
 
-    local page = screenui.page_of(focus)
-    local first = (page - 1) * PL_PER_PAGE + 1
-    local used = math.max(0, math.min(PL_PER_PAGE, count - first + 1))
-    if used <= PL_COLS then
-      draw_cell_desc(id)
+    if slots_used(count, focus) <= PL_COLS then
+      draw_cell_scope(id, cell)
     end
   end
 end
@@ -526,7 +599,7 @@ end
 -- hold/tap gesture might land on; it only ever shows all of them at once.
 
 local MAP_COLS = topology.GRID_W
-local MAP_TOP = 14
+local MAP_TOP = 11
 local MAP_CELL_W = 128 / MAP_COLS
 local MAP_CELL_H = 6
 local MAP_RECT_W = MAP_CELL_W - 1
@@ -540,7 +613,7 @@ function screenui.draw_map()
     if patch.degree(id) > 0 then active = active + 1 end
   end
 
-  screenui.draw_header("MAP", "Map", active .. "/" .. #topology.order)
+  screenui.draw_header("MAP", "Map " .. active .. "/" .. #topology.order)
 
   for id, cell in topology.each() do
     screen.level(patch.degree(id) > 0 and MAP_ON or MAP_OFF)
@@ -662,38 +735,47 @@ function screenui.draw_edge(id_a, id_b)
   local edge_id = patch.has(id_a, id_b)
   local edge = edge_id and patch.get(edge_id) or nil
 
-  screenui.draw_header("<>", "cable",
-                       edge and string.format("%+.2f", edge.gain) or "none")
+  -- the gain used to be printed in the header. it is not any more, for the
+  -- same reason no widget prints its value (lib/glyph.lua): the bar below
+  -- says which side of centre the cable is on and how far, which is the
+  -- question you actually have while turning E3.
+  screenui.draw_header("<>", "cable")
 
   -- two names on one line: split the width between them and let each give way
   -- on its own side rather than letting a long pair meet in the middle.
   screen.level(15)
-  screen.move(2, 20)
+  screen.move(2, 17)
   screen.text(fit(a.name, 56))
-  screen.move(126, 20)
+  screen.move(126, 17)
   screen.text_right(fit(b.name, 56))
   screen.level(4)
-  screen.move(62, 20)
+  screen.move(62, 17)
   screen.text("\xE2\x80\x94")
 
   if edge then
     -- one full-width bar rather than a knob: a cable's gain is bipolar and
     -- what you want to see is which side of centre it is on and how far,
     -- which a straight run of pixels shows and a 270-degree gauge does not.
+    -- the centre is ticked now that no number backs it up.
     screen.level(2)
-    screen.rect(2, 24, 124, 2)
+    screen.rect(2, 21, 124, 3)
+    screen.fill()
+    screen.level(6)
+    screen.rect(64, 19, 1, 7)
     screen.fill()
     screen.level(13)
-    screen.rect(2, 24, math.floor(124 * ((edge.gain + 1) / 2)), 2)
+    local mid, span = 64, math.floor(62 * edge.gain)
+    if span >= 0 then screen.rect(mid, 21, math.max(1, span), 3)
+    else screen.rect(mid + span, 21, -span, 3) end
     screen.fill()
     if edge.oneway then
       screen.level(6)
-      screen.move(2, 33)
+      screen.move(2, 32)
       screen.text("one-way")
     end
   else
     screen.level(4)
-    screen.move(2, 33)
+    screen.move(2, 32)
     screen.text(fit("not cabled \xE2\x80\x94 tap-release one", 124))
   end
 
@@ -701,7 +783,7 @@ function screenui.draw_edge(id_a, id_b)
   local desc_lines = wrap(interaction_text(a.type, b.type), 30)
   for i, line in ipairs(desc_lines) do
     if i > 3 then break end
-    screen.move(2, 36 + i * 9)
+    screen.move(2, 33 + i * 9)
     screen.text(fit(line, 124))
   end
 end

@@ -122,9 +122,12 @@ end
 
 tm.PARAMS = {
   {
-    key = "length", label = "Length", default = 0.43,
+    key = "length", label = "Length", glyph = "steps", default = 0.43,
     get = vp_get("length", 0.43), set = vp_set("length"),
     text = function(id) return tm.length(id) .. " steps" end,
+    -- the shape draws LENGTH_MAX slots and lights the ones in play, so it
+    -- reports the real step count rather than the knob's fraction of it.
+    glyph_data = function(id) return {n = LENGTH_MAX, lit = tm.length(id)} end,
     push = function() end, -- takes effect on the register's next step
   },
   {
@@ -132,7 +135,7 @@ tm.PARAMS = {
     -- fall off the end is kept (the loop) rather than thrown away for a fresh
     -- coin flip. 0 is fully random every step; 1 never lets go of the loop it
     -- started with.
-    key = "prob", label = "Prob", default = 0.65,
+    key = "prob", label = "Prob", glyph = "dots", default = 0.65,
     get = vp_get("prob", 0.65), set = vp_set("prob"),
     text = function(id) return string.format("%.0f%% lock", state.get_vparam(id, "prob", 0.65) * 100) end,
     push = function() end,
@@ -141,7 +144,7 @@ tm.PARAMS = {
     -- separated out from Prob on purpose: a locked loop that never moves is a
     -- bar-length loop forever, and the real module's charm past noon is that
     -- it doesn't quite stay locked. this is that, as its own knob.
-    key = "drift", label = "Drift", default = 0.15,
+    key = "drift", label = "Drift", glyph = "wander", default = 0.15,
     get = vp_get("drift", 0.15), set = vp_set("drift"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "drift", 0.15)) end,
     push = function() end,
@@ -149,13 +152,13 @@ tm.PARAMS = {
   {
     -- skews a fresh coin flip toward 0 or 1, so the pattern's density -- and
     -- the pitch line's average height -- can drift instead of sitting at 50/50.
-    key = "bias", label = "Bias", default = 0.5,
+    key = "bias", label = "Bias", glyph = "bipolar", default = 0.5,
     get = vp_get("bias", 0.5), set = vp_set("bias"),
     text = function(id) return string.format("%+.2f", (state.get_vparam(id, "bias", 0.5) - 0.5) * 2) end,
     push = function() end,
   },
   {
-    key = "range", label = "Range", default = 0.5,
+    key = "range", label = "Range", glyph = "span", default = 0.5,
     get = vp_get("range", 0.5), set = vp_set("range"),
     text = function(id) return span_text(tm.span(id)) end,
     push = function(id) push_voices(id) end,
@@ -165,22 +168,29 @@ tm.PARAMS = {
     -- coarser and jumpier, more is smoother -- the "Voltages expander" idea
     -- (more bits summed, more continuous a line) folded into one knob rather
     -- than eight fixed weights.
-    key = "bits", label = "Bits", default = 1.0,
+    key = "bits", label = "Bits", glyph = "stack", default = 1.0,
     get = vp_get("bits", 1.0), set = vp_set("bits"),
     text = function(id) return tm.bits(id) .. " bits" end,
+    glyph_data = function(id) return {n = 8, lit = tm.bits(id)} end,
     push = function(id) push_voices(id) end,
   },
   {
     -- which bit gates the outgoing trigger: the "Pulses expander"'s eight
     -- per-bit gate outputs, collapsed onto the one you pick, since a TM cell
     -- has one outgoing cable bank rather than eight.
-    key = "tap", label = "Tap", default = 0,
+    key = "tap", label = "Tap", glyph = "register", default = 0,
     get = vp_get("tap", 0), set = vp_set("tap"),
     text = function(id) return "bit " .. tm.tap(id) end,
+    -- the only shape on the panel that draws another module's live state:
+    -- "bit 4" means nothing without the eight bits either side of it.
+    glyph_data = function(id)
+      local r = tm.get(id)
+      return {bits = r and r.bits or nil, tap = tm.tap(id) - 1}
+    end,
     push = function() end,
   },
   {
-    key = "level", label = "Level", default = 0.8,
+    key = "level", label = "Level", glyph = "fader", default = 0.8,
     get = vp_get("level", 0.8), set = vp_set("level"),
     text = function(id) return string.format("%.2f", tm.out_level(id)) end,
     push = function() end,

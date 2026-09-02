@@ -659,7 +659,7 @@ urgent question.
 
 ### 5.2 Screen — Global param page (nothing held)
 
-`lib/gparam.lua`'s seven global macros, drawn as §5.2b's widget grid. `E1`
+`lib/gparam.lua`'s seven global macros, drawn as §5.2c's widget grid. `E1`
 walks the list, `E2` moves the picked param coarsely and `E3` finely. Seven
 fits on one page.
 
@@ -674,41 +674,80 @@ but not the widget grid below it — there is no list to walk, just the
 It used to be: a two-column list of `label ....... value` rows with a
 hairline bar under each. That was compact, and it read like a settings menu —
 rows of small type you parse left to right, one at a time, while the thing
-you are editing is making noise. An Elektron box solves the same problem the
-opposite way round: a title bar that never moves, and then a fixed grid of
-widgets, each showing its value as a *shape* you read at a glance and its
-name as a word underneath. You look at the grid, not at the rows.
+you are editing is making noise. So it became a fixed grid of widgets, each
+showing its value as a shape and its name as a word underneath. §5.2c is what
+that grid became once the shapes stopped all being the same shape.
 
-**The header bar.** Inverted — a filled bar with the text knocked out of it,
-which is what makes it read as a title rather than as one more row. Eleven
-pixels, and always the same six things in the same places:
+### 5.2c Screen — one shape per parameter
 
-| | |
-|-|-|
-| transport | a filled triangle running, a filled square frozen. Still and an external Stop are the same state (§4.1c), so one glyph reports both |
-| tag chip | two or three characters saying what kind of page this is: a cell's panel letter, `MIX`, `G` |
-| page dots | one per page, filled for the one you are on — eight pixels where "1/2" would cost twenty |
-| name | the page's name, or — for a few seconds after anything happens — what just happened |
-| value | the full, untrimmed reading of whatever the cursor is on: the one thing on the screen that is never abbreviated |
-| tempo chip | inverted again, at the right edge. `ext` when something else is deciding it |
+The first cut of the grid was a Digitakt tribute: an 11px inverted title bar
+and a 4 × 2 grid of identical 270° knob gauges, with a value line under each
+label. On a Digitakt that is the right answer — it has eight physical knobs
+whose meaning changes per page, so the screen's whole job is to *label* them,
+and eight identical widgets is honest about the eight identical knobs under
+your fingers. norns has no such row. Here the screen is not labelling
+anything; it is the only thing there is.
 
-**The grid.** 4 × 2, eight to a page, a longer list paginating rather than
-wrapping back over itself.
+Which made the grid a list wearing a costume. A circle with a pointer tells
+you a quantity but never *which* quantity, so you read all eight words every
+time — slower than the text rows it replaced, and with seven of the eight
+values now hidden in the header.
 
-- a parameter whose reading is a **quantity** draws as a **knob**: a circle,
-  a bright arc from the start of a 270° sweep to the value, and a radial
-  pointer. Three strokes and no more than three — at fifteen frames a second
-  eight of these plus a header is the whole screen budget.
-- a parameter whose reading is a **word** — a gait, a scale, on/off — draws
-  as a **boxed readout** instead, filled and inverted when focused, outlined
-  when not. A pointer angle tells you nothing about "euclidean".
-- which one a parameter gets is decided from its text at draw time (does the
-  reading start with a digit, a sign, or the decay multiplier's `x`?), not
-  from a flag on the parameter. That keeps the one page contract every module
-  already shares, and a row that changes from a number to a word — Scale's
-  `free` at position zero — changes widget with it.
-- the label under each widget is the parameter's name, clipped to the column.
-  The value is never clipped: it is in the header in full.
+So: **the drawing carries the meaning, and no two parameters may look
+alike.** `lib/glyph.lua` holds the vocabulary — twenty-two shapes, one named
+by each row's own `glyph` field. A Decay draws a falling tail and the tail
+gets longer; a Prob draws a field of dots and the field gets denser; a Length
+draws a row of steps and more of them light; a Tap draws the eight bits of
+the register and points at the one it reads.
+
+Three things went, and each paid for the same thing:
+
+| gone | returns | spent on |
+|-|-|-|
+| the inverted 11px title slab | 3px, and the panel's brightest object | the shape |
+| the value line under every label | 7px per row | the shape |
+| the knob | a circle's worth of pixels | the shape |
+
+**The header.** 8px, no fill, no chips, a 1px rule underneath. The same five
+things, as plain text at three levels: transport (triangle running, square
+frozen — Still and an external Stop are one state, §4.1c), the tag (a cell's
+panel letter, `MIX`, `MAP`, `G` — the one thing the name cannot tell you,
+since "Bittern" does not say whether it is a field or a drum), the name, page
+dots, and the tempo. The value readout is gone: every widget draws its own.
+
+**The block.** 128 × 64, header 8, two blocks of 27 — 62, with two spare. In
+a block the shape occupies the first 19 rows and the label's baseline is at
+26, so the ascenders start two pixels below where the shape stops and the
+bottom row's descenders land on 63. Four columns of 32; the shape is 26 wide,
+inset 3 either side.
+
+**Curves, but only cheap ones.** `test/soak.lua` caps `redraw()` at 200
+screen commands a frame, because a queue matron cannot drain blocks the Lua
+thread and takes the front panel down with the screen. That budget decides
+how a curve is drawn, not taste: `screen.curve` is **one** command and draws
+a real cubic, while the same curve sampled into a 26-point polyline is
+twenty-seven — eight of those is the whole frame. So Decay, Attack, Body,
+Bright, Drive and Timbre are genuine cubics, and everything discrete or
+positional stays straight, because a curve would say nothing there. No
+`screen.arc`: with a live current point — and there always is one, left by
+the previous widget's label — `cairo_arc` drags a phantom segment in from
+wherever the pen was, which is the bug the old `draw_knob` carried two extra
+`move()`s to suppress. `curve_to` has no such behaviour.
+
+Shapes that draw many cells (a dot field, a row of steps, a register) issue
+their rects into one path and paint with a single `screen.fill()` — the rects
+accumulate, the fill is what costs. The measured cost of a full page is 145
+commands on the global page, 147 on a voice's, 124 on the mixer.
+
+**What it costs.** There is now nowhere on the panel to read an exact number.
+You can set Tune by ear but not to `+3.00 st`, and you cannot match two cells
+by eye — the mixer's Delay row, whose whole point was a millisecond figure
+you match to the tempo, is where that bites hardest, and it is left
+consistent with everything else rather than made an exception, because one
+row that prints a number is a row that looks broken. If the exception is ever
+wanted, the cheap version keeps all of the above: show the value in the
+header's name slot **only while an encoder is actually turning**, and let it
+fall back to the name a second later.
 
 **Four columns, not the Digitakt's five.** At five a column is 25px, and 25px
 of this font is four or five characters — which turns both `Scatter` and
@@ -717,14 +756,39 @@ fits the longest label the panel has. It also means eight to a page rather
 than ten, which lands every page in the script except a voice's twelve on one
 screen.
 
+**The scopes.** A page of four rows or fewer leaves the whole second block
+empty. That used to fill with three wrapped lines from the lexicon — a
+sentence you read once on the first day and then never again, sitting in the
+best display real estate on the panel while the thing you were listening to
+went undrawn. It is now a live display per cell type, drawn from state that
+already exists and is already read at frame rate for the grid LEDs:
+
+- **LFO** — the sine, scrolling. The right edge is now, and the current value
+  is carried out to the margin. `lfo.phase(id)` (§5.1).
+- **D** — the gait's phase as a sweeping bar with its cycle ticked. A metric
+  gait sweeps evenly and a swung or euclidean one does not, so the bar says
+  which you are on without reading the word. `rambler.info(id).phase`.
+
+A type with no scope keeps its sentence, which is what lets the rest land one
+family at a time.
+
 `test/screen.lua` is the authority on the geometry: two words may never share
-pixels; a word may sit inside a box (the header bar, a chip, a widget's
-readout) but never inside a knob gauge, and never half-clipped by anything.
+pixels; a word may sit inside a box but never inside a shape, and never
+half-clipped by anything. It also asserts that every row names a shape, that
+the shape exists, and that **no page shows the same shape twice** — the two
+exceptions are named there, the mixer (five faders in a row is what a mixer
+looks like; the repetition is the reading) and a D cell's Gait and Grid,
+which are both words and have no other shape to be.
+
+`test/render.lua` is the other half: it rasterises the real `screenui.lua`
+into a PGM per view, so the drawing can be looked at without a norns on the
+desk. It asserts nothing — geometry tests cannot tell you whether a Decay
+looks like a decay.
 
 ### 5.3 Screen — Cell view (a cell held or open)
 
-The same widget grid as §5.2, for whichever page that cell's type has
-(`lib/cellparam.lua`, or `voice`/`gvoice`/`tm`'s own). The header's tag chip
+The same widget grid as §5.2c, for whichever page that cell's type has
+(`lib/cellparam.lua`, or `voice`/`gvoice`/`tm`'s own). The header's tag
 carries the panel letter and its dots the page number. Holding is a glance —
 the encoders are on the page for as long as you hold, and the patch gesture
 is live underneath; tapping latches it open, and dims the panel to that cell
@@ -750,7 +814,7 @@ Tapping a voice cell replaces the screen with its parameters; tapping again
 (or `K2`) puts the screen back. `E1` picks one, `E2` moves it coarsely, `E3`
 finely. *Holding* a voice cell shows the same page for as long as you hold
 it, without taking the encoders off the patch — unchanged. Twelve parameters
-is the only list in the script long enough to paginate on §5.2b's eight-wide
+is the only list in the script long enough to paginate on §5.2c's eight-wide
 grid.
 
 **Three new rows since the grid overhaul**, at the end of the list: the old
@@ -896,8 +960,10 @@ Canopy/
     gparam.lua                -- the seven-parameter global page (§4.1, §5.2)
     mixer.lua                 -- the four soundscape loops + master (§4.1b)
     gridui.lua                -- grid render + hold/tap state machine
-    screenui.lua              -- the widget grid (§5.2b): global / mixer /
+    screenui.lua              -- the widget grid (§5.2c): global / mixer /
                                  cell / edge views, plus the map (§4.1d)
+    glyph.lua                 -- the shape vocabulary (§5.2c): one drawn
+                                 shape per parameter, named by its `glyph`
     bridge.lua                -- engine command wrapper
   lib/Engine_Canopy.sc      -- SC: modal voices, GVOICE drums, exciters, patch
                                matrix, heartwood, the four ambience loops,

@@ -52,9 +52,9 @@ end
 -- "the one thing that matters about that cell" (§4.2) -- the knob E2 used to
 -- be when nothing else was going on. lexicon.lua still owns its label and
 -- range; this only turns it into a row.
-local function character_row(label, text_fn)
+local function character_row(label, text_fn, glyph)
   return {
-    key = "character", label = label,
+    key = "character", label = label, glyph = glyph or "fader",
     get = function(id)
       local ch = wl("lexicon").character(id)
       local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
@@ -74,9 +74,20 @@ end
 -- a bank of named options (gaits, rules, modes) as one row. `order` is the
 -- module's own ORDER table, `current`/`apply` its getter/setter -- this file
 -- never learns what any of the keys mean.
+-- a bank always draws as `word` -- a pointer angle says nothing about
+-- "euclidean" -- and glyph_data gives the box the one thing the old one could
+-- not show: that there are nine gaits and this is the second.
 local function bank_row(label, order_fn, current_fn, apply_fn)
   return {
-    key = label:lower(), label = label,
+    key = label:lower(), label = label, glyph = "word",
+    glyph_data = function(id)
+      local order = order_fn()
+      local cur = current_fn(id)
+      for i, key in ipairs(order) do
+        if key == cur then return {idx = i - 1, total = #order} end
+      end
+      return {idx = 0, total = #order}
+    end,
     steps_fn = function() return #order_fn() end,
     get = function(id)
       local order = order_fn()
@@ -100,7 +111,7 @@ end
 -- `write` takes the new boolean.
 local function flag_row(label, on_text, off_text, read_fn, write_fn)
   return {
-    key = label:lower(), label = label, steps = 2,
+    key = label:lower(), label = label, glyph = "flag", steps = 2,
     get = function(id) return read_fn(id) and 1 or 0 end,
     set = function(id, frac) write_fn(id, frac >= 0.5) end,
     text = function(id)
@@ -116,7 +127,7 @@ end
 -- cells have a decay at all.
 local function decay_row(text_fn)
   return {
-    key = "decay", label = "Decay",
+    key = "decay", label = "Decay", glyph = "ramp",
     get = function(id) return state.get_decay(id) end,
     set = function(id, v) state.decay[id] = util.clamp(v, 0, 1) end,
     text = text_fn,
@@ -135,7 +146,7 @@ PAGES.D = {
   character_row("Rate", function(id)
     local info = wl("rambler").info(id)
     return info and info.param or "-"
-  end),
+  end, "fader"),
   bank_row("Gait",
            function() return wl("rambler").GAIT_ORDER end,
            function(id) local r = wl("rambler").get(id); return r and r.gait end,
@@ -148,7 +159,10 @@ PAGES.D = {
            end,
            function(id, on) wl("rambler").set_rooted(id, on) end),
   {
-    key = "grid", label = "Grid",
+    -- read-only: the grid the current gait actually landed on. no bank to
+    -- show a position in, so `word` gets no ticks -- and its `get` is the
+    -- rambler's phase, which the D scope now draws full width underneath.
+    key = "grid", label = "Grid", glyph = "word",
     get = function(id)
       local info = wl("rambler").info(id)
       return info and util.clamp(info.phase or 0, 0, 1) or 0
@@ -167,13 +181,13 @@ PAGES.R = {
   character_row("Amount", function(id)
     local info = wl("weave").info(id)
     return info and info.param or "-"
-  end),
+  end, "fader"),
   bank_row("Rule",
            function() return wl("weave").RULE_ORDER end,
            function(id) local r = wl("weave").get(id); return r and r.rule end,
            function(id, key) wl("weave").set_rule(id, key) end),
   {
-    key = "gate", label = "Gate",
+    key = "gate", label = "Gate", glyph = "flag",
     get = function(id)
       local info = wl("weave").info(id)
       return (info and info.open) and 1 or 0
@@ -195,7 +209,7 @@ PAGES.F = {
   character_row("Range", function(id)
     local info = wl("grove").info(id)
     return info and info.param or "-"
-  end),
+  end, "span"),
   bank_row("Mode",
            function() return wl("grove").MODE_ORDER end,
            function(id) local f = wl("grove").get(id); return f and f.mode end,
@@ -207,7 +221,7 @@ PAGES.F = {
              if f and (f.snap and true or false) ~= on then wl("grove").toggle_snap(id) end
            end),
   {
-    key = "degree", label = "Now",
+    key = "degree", label = "Now", glyph = "marker",
     get = function(id)
       local info = wl("grove").info(id)
       return info and util.clamp((info.pos + 1) / 2, 0, 1) or 0.5
@@ -227,7 +241,7 @@ PAGES.E = {
     local ch = wl("lexicon").character(id)
     local lo, hi = (ch and ch.lo) or 0, (ch and ch.hi) or 1
     return string.format("%.2f", state.base_character(id, lo, hi))
-  end),
+  end, "tilt"),
   decay_row(function(id)
     return string.format("x%.2f", wl("exciter").decay_scale(id))
   end),
@@ -239,9 +253,9 @@ PAGES.H = {
   character_row("Conduct", function(id)
     local info = wl("heartwood").info(id)
     return info and string.format("%.2f", info.conductance) or "-"
-  end),
+  end, "lattice"),
   {
-    key = "hop", label = "Hop",
+    key = "hop", label = "Hop", glyph = "spike",
     get = function(id)
       local info = wl("heartwood").info(id)
       return info and util.clamp(1 - info.hop / 0.4, 0, 1) or 0
@@ -254,7 +268,7 @@ PAGES.H = {
     push = function() end,
   },
   {
-    key = "loss", label = "Loss",
+    key = "loss", label = "Loss", glyph = "ramp",
     get = function(id)
       local info = wl("heartwood").info(id)
       return info and util.clamp(1 - info.loss, 0, 1) or 0
@@ -267,7 +281,7 @@ PAGES.H = {
     push = function() end,
   },
   {
-    key = "charge", label = "Charge",
+    key = "charge", label = "Charge", glyph = "rampup",
     get = function(id)
       local info = wl("heartwood").info(id)
       return info and util.clamp(info.charge, 0, 1) or 0
@@ -286,7 +300,7 @@ PAGES.C = {
   character_row("Ratio", function(id)
     local info = wl("clockcell").info(id)
     return info and info.param or "-"
-  end),
+  end, "word"),
 }
 
 -- Out cells: nothing to set -- position along the row *is* the pan -- so the
@@ -295,7 +309,7 @@ PAGES.C = {
 -- here to remove.
 PAGES.O = {
   {
-    key = "pan", label = "Pan",
+    key = "pan", label = "Pan", glyph = "marker",
     get = function(id)
       local cell = topology.get(id)
       return cell and ((cell.pan + 1) / 2) or 0.5
@@ -310,7 +324,8 @@ PAGES.O = {
     push = function() end,
   },
   {
-    key = "feeds", label = "Sources",
+    key = "feeds", label = "Sources", glyph = "steps",
+    glyph_data = function(id) return {n = 8, lit = patch.degree(id)} end,
     get = function(id) return util.clamp(patch.degree(id) / 8, 0, 1) end,
     set = function() end,
     text = function(id) return tostring(patch.degree(id)) end,

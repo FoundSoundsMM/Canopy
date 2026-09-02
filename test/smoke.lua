@@ -37,11 +37,13 @@ do
   -- 21. the cell page's description line is back (screenui.draw_cell), so
   -- screenui requires lexicon directly again -- cellparam still fetches it
   -- lazily too, but require() memoises, so this is one module either way.
+  -- §5.2c added glyph.lua, which screenui requires directly (it is the whole
+  -- widget vocabulary) and nothing else touches.
   local WANT = {
-    "bridge", "cellparam", "clockcell", "dispatch", "exciter", "gparam",
-    "gridui", "grove", "gust", "gvoice", "heartwood", "lexicon", "lfo",
-    "mixer", "patch", "quantise", "rambler", "screenui", "state", "tm",
-    "topology", "voice", "weave",
+    "bridge", "cellparam", "clockcell", "dispatch", "exciter", "glyph",
+    "gparam", "gridui", "grove", "gust", "gvoice", "heartwood", "lexicon",
+    "lfo", "mixer", "patch", "quantise", "rambler", "screenui", "state",
+    "tm", "topology", "voice", "weave",
   }
   check("exactly the expected modules, one copy each",
         table.concat(names, ",") == table.concat(WANT, ","),

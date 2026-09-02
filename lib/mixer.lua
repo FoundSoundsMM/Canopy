@@ -79,9 +79,13 @@ end
 
 local COARSE, FINE = 1 / 80, 1 / 500
 
+-- §5.2c: these five deliberately share one shape where every other page in
+-- the script insists on eight different ones. a mixer IS a row of identical
+-- columns -- the repetition is what says "these are the same kind of thing,
+-- compare them" -- so `fader` five times over is the reading, not a lapse.
 local function level_row(loop)
   return {
-    key = "lvl_" .. loop.key, label = loop.name,
+    key = "lvl_" .. loop.key, label = loop.name, glyph = "fader",
     coarse = COARSE, fine = FINE, min = 0, max = 1,
     get = function() return mixer.get_level(loop.key) end,
     set = function(v) mixer.set_level(loop.key, v) end,
@@ -104,7 +108,8 @@ end
 -- as the four loops. K1+E3 still moves it from anywhere, exactly as before
 -- -- this is the same number, given a face.
 table.insert(mixer.PARAMS, {
-  key = "master", label = "Master", coarse = COARSE, fine = FINE,
+  key = "master", label = "Master", glyph = "fader",
+  coarse = COARSE, fine = FINE,
   min = 0, max = 1,
   get = function() return state.global.level or 0.8 end,
   set = function(v) state.global.level = util.clamp(v, 0, 1) end,
@@ -124,9 +129,10 @@ table.insert(mixer.PARAMS, {
 --
 -- the numbers themselves live in lib/gust.lua, which owns their defaults and
 -- their ranges; this is only the face.
-local function space_row(key, label, text_fn, frac_fn, coarse, fine)
+local function space_row(key, label, glyph, text_fn, frac_fn, coarse, fine)
   return {
-    key = "gust_" .. key, label = label, coarse = coarse, fine = fine,
+    key = "gust_" .. key, label = label, glyph = glyph,
+    coarse = coarse, fine = fine,
     get = function() return wl("gust").get_space(key) end,
     set = function(v) wl("gust").set_space(key, v) end,
     text = text_fn, frac = frac_fn,
@@ -134,14 +140,22 @@ local function space_row(key, label, text_fn, frac_fn, coarse, fine)
   }
 end
 
-table.insert(mixer.PARAMS, space_row("space", "Space",
+table.insert(mixer.PARAMS, space_row("space", "Space", "peak",
   function() return string.format("%.2f", wl("gust").get_space("space")) end,
   function() return wl("gust").get_space("space") end,
   COARSE, FINE))
 
 -- in milliseconds, not a 0..1 knob: a delay time is a number you want to
 -- read, and often one you want to match to the tempo by eye.
-table.insert(mixer.PARAMS, space_row("delay", "Delay",
+--
+-- §5.2c took that number off the screen along with every other one, and this
+-- is the row where that trade is most obviously a loss -- `steps` says how
+-- far up the range you are but not that you are on a dotted eighth. it is
+-- left consistent with the rest of the panel rather than made an exception,
+-- because one row that prints a number is a row that looks broken. if the
+-- exception is ever wanted, the cheap version is in screenui.lua's header
+-- note: show the value in the name slot only while an encoder is turning.
+table.insert(mixer.PARAMS, space_row("delay", "Delay", "steps",
   function() return string.format("%.0f ms", wl("gust").get_space("delay") * 1000) end,
   function()
     local g = wl("gust")
@@ -149,7 +163,7 @@ table.insert(mixer.PARAMS, space_row("delay", "Delay",
   end,
   0.01, 0.002))
 
-table.insert(mixer.PARAMS, space_row("regen", "Regen",
+table.insert(mixer.PARAMS, space_row("regen", "Regen", "combs",
   function() return string.format("%.2f", wl("gust").get_space("regen")) end,
   function() local g = wl("gust"); return g.get_space("regen") / g.REGEN_MAX end,
   COARSE, FINE))

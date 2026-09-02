@@ -74,7 +74,7 @@ end
 
 voice.PARAMS = {
   {
-    key = "tune", label = "Tune", default = 0.5,
+    key = "tune", label = "Tune", glyph = "marker", default = 0.5,
     get = vp_get("tune", 0.5), set = vp_set("tune"),
     text = function(id) return string.format("%+.1f st", voice.tune_semitones(id)) end,
     push = function(id)
@@ -89,7 +89,7 @@ voice.PARAMS = {
     -- sharp and settling, or (turned all the way up) an 808's own glide
     -- from a couple of octaves up down to the fundamental. 0 is a no-op --
     -- Tune alone still gives you the plain pitched hit it always has.
-    key = "bend", label = "Bend", default = 0,
+    key = "bend", label = "Bend", glyph = "bipolar", default = 0,
     get = vp_get("bend", 0), set = vp_set("bend"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "bend", 0)) end,
     push = function(id)
@@ -97,7 +97,7 @@ voice.PARAMS = {
     end,
   },
   {
-    key = "decay", label = "Decay", default = 0.5,
+    key = "decay", label = "Decay", glyph = "ramp", default = 0.5,
     get = function(id) return state.get_decay(id) end,
     set = function(id, v)
       state.decay[id] = util.clamp(v, 0, 1)
@@ -109,7 +109,7 @@ voice.PARAMS = {
     end,
   },
   {
-    key = "body", label = "Body", default = 0.5,
+    key = "body", label = "Body", glyph = "peak", default = 0.5,
     get = vp_get("body", 0.5), set = vp_set("body"),
     -- harmonic at 0, free-free bar at 1: the difference between a drum with a
     -- pitch and a drum with a clang.
@@ -119,7 +119,7 @@ voice.PARAMS = {
     end,
   },
   {
-    key = "damp", label = "Damp", default = 0.5,
+    key = "damp", label = "Damp", glyph = "combs", default = 0.5,
     get = vp_get("damp", 0.5), set = vp_set("damp"),
     text = function(id) return string.format("%.2f", voice.damp(id)) end,
     push = function(id)
@@ -127,7 +127,7 @@ voice.PARAMS = {
     end,
   },
   {
-    key = "bright", label = "Bright", default = 0.5,
+    key = "bright", label = "Bright", glyph = "tilt", default = 0.5,
     get = vp_get("bright", 0.5), set = vp_set("bright"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "bright", 0.5)) end,
     push = function(id)
@@ -135,7 +135,7 @@ voice.PARAMS = {
     end,
   },
   {
-    key = "drive", label = "Drive", default = 0.25,
+    key = "drive", label = "Drive", glyph = "knee", default = 0.25,
     get = vp_get("drive", 0.25), set = vp_set("drive"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "drive", 0.25)) end,
     push = function(id)
@@ -143,7 +143,7 @@ voice.PARAMS = {
     end,
   },
   {
-    key = "strike", label = "Strike", default = 0.3,
+    key = "strike", label = "Strike", glyph = "spike", default = 0.3,
     get = vp_get("strike", 0.3), set = vp_set("strike"),
     -- where on the bar the mallet lands: comb-notches whichever modes have a
     -- node there, which is most of what separates a rim from a centre hit.
@@ -153,7 +153,7 @@ voice.PARAMS = {
     end,
   },
   {
-    key = "level", label = "Level", default = 0.7,
+    key = "level", label = "Level", glyph = "fader", default = 0.7,
     get = vp_get("level", 0.7), set = vp_set("level"),
     text = function(id) return string.format("%.2f", voice.level(id)) end,
     push = function(id)
@@ -166,7 +166,7 @@ voice.PARAMS = {
     -- effect on the next event" shape a TM cell's Prob/Drift/Bias rows use.
     -- used to live on the T socket's own character knob; there is no socket
     -- left to carry it, so it moved here.
-    key = "hardness", label = "Hard", default = 0.5,
+    key = "hardness", label = "Hard", glyph = "spike", default = 0.5,
     get = vp_get("hardness", 0.5), set = vp_set("hardness"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "hardness", 0.5)) end,
     push = function() end,
@@ -175,7 +175,7 @@ voice.PARAMS = {
     -- how far a field or a TM cell moves this voice's pitch -- the old P
     -- socket's own knob, 0..2 so the player can flatten the melody to
     -- nothing or double how wide it reads.
-    key = "depth", label = "Depth", default = 0.5,
+    key = "depth", label = "Depth", glyph = "span", default = 0.5,
     get = vp_get("depth", 0.5), set = vp_set("depth"),
     text = function(id) return string.format("%.2f", voice.depth(id)) end,
     push = function(id) wl("grove").push_voice_now(id) end,
@@ -184,7 +184,7 @@ voice.PARAMS = {
     -- the old M socket's balance knob: 0 injects a cabled stream into the
     -- resonator as excitation, 1 lands it on the body as damping/brightness/
     -- structure bend, and everything between is a mix of the two.
-    key = "balance", label = "Balance", default = 0.5,
+    key = "balance", label = "Balance", glyph = "link", default = 0.5,
     get = vp_get("balance", 0.5), set = vp_set("balance"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "balance", 0.5)) end,
     push = function(id)

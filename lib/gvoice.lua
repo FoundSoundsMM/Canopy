@@ -50,7 +50,7 @@ end
 
 gvoice.PARAMS = {
   {
-    key = "pitch", label = "Pitch", default = 0.5,
+    key = "pitch", label = "Pitch", glyph = "marker", default = 0.5,
     get = vp_get("pitch", 0.5), set = vp_set("pitch"),
     text = function(id)
       local v = state.get_vparam(id, "pitch", 0.5)
@@ -62,7 +62,7 @@ gvoice.PARAMS = {
     end,
   },
   {
-    key = "decay", label = "Decay", default = 0.5,
+    key = "decay", label = "Decay", glyph = "ramp", default = 0.5,
     get = function(id) return state.get_decay(id) end,
     set = function(id, v)
       state.decay[id] = util.clamp(v, 0, 1)
@@ -77,7 +77,7 @@ gvoice.PARAMS = {
   {
     -- ping: the mix-in of a detuned second partial (0 = pure fundamental).
     -- noise: brown <-> white colour and bandwidth (0 = dark and narrow).
-    key = "tone", label = "Tone", default = 0.5,
+    key = "tone", label = "Tone", glyph = "tilt", default = 0.5,
     get = vp_get("tone", 0.5), set = vp_set("tone"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "tone", 0.5)) end,
     push = function(id)
@@ -88,7 +88,7 @@ gvoice.PARAMS = {
   {
     -- how much of the strike is transient: a harder, shorter click/attack at
     -- 1, a softer, slower one at 0.
-    key = "punch", label = "Punch", default = 0.3,
+    key = "punch", label = "Punch", glyph = "spike", default = 0.3,
     get = vp_get("punch", 0.3), set = vp_set("punch"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "punch", 0.3)) end,
     push = function(id)
@@ -97,7 +97,7 @@ gvoice.PARAMS = {
     end,
   },
   {
-    key = "drive", label = "Drive", default = 0.2,
+    key = "drive", label = "Drive", glyph = "knee", default = 0.2,
     get = vp_get("drive", 0.2), set = vp_set("drive"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "drive", 0.2)) end,
     push = function(id)
@@ -106,7 +106,7 @@ gvoice.PARAMS = {
     end,
   },
   {
-    key = "level", label = "Level", default = 0.7,
+    key = "level", label = "Level", glyph = "fader", default = 0.7,
     get = vp_get("level", 0.7), set = vp_set("level"),
     text = function(id) return string.format("%.2f", gvoice.level(id)) end,
     push = function(id)

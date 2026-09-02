@@ -81,6 +81,25 @@ end
 rec.rect = function(x, y, w, h) cur.rect = {x, y, w, h} end
 rec.circle = function(x, y, r) cur.shape = {x - r, y - r, 2 * r, 2 * r} end
 rec.arc = function(x, y, r) cur.shape = {x - r, y - r, 2 * r, 2 * r} end
+-- §5.2c: the widget shapes are cubics now (lib/glyph.lua's Decay, Attack,
+-- Body, Bright, Drive, Timbre). without this they were invisible to the
+-- recorder and every one of them went unchecked -- a curve that ran into the
+-- label under it would have drawn clean here. a cubic is contained by the
+-- bounding box of its four points, so that box is what gets recorded, and it
+-- is treated as a `line`: strokes are structure, and the same "text may not
+-- sit inside a shape" rule that pins the gauges would be wrong for a curve
+-- drawn deliberately behind nothing.
+rec.curve = function(x1, y1, x2, y2, x3, y3)
+  local xs = {cur.x, x1, x2, x3}
+  local ys = {cur.y, y1, y2, y3}
+  local x0, x9, y0, y9 = xs[1], xs[1], ys[1], ys[1]
+  for i = 2, 4 do
+    x0 = math.min(x0, xs[i]); x9 = math.max(x9, xs[i])
+    y0 = math.min(y0, ys[i]); y9 = math.max(y9, ys[i])
+  end
+  record("line", x0, y0, x9 - x0, math.max(1, y9 - y0))
+  cur.x, cur.y = x3, y3
+end
 rec.close = function() end
 -- a rectangle is a box: filled it is a background, stroked it is a frame,
 -- and either way text may legally sit inside it. a circle or an arc is a
@@ -490,6 +509,148 @@ do
   end
   check("every cell type on the panel has a settings page", #missing == 0,
         table.concat(missing, ","))
+end
+
+-- 6: the glyph vocabulary ----------------------------------------------------
+-- §5.2c. the widget grid stopped being eight identical gauges and became one
+-- drawn shape per parameter (lib/glyph.lua), which introduces two ways to be
+-- wrong that no geometry check above can see: a row can name a shape that
+-- does not exist (it silently falls back to `fader`, so the panel looks fine
+-- and the parameter is mislabelled forever), and two rows on the SAME page
+-- can end up with the same shape, which puts you straight back to reading the
+-- words -- the exact failure the whole re-cut was meant to remove.
+
+print("\n-- the glyph set --")
+do
+  local glyph = wl("glyph")
+
+  -- every list of rows the panel can put on screen, and what it is called
+  local lists = {{"gparam", M.gparam.PARAMS}, {"mixer", M.mixer.PARAMS}}
+  local seen_type = {}
+  for id, cell in M.topology.each() do
+    if not seen_type[cell.type] then
+      seen_type[cell.type] = true
+      local page = cellparam.page(id)
+      if page then table.insert(lists, {cell.type, page.PARAMS}) end
+    end
+  end
+
+  local unknown, unnamed = {}, {}
+  local rows = 0
+  for _, entry in ipairs(lists) do
+    for _, p in ipairs(entry[2]) do
+      rows = rows + 1
+      if p.glyph == nil then
+        table.insert(unnamed, entry[1] .. "." .. tostring(p.label))
+      elseif not glyph.exists(p.glyph) then
+        table.insert(unknown, entry[1] .. "." .. tostring(p.label)
+                              .. " -> " .. tostring(p.glyph))
+      end
+    end
+  end
+  check("every row names a shape", #unnamed == 0, table.concat(unnamed, ","))
+  check("and every shape it names exists", #unknown == 0,
+        table.concat(unknown, ","))
+  check("and that was every row on the panel", rows > 60, tostring(rows))
+
+  -- one shape may not appear twice on one screenful. the two exceptions are
+  -- deliberate and named here rather than left to be rediscovered:
+  --   mixer   five faders in a row IS what a mixer looks like; the repetition
+  --           is the reading (lib/mixer.lua says so at level_row).
+  --   D       Gait is a bank of nine and Grid is a read-only quantise name.
+  --           both are words, and a word has no other shape to be.
+  local ALLOWED = {mixer = true, D = true}
+  local dupes = {}
+  for _, entry in ipairs(lists) do
+    local name, params = entry[1], entry[2]
+    if not ALLOWED[name] then
+      for page = 1, math.ceil(#params / screenui.PARAMS_PER_PAGE) do
+        local first = (page - 1) * screenui.PARAMS_PER_PAGE + 1
+        local used = {}
+        for i = first, math.min(#params, first + screenui.PARAMS_PER_PAGE - 1) do
+          local g = params[i].glyph
+          if used[g] then
+            table.insert(dupes, name .. " page " .. page .. ": " .. tostring(g)
+                                .. " on both " .. tostring(used[g]) .. " and "
+                                .. tostring(params[i].label))
+          end
+          used[g] = params[i].label
+        end
+      end
+    end
+  end
+  check("no page shows the same shape twice", #dupes == 0, dupes[1] or "")
+end
+
+-- 7: the block arithmetic ----------------------------------------------------
+-- the header shrank from 11 to 8 and the widget grew from 11 to 19, and the
+-- value line went. those three numbers have to still add up to 64 -- the old
+-- layout's failure mode was a row that overran the panel by two pixels and
+-- only showed up on hardware.
+
+print("\n-- the block arithmetic --")
+do
+  local glyph = wl("glyph")
+  local top = screenui.BLOCK_TOP
+  check("the header is 8px", screenui.HEADER_H == 8, tostring(screenui.HEADER_H))
+  check("row 1 starts below it", top[1] >= screenui.HEADER_H,
+        tostring(top[1]))
+  check("row 2 starts below row 1's label",
+        top[2] >= top[1] + glyph.H + 6, tostring(top[2]))
+  -- the label baseline is 26 from the block top; the font's descender lands
+  -- one pixel under it, so the bottom row's last lit pixel is at top[2] + 27.
+  check("and the bottom label's descender is still on the panel",
+        top[2] + 27 <= 64, tostring(top[2] + 27))
+  check("the shape is 26 x 19", glyph.W == 26 and glyph.H == 19,
+        glyph.W .. "x" .. glyph.H)
+end
+
+-- 8: the scopes --------------------------------------------------------------
+-- a page of four rows or fewer hands its second block to a live display
+-- instead of to three lines of lexicon prose. what this pins is that the two
+-- that exist actually draw INTO that block rather than over the row above it,
+-- and that a type without one still gets its sentence.
+
+print("\n-- the scopes --")
+do
+  local function drew_below(y)
+    for _, b in ipairs(boxes) do
+      if b.kind ~= "line" and b.y0 >= y then return true end
+    end
+    return false
+  end
+
+  local function first_scope_cell(t)
+    for id, cell in M.topology.each() do
+      if cell.type == t then return id end
+    end
+  end
+
+  for _, t in ipairs({"LFO", "D"}) do
+    local id = first_scope_cell(t)
+    check(t .. ": has a scope", screenui.SCOPES[t] ~= nil, t)
+    if id then
+      M.state.cell_edit = id
+      M.state.vparam_focus = 1
+      screenui.redraw()
+      draws_clean(t .. " with its scope")
+      check(t .. ": the scope drew in the lower block", drew_below(37), id)
+      M.state.cell_edit = nil
+    end
+  end
+
+  -- a type with no scope keeps the lexicon sentence, which is the fallback
+  -- that lets the rest land one family at a time.
+  local e = first_scope_cell("E")
+  if e then
+    M.state.cell_edit = e
+    M.state.vparam_focus = 1
+    screenui.redraw()
+    draws_clean("E with its description")
+    check("a type with no scope still gets its sentence",
+          screenui.SCOPES.E == nil and drew_below(40), e)
+    M.state.cell_edit = nil
+  end
 end
 
 report()

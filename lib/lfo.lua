@@ -46,7 +46,7 @@ end
 
 lfo.PARAMS = {
   {
-    key = "rate", label = "Speed", default = 0.5,
+    key = "rate", label = "Speed", glyph = "fader", default = 0.5,
     get = vp_get("rate", 0.5), set = vp_set("rate"),
     text = function(id) return string.format("%.2f Hz", lfo.rate_hz(id)) end,
     push = function(id)

@@ -101,7 +101,7 @@ end
 
 gparam.PARAMS = {
   {
-    key = "bpm", label = "BPM", coarse = 1, fine = 0.1,
+    key = "bpm", label = "BPM", glyph = "fader", coarse = 1, fine = 0.1,
     get = function() return gparam.tempo() end,
     set = function(v) gparam.set_bpm(v) end,
     text = function()
@@ -117,7 +117,7 @@ gparam.PARAMS = {
     push = function() end, -- set_bpm already pushes on every change
   },
   {
-    key = "swing", label = "Swing", coarse = 1 / 80, fine = 1 / 500,
+    key = "swing", label = "Swing", glyph = "swing", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
     get = function() return state.global.swing or 0 end,
     set = function(v) state.global.swing = util.clamp(v, 0, 1) end,
@@ -131,7 +131,7 @@ gparam.PARAMS = {
     -- (quantise.lua's "scatter" reading). also scales the rhythm/field
     -- wildness rambler.lua and grove.lua used to read off Weather directly.
     -- called Rain until the actual Rain.wav ambience below took that name.
-    key = "scatter", label = "Scatter", coarse = 1 / 80, fine = 1 / 500,
+    key = "scatter", label = "Scatter", glyph = "wander", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
     get = function() return state.global.scatter or 0 end,
     set = function(v) state.global.scatter = util.clamp(v, 0, 1) end,
@@ -140,7 +140,7 @@ gparam.PARAMS = {
     push = function() end,
   },
   {
-    key = "scale", label = "Scale", coarse = 1, fine = 1,
+    key = "scale", label = "Scale", glyph = "word", coarse = 1, fine = 1,
     get = function() return state.global.scale_i or 0 end,
     set = function(v)
       local grove = wl("grove")
@@ -155,6 +155,11 @@ gparam.PARAMS = {
       local n = #wl("grove").SCALES
       return (n > 0) and ((state.global.scale_i or 0) / n) or 0
     end,
+    -- §5.2c: the boxed reading says "dorian"; the ticks under it say there
+    -- are eleven of them and this is the fourth, which the box never could.
+    glyph_data = function()
+      return {idx = state.global.scale_i or 0, total = #wl("grove").SCALES + 1}
+    end,
     push = function()
       -- a scale change is audible on every voice a field or Tune is
       -- currently holding off the root, so re-push them all immediately
@@ -168,7 +173,7 @@ gparam.PARAMS = {
     end,
   },
   {
-    key = "drops", label = "Drops", coarse = 1 / 80, fine = 1 / 500,
+    key = "drops", label = "Drops", glyph = "dots", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
     get = function() return state.global.drops or 0 end,
     set = function(v) state.global.drops = util.clamp(v, 0, 1) end,
@@ -177,7 +182,7 @@ gparam.PARAMS = {
     push = function() end, -- read live by grove.on_strike
   },
   {
-    key = "decay", label = "Decay", coarse = 1 / 80, fine = 1 / 500,
+    key = "decay", label = "Decay", glyph = "ramp", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
     get = function() return state.global.decay_mult or 0.5 end,
     set = function(v) state.global.decay_mult = util.clamp(v, 0, 1) end,
@@ -190,7 +195,7 @@ gparam.PARAMS = {
     end,
   },
   {
-    key = "pitch", label = "Pitch", coarse = 1, fine = 0.1,
+    key = "pitch", label = "Pitch", glyph = "marker", coarse = 1, fine = 0.1,
     get = function() return state.global.pitch_offset or 0 end,
     set = function(v)
       state.global.pitch_offset =

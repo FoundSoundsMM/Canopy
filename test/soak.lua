@@ -307,10 +307,12 @@ do
 
   local calls, paint = frame()
   check("the global param page: under 200 commands", calls < 200, calls .. " calls")
+  print("      global " .. calls .. " commands, " .. paint .. " paint")
 
   M.state.cell_edit = "oak"
   calls, paint = frame()
   check("the sound page: under 200 commands", calls < 200, calls .. " calls")
+  print("      sound  " .. calls .. " commands, " .. paint .. " paint")
   M.state.cell_edit = nil
 
   -- ten knobs is the most the widget grid ever draws, and the sound page
@@ -323,11 +325,13 @@ do
   M.state.view = "mixer"
   calls, paint = frame()
   check("the mixer page: under 170 commands", calls < 170, calls .. " calls")
+  print("      mixer  " .. calls .. " commands, " .. paint .. " paint")
   M.state.view = "global"
 
   M.state.held = {"d.hob"}
   calls, paint = frame()
   check("the cell view: under 150 commands", calls < 150, calls .. " calls")
+  print("      cell   " .. calls .. " commands, " .. paint .. " paint")
   M.state.held = {}
 end
 

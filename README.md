@@ -14,8 +14,8 @@ new step-sequencer lanes. Full detail and rationale in
 Since then, five changes that are all about *playing* it rather than about
 what it can make (spec §4.1b, §4.3, §5.1b, §5.2b):
 
-- the screen is a **Digitakt-style widget grid** — an inverted title bar and
-  a 4×2 grid of knobs and boxed readouts — instead of a list of text rows;
+- the screen draws **one shape per parameter** — a 4×2 grid where no two
+  widgets look alike, under an 8px header, with no numbers on it at all;
 - the whole patch can be **externally clocked and started/stopped over MIDI**;
 - opening a cell's page **dims the rest of the panel** down to that cell;
 - a source can only sit in **one Output slot** — a second one moves it;
@@ -193,8 +193,10 @@ lib/
   gridui.lua                grid render + the one gesture vocabulary
   cellparam.lua             a settings page for every cell type that did
                              not already have one (T, R, F, E, H, C, Q, Out)
-  screenui.lua              the Digitakt-style widget grid: the global page,
-                             the mixer page, the cell page, the edge view
+  screenui.lua              the widget grid: the global page, the mixer
+                             page, the cell page, the edge view, the map
+  glyph.lua                 the shape vocabulary: twenty-two drawn shapes,
+                             one per parameter, no two alike
   mixer.lua                 the four soundscape loops + the master (§4.1b)
   dispatch.lua              §6 type-interaction matrix: pulse events
                              (-> voice, GVOICE, E, F, H) and the continuous
@@ -273,12 +275,17 @@ to actually render audio.
   page held and open, a heavily cabled cell, every type pair on the edge
   view, and a header carrying a long message next to an `ext` tempo — is
   checked for collisions and for running off the panel. Two words may never
-  share pixels; a word may sit inside a box (the inverted header bar, a chip,
-  a widget's readout) but never inside a knob gauge, and never half-clipped
-  by anything. This is the test the two original overlap bugs (a 2px bar
-  under an 8px row, and a twelve-row list wrapping back over itself on a
-  ten-row page) would have failed, and it is what pins the widget grid's
-  geometry now.
+  share pixels; a word may sit inside a box but never inside a shape, and
+  never half-clipped by anything. This is the test the two original overlap
+  bugs (a 2px bar under an 8px row, and a twelve-row list wrapping back over
+  itself on a ten-row page) would have failed, and it is what pins the widget
+  grid's geometry now. It also holds the shape vocabulary to its own rule:
+  every row names a shape, every shape it names exists, and **no page shows
+  the same shape twice** — two exceptions, both named there.
+- `render.lua` — not a test. It rasterises the real `screenui.lua` into a
+  PGM per view so the panel can be looked at without a norns on the desk;
+  a geometry check cannot tell you whether a Decay looks like a decay.
+  `ROOT=$(pwd) SP=$(pwd)/test lua test/render.lua <outdir>`
 - `gridui.lua` — the panel is key-for-key what the sketch it was drawn from
   says, all four voices are on row 2, both sequencer lanes are centred; a tap
   opens and closes the settings page on every cell type; `K1`+tap strikes a

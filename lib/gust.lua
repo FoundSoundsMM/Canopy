@@ -186,7 +186,7 @@ gust.PARAMS = {
     -- shown as the note it will actually sound, not as the knob's own
     -- offset: with a Scale selected the knob moves in steps the offset does
     -- not, and the number worth reading is where the key has landed.
-    key = "pitch", label = "Pitch", default = 0.5,
+    key = "pitch", label = "Pitch", glyph = "marker", default = 0.5,
     get = vp_get("pitch", 0.5), set = vp_set("pitch"),
     text = function(id)
       return string.format("%.1f Hz", gust.note_hz(id))
@@ -197,7 +197,7 @@ gust.PARAMS = {
     end,
   },
   {
-    key = "attack", label = "Attack", default = 0.5,
+    key = "attack", label = "Attack", glyph = "rampup", default = 0.5,
     get = vp_get("attack", 0.5), set = vp_set("attack"),
     text = function(id) return string.format("%.2f s", gust.attack_seconds(id)) end,
     push = function(id)
@@ -206,7 +206,7 @@ gust.PARAMS = {
     end,
   },
   {
-    key = "decay", label = "Decay", default = 0.5,
+    key = "decay", label = "Decay", glyph = "ramp", default = 0.5,
     get = function(id) return state.get_decay(id) end,
     set = function(id, v)
       state.decay[id] = util.clamp(v, 0, 1)
@@ -222,7 +222,7 @@ gust.PARAMS = {
     -- how hard the triangle is folded on its way out: 0 is close to a plain
     -- triangle, 1 is the reedy, buzzing end of the same oscillator. this is
     -- the knob that decides whether a gust is a flute or a horn.
-    key = "timbre", label = "Timbre", default = 0.35,
+    key = "timbre", label = "Timbre", glyph = "wave", default = 0.35,
     get = vp_get("timbre", 0.35), set = vp_set("timbre"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "timbre", 0.35)) end,
     push = function(id)
@@ -236,7 +236,7 @@ gust.PARAMS = {
     -- cross-modulate rather than merely sum. at 0 a cable into this cell is
     -- inaudible, so the knob is also the cell's own "listen to the patch"
     -- switch.
-    key = "cross", label = "Cross", default = 0.3,
+    key = "cross", label = "Cross", glyph = "link", default = 0.3,
     get = vp_get("cross", 0.3), set = vp_set("cross"),
     text = function(id) return string.format("%.2f", state.get_vparam(id, "cross", 0.3)) end,
     push = function(id)
@@ -245,7 +245,7 @@ gust.PARAMS = {
     end,
   },
   {
-    key = "level", label = "Level", default = 0.7,
+    key = "level", label = "Level", glyph = "fader", default = 0.7,
     get = vp_get("level", 0.7), set = vp_set("level"),
     text = function(id) return string.format("%.2f", gust.level(id)) end,
     push = function(id)
