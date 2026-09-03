@@ -653,4 +653,55 @@ do
   end
 end
 
+-- 9: the lexicon's own reachability -----------------------------------------
+-- interaction_text canonicalises a pair by sorting it on TYPE_ORDER before it
+-- looks the string up, so a key written in the other order is dead text: the
+-- edge view falls through to "no direct interaction defined" and nobody
+-- notices, because the fallback is a plausible sentence. eleven keys were
+-- written that way, including every "something strikes a voice" cable. the
+-- rule is simply that each key has to be what the lookup produces for its own
+-- two types -- which is a fixed point check, and needs no fixture at all.
+
+print("\n-- the lexicon's own reachability --")
+do
+  -- both are file-locals in lib/screenui.lua, deliberately: the panel is the
+  -- only consumer. reach them through draw_edge's upvalues rather than
+  -- widening the module for a test.
+  local function upvalue(f, want)
+    local i = 1
+    while true do
+      local name, value = debug.getupvalue(f, i)
+      if name == nil then return nil end
+      if name == want then return value end
+      i = i + 1
+    end
+  end
+
+  local interaction_text = upvalue(screenui.draw_edge, "interaction_text")
+  local descs = interaction_text and upvalue(interaction_text, "INTERACTION_DESC")
+  check("the lexicon and its lookup are reachable",
+        type(interaction_text) == "function" and type(descs) == "table", "")
+
+  if descs then
+    local dead = {}
+    for key, text in pairs(descs) do
+      local a, b = key:match("^([^|]+)|([^|]+)$")
+      if not a then
+        table.insert(dead, key .. ": not an a|b pair")
+      elseif interaction_text(a, b) ~= text then
+        table.insert(dead, key .. ": reads as \"" .. interaction_text(a, b) .. "\"")
+      end
+    end
+    table.sort(dead)
+    check("every key is what the lookup produces for its own pair",
+          #dead == 0, #dead .. " dead: " .. (dead[1] or ""))
+    -- and the pair is order-free at the call site, which is what the sort is
+    -- there for in the first place.
+    check("a pair reads the same held either way round",
+          interaction_text("D", "voice") == interaction_text("voice", "D")
+          and interaction_text("D", "voice") ~= "no direct interaction defined",
+          interaction_text("D", "voice"))
+  end
+end
+
 report()
