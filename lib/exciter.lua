@@ -34,7 +34,7 @@ function exciter.decay_scale(id)
 end
 
 -- deliberately D and R cables only, not "anything that can carry a pulse".
--- the heartwood can deliver one too, and so can a voice's O socket, but an
+-- a voice's O socket can deliver one too, but an
 -- S<->H cable's *usual* meaning is the stream diffusing through the lattice
 -- and an O->S cable's is the voice colouring the exciter (§6) -- gating on
 -- either would silence an exciter the player cabled in expecting to hear it.
@@ -112,7 +112,7 @@ patch.on_change(exciter.resync)
 -- §7.4 metering back-channel: one poll per exciter (Engine_Canopy.sc's
 -- \wl_exc_meter synth + its addPoll loop, named "exc_lvl_<index>" to match
 -- this cell's own `index`). folded straight into the same decaying flash a
--- grain-fire already uses (state.flash, shared with rambler/weave/heartwood)
+-- grain-fire already uses (state.flash, shared with rambler and weave)
 -- rather than a parallel brightness path -- a free-running exciter's
 -- continuous level and a gated one's discrete hits both just light the cell,
 -- whichever last touched it.

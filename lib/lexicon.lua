@@ -4,6 +4,14 @@
 -- range of each cell's character knob (§4.2), which the cell view prints
 -- while you are holding the cell, and a one-line description for the same
 -- line.
+--
+-- how these lines are written, since it took two passes to get right. they
+-- are read on a 128px screen, wrapped to three lines of about thirty
+-- characters, by someone holding the cell down and wondering what it is. so:
+-- say what the cell DOES, in the first four words, in the plainest word
+-- available. no dashes standing in for a clause, no folk-etymology, no
+-- "the trunk" when "the lowest voice" is what is meant. a sentence you can
+-- act on beats a sentence you can admire.
 
 local topology = wl("topology")
 
@@ -12,89 +20,92 @@ local lexicon = {}
 -- one-line descriptions, keyed by cell id -----------------------------
 
 local DESC = {
-  -- voices (§2.1) -- one point now, cable endpoint and sound page both.
-  oak   = "low, heavy, long -- the trunk. tune it down and it is the kick.",
-  hazel = "dry, clacky, short, very inharmonic -- the crack.",
-  alder = "hollow, odd-harmonic -- a struck tube. the tom.",
-  rowan = "bright, bell-adjacent, protective -- the metal.",
+  -- voices (§2.1). one cable endpoint each, and a full sound page on a tap.
+  oak   = "Deep, heavy and long. Tuned down it is the kick drum.",
+  hazel = "Dry and clacky, very short. A hard crack.",
+  alder = "Hollow, like a struck tube. The tom.",
+  rowan = "Bright and metallic, close to a bell.",
 
   -- trigger sources / T, internally D (§2.3)
-  ["d.hob"]      = "euclidean gait -- k pulses spread across n.",
-  ["d.grim"]     = "figure gait -- a bank of sixteen-step patterns, on the clock.",
-  ["d.shuck"]    = "slow and heavy gait -- very low rate, high weight.",
-  ["d.boggart"]  = "burst gait -- one wrap fires a ratchet of 2-7.",
-  ["d.spriggan"] = "stochastic gait -- a Bernoulli gate at the wrap.",
-  ["d.gabriel"]  = "drifter gait -- fast, free, strongest coupling constant.",
-  ["d.hunt"]     = "accelerando gait -- rate ramps across a cycle then resets.",
-  ["d.skriker"]  = "swarm gait -- a short, unpredictable cluster of 2-4 hits.",
+  ["d.hob"]      = "Fires k evenly spread pulses out of every n. Rate sets n.",
+  ["d.grim"]     = "Plays a 16 step pattern from a bank, in time with the clock.",
+  ["d.shuck"]    = "Very slow and very heavy. One big hit at a time.",
+  ["d.boggart"]  = "Every cycle it fires a fast roll of 2 to 7 hits.",
+  ["d.spriggan"] = "Rolls a dice each cycle and only sometimes fires.",
+  ["d.gabriel"]  = "Fast, free running, and pulled hardest by its neighbours.",
+  ["d.hunt"]     = "Speeds up across a cycle, then drops back and starts again.",
+  ["d.skriker"]  = "Fires an unpredictable cluster of 2 to 4 hits close together.",
 
   -- Turing Machine cells / TM (§2.3b)
-  ["tm.padfoot"]    = "8-bit shift register -- triggered only. tap it: full sound page.",
-  ["tm.barghest"]   = "8-bit shift register -- triggered only. tap it: full sound page.",
-  ["tm.puck"]       = "8-bit shift register -- triggered only. tap it: full sound page.",
-  ["tm.tatterfoal"] = "8-bit shift register -- triggered only. tap it: full sound page.",
+  ["tm.padfoot"]    = "An 8 bit pattern that mutates as it runs. Feed it a pulse.",
+  ["tm.barghest"]   = "An 8 bit pattern that mutates as it runs. Feed it a pulse.",
+  ["tm.puck"]       = "An 8 bit pattern that mutates as it runs. Feed it a pulse.",
+  ["tm.tatterfoal"] = "An 8 bit pattern that mutates as it runs. Feed it a pulse.",
 
-  -- clock cells / C (new)
-  ["clk.toll"]  = "flashes with the master clock, at this cell's own ratio.",
-  ["clk.knell"] = "flashes with the master clock, at this cell's own ratio.",
-  ["clk.chime"] = "flashes with the master clock, at this cell's own ratio.",
-  ["clk.peal"]  = "flashes with the master clock, at this cell's own ratio.",
+  -- clock cells / C
+  ["clk.toll"]  = "Pulses in time with the transport, at the ratio you set.",
+  ["clk.knell"] = "Pulses in time with the transport, at the ratio you set.",
+  ["clk.chime"] = "Pulses in time with the transport, at the ratio you set.",
+  ["clk.peal"]  = "Pulses in time with the transport, at the ratio you set.",
 
-  -- the weave / R (§2.7)
-  ["r.thicket"] = "rest -- now and then it swallows a whole run.",
-  ["r.tangle"]  = "ghost -- a quiet shadow just behind it.",
-  ["r.stile"]   = "hocket -- sends each pulse down a different cable.",
-  ["r.sneck"]   = "sift -- only pulses over the threshold get through.",
-  ["r.lych"]    = "meet -- fires when two different inputs land together.",
-  ["r.drove"]   = "accent -- reshapes weight on a cycling contour.",
+  -- the weave / R (§2.7). every one of these takes a pulse in and sends a
+  -- changed pulse out, so the line says what changes.
+  ["r.thicket"] = "Drops pulses. Now and then it swallows a whole run of them.",
+  ["r.tangle"]  = "Adds a quiet echo just behind every pulse.",
+  ["r.stile"]   = "Sends each pulse out of a different cable, in turn.",
+  ["r.sneck"]   = "Only lets the hardest pulses through. Amount sets the bar.",
+  ["r.lych"]    = "Fires only when two different inputs arrive together.",
+  ["r.drove"]   = "Makes some pulses louder than others, on a repeating shape.",
 
   -- percussion cells / F(ping), N(noise), internally GVOICE (§2.7b)
-  ["gv.yaffle"]  = "ping -- a mid, woody knock. tap it: full sound page.",
-  ["gv.knap"]    = "ping -- a dry, high crack, flint struck. tap it: full sound page.",
-  ["gv.clapper"] = "ping -- a low wooden knock, the kick end. tap it: full sound page.",
-  ["gv.scree"]   = "noise -- a bright scatter, the hihat end. tap it: full sound page.",
-  ["gv.chaff"]   = "noise -- a dry mid rustle, snare-like. tap it: full sound page.",
-  ["gv.rattle"]  = "noise -- a low shake, clap/rim-like. tap it: full sound page.",
+  ["gv.yaffle"]  = "A mid, woody knock. Tap it for a full sound page.",
+  ["gv.knap"]    = "A dry, high crack, like flint. Tap it for a full sound page.",
+  ["gv.clapper"] = "A low wooden knock, the kick end. Tap it for a sound page.",
+  ["gv.scree"]   = "Bright noise, the hi hat end. Tap it for a full sound page.",
+  ["gv.chaff"]   = "Dry mid noise, snare like. Tap it for a full sound page.",
+  ["gv.rattle"]  = "A low shake, clap or rim like. Tap it for a sound page.",
 
-  -- exciter cells / E, was S (§2.4)
-  ["e.bracken"]  = "dry rustle -- bandpassed white noise and crackle.",
-  ["e.ember"]    = "crackle and pop -- exponential impulse noise.",
-  ["e.gorse"]    = "prickly high band, resonant, spiky.",
-  ["e.windfall"] = "grain bursts -- short enveloped clusters.",
-  ["e.mistle"]   = "pitched chirps -- formant/bird-shaped.",
-  ["e.wisp"]     = "slow wandering random walk, control-rate.",
+  -- exciter cells / E (§2.4). continuous until a pulse is cabled in, then
+  -- each pulse fires one short grain of it.
+  ["e.bracken"]  = "A dry rustle. Filtered noise and crackle.",
+  ["e.ember"]    = "Crackle and pop, like a fire.",
+  ["e.gorse"]    = "A prickly, ringing high band.",
+  ["e.windfall"] = "Short bursts of grains, in clusters.",
+  ["e.mistle"]   = "Pitched chirps, shaped like a bird call.",
+  ["e.wisp"]     = "A slow random wander. Too slow to hear, use it to modulate.",
 
-  -- heartwood / H (§2.5)
-  ["h.taproot"] = "heartwood node -- anchors the chain, deep and slow.",
-  ["h.mycel"]   = "heartwood node -- passes energy along the chain.",
-  ["h.wyrd"]    = "heartwood node -- passes energy along the chain.",
-  ["h.ley"]     = "heartwood node -- the far end of the chain.",
+  -- sample players / S, internally SMP (§2.5)
+  ["smp.rain"]    = "Plays the rain recording. Attack and Decay set the swell.",
+  ["smp.cicada"]  = "Plays the cicada recording. Attack and Decay set the swell.",
+  ["smp.thunder"] = "Plays the thunder recording. Attack and Decay set the swell.",
+  ["smp.sea"]     = "Plays the sea recording. Attack and Decay set the swell.",
 
-  -- the gusts / G (§2.11)
-  ["gu.gale"]    = "gust -- the top row's low edge, broad and unhurried.",
-  ["gu.sough"]   = "gust -- a high, breathy swell. press it: it sounds.",
-  ["gu.eddy"]    = "gust -- quick to speak, turns over on itself.",
-  ["gu.whorl"]   = "gust -- the slowest of the top row, wide and open.",
-  ["gu.flaw"]    = "gust -- the sharpest: fast swell, short fall.",
-  ["gu.zephyr"]  = "gust -- the top row's high edge, quickest of the twelve.",
-  ["gu.squall"]  = "gust -- lowest and furthest left, a very long swell.",
-  ["gu.flurry"]  = "gust -- low and quick, the bed's moving part.",
-  ["gu.snell"]   = "gust -- cold and thin for its register.",
-  ["gu.bluster"] = "gust -- the bed's most forward voice.",
-  ["gu.buffet"]  = "gust -- broad and slow, sits under the others.",
-  ["gu.haar"]    = "gust -- lowest right, the slowest to arrive of all twelve.",
+  -- the gusts / G (§2.11). twelve of one instrument, so twelve of one line:
+  -- what differs between them is the seat, and the panel already shows that.
+  ["gu.gale"]    = "A drone. Press it to play its note. Low and broad.",
+  ["gu.sough"]   = "A drone. Press it to play its note. High and breathy.",
+  ["gu.eddy"]    = "A drone. Press it to play its note. Quick to speak.",
+  ["gu.whorl"]   = "A drone. Press it to play its note. Wide and open.",
+  ["gu.flaw"]    = "A drone. Press it to play its note. Fast swell, short fall.",
+  ["gu.zephyr"]  = "A drone. Press it to play its note. The highest of the twelve.",
+  ["gu.squall"]  = "A drone. Press it to play its note. Very long swell.",
+  ["gu.flurry"]  = "A drone. Press it to play its note. Low and quick.",
+  ["gu.snell"]   = "A drone. Press it to play its note. Cold and thin.",
+  ["gu.bluster"] = "A drone. Press it to play its note. The most forward of them.",
+  ["gu.buffet"]  = "A drone. Press it to play its note. Broad and slow.",
+  ["gu.haar"]    = "A drone. Press it to play its note. The slowest of the twelve.",
 
-  -- the LFOs / L (§2.12) -- one sine each, sitting right above the gusts.
-  ["lfo.flood"]  = "sine LFO -- cable it anywhere and turn up Speed.",
-  ["lfo.ebb"]    = "sine LFO -- cable it anywhere and turn up Speed.",
-  ["lfo.neap"]   = "sine LFO -- cable it anywhere and turn up Speed.",
-  ["lfo.spring"] = "sine LFO -- cable it anywhere and turn up Speed.",
+  -- the LFOs / L (§2.12)
+  ["lfo.flood"]  = "A sine that never stops. Cable it out, then pick what it moves.",
+  ["lfo.ebb"]    = "A sine that never stops. Cable it out, then pick what it moves.",
+  ["lfo.neap"]   = "A sine that never stops. Cable it out, then pick what it moves.",
+  ["lfo.spring"] = "A sine that never stops. Cable it out, then pick what it moves.",
 
   -- the grove / F (§2.6)
-  ["f.cuckoo"]   = "call mode -- two notes back and forth, never quite the same twice.",
-  ["f.nightjar"] = "drone mode -- stays on the root; only the last few cents move.",
-  ["f.curlew"]   = "cascade mode -- a descending run, then a leap back to the top.",
-  ["f.bittern"]  = "octave mode -- register jumps only; ignores the scale.",
+  ["f.cuckoo"]   = "Picks notes. Two notes back and forth, never quite the same.",
+  ["f.nightjar"] = "Picks notes. Sits on the root and only drifts a few cents.",
+  ["f.curlew"]   = "Picks notes. Runs downward, then leaps back to the top.",
+  ["f.bittern"]  = "Picks notes. Octave jumps only. It ignores the scale.",
 }
 
 function lexicon.describe(id)
@@ -105,15 +116,15 @@ end
 
 -- §4.2 "the one thing that matters about that cell" --------------------
 -- a voice has no single one: it has the sound editor instead (§5.5), which
--- is why there is no `voice` row here. GVOICE, TM and GUST are the same way.
+-- is why there is no `voice` row here. GVOICE, TM, GUST, LFO and SMP are the
+-- same way.
 
 local CHARACTER = {
-  D = {label = "rate",  lo = 0, hi = 1, note = "rate / clock relation (gait-dependent)"},
-  R = {label = "rule",  lo = 0, hi = 1, note = "the transform's own amount (rule-dependent)"},
-  E = {label = "Colour", lo = 0, hi = 1, note = "the source's filter/character"},
-  H = {label = "Conductance", lo = 0, hi = 1, note = "hop delay and loss"},
+  D = {label = "Rate",  lo = 0, hi = 1, note = "how often it fires"},
+  R = {label = "Amount", lo = 0, hi = 1, note = "how strongly the rule applies"},
+  E = {label = "Colour", lo = 0, hi = 1, note = "the source's filter and character"},
   F = {label = "Range", lo = 0, hi = 1, note = "how far the field roams"},
-  C = {label = "Ratio", lo = 0, hi = 1, note = "multiple/division of the master clock"},
+  C = {label = "Ratio", lo = 0, hi = 1, note = "multiple or division of the clock"},
 }
 
 function lexicon.character(id)

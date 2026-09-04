@@ -21,18 +21,19 @@ print("\n-- E1 walks the list, clamped at both ends --")
 do
   local M = fresh(1)
   local n = M.gparam.PARAM_COUNT
-  check("seven params", n == 7, "#" .. n)
+  check("ten params", n == 10, "#" .. n)
   check("bpm is first", M.gparam.PARAMS[1].key == "bpm")
-  check("pitch is last", M.gparam.PARAMS[n].key == "pitch")
-  -- the gusts' delay line is deliberately NOT here: it is a level and a
-  -- room, so it went to the mixer page with the other four (mixer.lua).
-  check("and the gusts' delay line is not on this page",
-        (function()
-          for _, p in ipairs(M.gparam.PARAMS) do
-            if p.key:match("^gust") then return false end
-          end
-          return true
-        end)())
+  check("pitch closes the first page", M.gparam.PARAMS[7].key == "pitch")
+  -- the gusts' delay line lives here now. it sat on the mixer while that page
+  -- had a fixed eight-row list to fill; the mixer is one fader per active
+  -- output now (mixer.lua) and a room is not a channel, so it came back to
+  -- where the other patch-wide numbers are.
+  check("and the gusts' delay line closes the second",
+        M.gparam.PARAMS[8].key == "gust_space"
+        and M.gparam.PARAMS[9].key == "gust_delay"
+        and M.gparam.PARAMS[10].key == "gust_regen",
+        M.gparam.PARAMS[8].key .. " " .. M.gparam.PARAMS[9].key
+          .. " " .. M.gparam.PARAMS[10].key)
   check("and no soundscape rows are left here",
         (function()
           for _, p in ipairs(M.gparam.PARAMS) do

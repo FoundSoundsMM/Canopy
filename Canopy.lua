@@ -16,12 +16,13 @@
 -- hold a cell, tap a connected one: unpatch them.
 -- hold two cells together: read/set that edge's gain on E3.
 -- E1/E2/E3 with nothing held: the global param page -- E1 picks one of ten
--- (BPM, Swing, Scatter, Scale, Drops, Decay, Pitch, then the gusts' shared
+-- (BPM, Swing, Rain, Scale, Plonks, Decay, Pitch, then the gusts' shared
 -- delay: Space, Delay, Regen), E2/E3 nudge it coarse/fine. K1+E3: master
 -- level.
--- K3: forward, one page at a time -- main screen -> mixer (faders for the
--- four soundscape loops and the master) -> map (every cell, lit if it's
--- cabled, dim if it isn't) -- and no further: K3 on the map stays on the map,
+-- K3: forward, one page at a time -- main screen -> mixer (the master, plus a
+-- fader for every Output cell something is cabled to -- the list grows and
+-- shrinks with the patch) -> map (every cell, lit if it's cabled, dim if it
+-- isn't) -- and no further: K3 on the map stays on the map,
 -- it does not wrap back to the mixer. from an open cell page it goes to
 -- whichever of those it was opened over, dropping that cell's focus on the
 -- way. holding or tapping a cell open from the map still goes straight to
@@ -39,7 +40,6 @@
 -- Start/Stop, which freeze and unfreeze the gaits exactly as K2's Still
 -- does. see clock.transport below.
 --
--- build phase 5: the heartwood diffusion lattice, discrete and continuous.
 -- build phase 5b: the grove -- wandering pitch fields (now F cells), plus an
 -- always-on per-voice detune drift in SC.
 -- build phase 5c: Weather is the groove knob -- quantise -> swing -> chaos
@@ -59,10 +59,7 @@
 -- an output Compressor are new.
 -- build phase 7, the re-name: the script becomes Canopy. no more reverb (the
 -- old Canopy knob and its FreeVerb are gone entirely) and no more output
--- Compressor. the old Rain macro -- trigger/field wildness -- is renamed
--- Scatter, freeing "Rain" for something literal: an always-on loop of a real
--- rain recording, with its own dry level. Scale is pentatonic-only now,
--- shorthand "Pent".
+-- Compressor. Scale is pentatonic-only now, shorthand "Pent".
 -- the gusts (§2.11): the two step-sequencer lanes that briefly sat on the
 -- bottom two rows are gone, and their ten cells became ten small drone synths
 -- instead (lib/gust.lua) -- a folded triangle core with a slow attack and a
@@ -73,14 +70,25 @@
 -- to fill the top row out to six) share one delay line off the global page.
 -- cable two together and they cross-modulate.
 -- the LFOs (§2.12): four plain sine sources on the row right above the
--- gusts (lib/lfo.lua) -- cable one anywhere and it bends whatever it lands
--- on; its own page has one knob, Speed.
+-- gusts (lib/lfo.lua). cable one to a cell, then use its own page to pick
+-- which of that cell's knobs it moves and how far: Speed, Depth, Target,
+-- Param. left on Param "signal" it is the plain audio-rate cable it always
+-- was, which is what cabling one to an Output cell (a sine tone) wants.
 -- the re-cut's re-cut: six of the bottom weave row's R cells become G cells
 -- (lib/gvoice.lua) -- small, plain drum voices (three pinged resonant
 -- filters, three noise-with-decay) with a six-parameter sound page of their
 -- own, same shape as a voice's. the top weave row is reshuffled to keep the
 -- coolest rules; the six it gave up are still reachable by K1+E2, just no
 -- longer anyone's default cell (docs/canopy-spec.md §2.7/§2.7b).
+-- the interface pass: the heartwood lattice is gone and its four seats are
+-- four sample players instead (§2.5, lib/sample.lua) -- Rain, Cicada, Thunder
+-- and Sea, triggered by a pulse and swelling in under a slow attack and out
+-- under a slow fall. they took the four field recordings the mixer used to
+-- run as an always-on bed, which is why that page is free to be what it
+-- should have been: the master plus one fader per Output cell the patch is
+-- actually using. the gusts are Gust 1-12 and the clocks Clock 1-4, the
+-- screen says "Voice: Oak" rather than "M Oak", a clock cell divides down to
+-- 1/128 of a beat, and Cross on a gust is deep enough to hear.
 
 engine.name = "Canopy"
 
@@ -111,18 +119,18 @@ local voice    = wl("voice")
 local gvoice   = wl("gvoice")
 local gust     = wl("gust")   -- §2.11: the twelve drone cells on the bottom rows
 local lfo      = wl("lfo")    -- §2.12: the four sine LFOs above the gusts
+local sample   = wl("sample") -- §2.5: the four sample cells on the right diagonal
 local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
 local gparam   = wl("gparam")
 local mixer    = wl("mixer")
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
-local heartwood = wl("heartwood")
 local grove     = wl("grove")
 local weave     = wl("weave")   -- Regrow seeds rules through it; also loaded
                                  -- for the listeners each of them registers
 
 local g = nil
-local screen_metro, grid_metro
+local screen_metro, grid_metro, mod_metro
 local keystate = {k1 = false, k2 = false, k3 = false}
 
 local CONFIRM_HOLD = 1.0
@@ -227,7 +235,7 @@ local function do_regrow()
   local rcells  = shuffled(ids_of("R"))
   local ecells  = shuffled(ids_of("E"))
   local fcells  = shuffled(ids_of("F"))
-  local hcells  = shuffled(ids_of("H"))
+  local smcells = shuffled(ids_of("SMP"))
   local ocells  = shuffled(ids_of("O"))
 
   local n_voices = math.min(#voices, 2 + math.random(3))
@@ -345,14 +353,24 @@ local function do_regrow()
     end
   end
 
-  -- into the wood, and out of it somewhere else.
-  if #used_d > 0 and math.random() < 0.4 then
-    local h = take(hcells)
-    if h then
-      patch.add(used_d[math.random(#used_d)], h, gain(0.4, 0.8), false)
-      local h2 = take(hcells)
-      local v = voices[math.random(n_voices)]
-      if h2 and v then patch.add(h2, v, gain(0.2, 0.6), false) end
+  -- §2.5 a soundscape underneath, now and then: one of the four sample cells
+  -- hung off a clock rather than off a trigger, because what these are for is
+  -- a swell that arrives once in a while rather than a part. no Output cable
+  -- is drawn and none is needed -- a sample cell mixes itself, same as a gust.
+  local ccells = shuffled(ids_of("C"))
+  if math.random() < 0.5 then
+    local sm = take(smcells)
+    local c = take(ccells)
+    if sm and c then
+      -- a long attack and a long fall: these want to be weather, not a hit.
+      state.set_vparam(sm, "attack", 0.55 + math.random() * 0.35)
+      state.decay[sm] = 0.55 + math.random() * 0.35
+      state.set_vparam(sm, "level", 0.35 + math.random() * 0.3)
+      sample.push_all(sm)
+      -- near the bottom of the Ratio knob, which is now slow enough to mean
+      -- "once in a while" rather than "every few seconds" (clockcell.lua).
+      state.character[c] = 0.05 + math.random() * 0.2
+      patch.add(c, sm, gain(0.5, 1.0), false)
     end
   end
 
@@ -581,32 +599,43 @@ function init()
   end, 1 / 30, -1)
   grid_metro:start()
 
+  -- §2.12 the LFOs' control-rate half: an LFO aimed at a named knob moves
+  -- that knob from here, on its own metro rather than on the screen's or the
+  -- grid's. its own clock, because it is neither -- the screen can be
+  -- redrawn less often without anything sounding different, and this cannot.
+  -- 40 Hz is fast enough that a two-second swell on a decay time is smooth
+  -- and slow enough that four LFOs cost four OSC messages a frame, which is
+  -- what turning one encoder already costs.
+  mod_metro = metro.init(function() lfo.apply() end, 1 / 40, -1)
+  mod_metro:start()
+
   voice.init()
   gvoice.init()
   gust.init()
   lfo.init()
-  heartwood.init()
   grove.init()
   gparam.init() -- adopts the clock's tempo, pushes the rest (§5.2)
   exciter.start_meters() -- §7.4: per-exciter activity polls
-  bridge.master_level(state.global.level)
-  -- §4.1b the four always-on soundscape loops: the engine loads each async
-  -- and starts its \wl_amb once that buffer is ready, holding the fader in
-  -- the meantime, so pushing all four levels straight afterwards loses
-  -- nothing (lib/mixer.lua).
+  -- §4.1b the mixer: the master and one fader per active output, built from
+  -- the patch (lib/mixer.lua).
+  mixer.init()
+  -- §2.5 the four sample cells. the engine reads each .wav async and holds
+  -- every knob in the meantime, so pushing them straight afterwards loses
+  -- nothing.
   --
   -- norns.state.path, not a hardcoded "Canopy/" under _path.code: the
   -- installed script folder is not guaranteed to be named or cased exactly
-  -- like this repo, and a wrong guess here fails silently -- Buffer.read
-  -- has no error path back to Lua, so a missing loop is indistinguishable
-  -- from its fader being at zero (see Engine_Canopy.sc's amb_load comment).
-  mixer.init(norns.state.path .. "audio/")
+  -- like this repo, and a wrong guess here fails silently -- Buffer.read has
+  -- no error path back to Lua, so a missing sample is indistinguishable from
+  -- its Level being at zero (see Engine_Canopy.sc's smp_load comment).
+  sample.init(norns.state.path .. "audio/")
   rambler.start()
 end
 
 function cleanup()
   if screen_metro then screen_metro:stop() end
   if grid_metro then grid_metro:stop() end
+  if mod_metro then mod_metro:stop() end
   rambler.stop()
   cancel_confirm()
 end

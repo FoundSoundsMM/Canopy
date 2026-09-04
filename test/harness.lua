@@ -72,10 +72,11 @@ local function fresh_calls()
     exciter_on = {}, exciter_off = {}, exciter_colour = {}, exciter_gated = {}, exciter_gate = {},
     patch_add = {}, patch_gain = {}, patch_free = {},
     voice_mod = {}, voice_structure = {},
-    heart_conductance = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
-    amb_load = {}, amb_volume = {},
+    smp_load = {}, smp_note = {}, smp_attack = {}, smp_decay = {},
+    smp_speed = {}, smp_level = {}, smp_pan = {},
+    master_level = {}, out_level = {},
     g_strike = {}, g_pitch = {}, g_decay = {}, g_tone = {}, g_punch = {},
     g_drive = {}, g_amp = {},
     gust_note = {}, gust_pitch = {}, gust_attack = {}, gust_decay = {},
@@ -110,8 +111,6 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.voice_mod, {t = T, voice = a[1], v = a[2]})
     elseif k == "voice_structure" then
       table.insert(CALLS.voice_structure, {t = T, voice = a[1], v = a[2]})
-    elseif k == "heart_conductance" then
-      table.insert(CALLS.heart_conductance, {t = T, index = a[1], v = a[2]})
     elseif k == "voice_pitch" then
       table.insert(CALLS.voice_pitch, {t = T, voice = a[1], hz = a[2]})
     elseif k == "voice_glide" then
@@ -124,10 +123,6 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.exciter_decay, {t = T, index = a[1], scale = a[2]})
     elseif k == "voice_bend" then
       table.insert(CALLS.voice_bend, {t = T, voice = a[1], v = a[2]})
-    elseif k == "amb_load" then
-      table.insert(CALLS.amb_load, {t = T, index = a[1], path = a[2]})
-    elseif k == "amb_volume" then
-      table.insert(CALLS.amb_volume, {t = T, index = a[1], v = a[2]})
     elseif k == "g_strike" then
       table.insert(CALLS.g_strike, {t = T, index = a[1], force = a[2]})
     elseif k == "g_pitch" then
@@ -162,6 +157,24 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.gust_space, {t = T, mix = a[1], time = a[2], fb = a[3]})
     elseif k == "lfo_rate" then
       table.insert(CALLS.lfo_rate, {t = T, index = a[1], hz = a[2]})
+    elseif k == "smp_load" then
+      table.insert(CALLS.smp_load, {t = T, index = a[1], path = a[2]})
+    elseif k == "smp_note" then
+      table.insert(CALLS.smp_note, {t = T, index = a[1], force = a[2]})
+    elseif k == "smp_attack" then
+      table.insert(CALLS.smp_attack, {t = T, index = a[1], secs = a[2]})
+    elseif k == "smp_decay" then
+      table.insert(CALLS.smp_decay, {t = T, index = a[1], secs = a[2]})
+    elseif k == "smp_speed" then
+      table.insert(CALLS.smp_speed, {t = T, index = a[1], v = a[2]})
+    elseif k == "smp_level" then
+      table.insert(CALLS.smp_level, {t = T, index = a[1], v = a[2]})
+    elseif k == "smp_pan" then
+      table.insert(CALLS.smp_pan, {t = T, index = a[1], v = a[2]})
+    elseif k == "master_level" then
+      table.insert(CALLS.master_level, {t = T, v = a[1]})
+    elseif k == "out_level" then
+      table.insert(CALLS.out_level, {t = T, index = a[1], v = a[2]})
     end
   end
 end})
@@ -186,7 +199,7 @@ function fresh(seed)
   _canopy_mods = {}
   local M = {}
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
-                      "lexicon", "heartwood", "grove", "clockcell", "weave",
+                      "lexicon", "sample", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
                       "gparam", "mixer", "tm", "gust", "lfo", "cellparam"}) do
     M[n] = wl(n)

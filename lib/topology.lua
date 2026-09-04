@@ -19,17 +19,17 @@
 --  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
 --  2    .   M   .   M   .   F   F   F   N   N   N   .   M   .   M   .
 --  3    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
---  4    F   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   H
---  5    .   F   .   .   .   C   T   T   T   T   C   .   .   .   H   .
---  6    E   .   F   .   .   .   L   L   L   L   .   .   .   H   .   R
---  7    E   E   .   F   .   G   G   G   G   G   G   .   H   .   R   R
+--  4    F   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   S
+--  5    .   F   .   .   .   C   T   T   T   T   C   .   .   .   S   .
+--  6    E   .   F   .   .   .   L   L   L   L   .   .   .   S   .   R
+--  7    E   E   .   F   .   G   G   G   G   G   G   .   S   .   R   R
 --  8    E   E   E   .   .   G   G   G   G   G   G   .   .   R   R   R
 --
 --   O  output (16)     M  voice (4)        F  grove field / percussion-ping
 --   N  percussion-noise TM Turing Machine  C  clock (4)
---   T  trigger source (8, was D)          H  heartwood (4)
+--   T  trigger source (8, was D)           S  sample player (4)
 --   E  exciter (6, was S)                  R  weave (6)
---   G  gust (12, drone synths)            L  LFO (4, sine modulators)
+--   G  gust (12, drone synths)             L  LFO (4, sine modulators)
 --   .  unregistered, dark and inert
 
 local topology = {}
@@ -149,38 +149,53 @@ local CLOCK_CELLS = {
   {id = "peal",  x = 11, y = 5, counterpart = "toll"},
 }
 
-for _, c in ipairs(CLOCK_CELLS) do
+-- named by number rather than by a folk name each: four cells that do exactly
+-- the same job differing only in their ratio are four of one thing, and
+-- "Clock 3" says which one where "Chime" only says which word. the ids keep
+-- the old names so saved patches still load.
+for i, c in ipairs(CLOCK_CELLS) do
   local id = "clk." .. c.id
-  local name = c.id:sub(1, 1):upper() .. c.id:sub(2)
-  reg("C", id, name, {{c.x, c.y}}, {counterpart = "clk." .. c.counterpart})
+  reg("C", id, "Clock " .. i, {{c.x, c.y}}, {counterpart = "clk." .. c.counterpart})
 end
 
--- 2.5 heartwood -- H (4) -----------------------------------------------------
--- trimmed from a ring of 8 to a simple chain of 4 (fewer cells, "choose the
--- best ones") -- each node still only neighbours the next/previous one, so
--- energy still visibly travels, just along a line rather than a ring.
-
-local H_CELLS = {
-  {id = "taproot", x = 16, y = 4},
-  {id = "mycel",   x = 15, y = 5},
-  {id = "wyrd",    x = 14, y = 6},
-  {id = "ley",     x = 13, y = 7},
+-- 2.5 sample players -- S (4, internally type "SMP") ------------------------
+-- what used to be the heartwood diffusion lattice. that family was four cells
+-- of one shared mechanic nobody could hear the shape of -- a pulse went in,
+-- something came out somewhere else later, and the only knob was a single
+-- "conductance" number standing in for two quantities at once. it is gone.
+--
+-- in its place, four sample players, one per field recording under audio/.
+-- a pulse (or K1+tap) plays that sample under an envelope with a slow attack
+-- and a slow fall the player sets per cell, so the same four soundscapes that
+-- used to sit under the patch as always-on loops are now something the patch
+-- can actually play. like a gust, a sample cell is heard WITHOUT being cabled
+-- to the Output row: it panned by where it sits and mixed in automatically.
+-- see lib/sample.lua.
+--
+-- `file` is a name under audio/ and `index` is the engine's own sample slot
+-- (0-based), which is also the buffer amb_load fills.
+local SMP_CELLS = {
+  {id = "rain",    name = "Rain",    file = "Rain.wav",    x = 16, y = 4, attack = 1.2, decay = 6.0},
+  {id = "cicada",  name = "Cicada",  file = "Cicada.wav",  x = 15, y = 5, attack = 2.0, decay = 8.0},
+  {id = "thunder", name = "Thunder", file = "Thunder.wav", x = 14, y = 6, attack = 0.8, decay = 10.0},
+  {id = "sea",     name = "Sea",     file = "Sea.wav",     x = 13, y = 7, attack = 2.5, decay = 9.0},
 }
 
-for i, h in ipairs(H_CELLS) do
-  reg("H", "h." .. h.id, h.id:sub(1, 1):upper() .. h.id:sub(2), {{h.x, h.y}},
-      {index = i - 1})
+-- pan, like a gust's, comes from the column and nothing else -- these four
+-- sit on a diagonal from the right edge inward, so they spread from hard
+-- right toward the middle rather than piling up in one place.
+for i, sm in ipairs(SMP_CELLS) do
+  reg("SMP", "smp." .. sm.id, sm.name, {{sm.x, sm.y}}, {
+    letter = "S",
+    index = i - 1,
+    file = sm.file,
+    attack = sm.attack,
+    decay = sm.decay,
+    pan = 0.8 - (i - 1) * 0.45,
+  })
 end
 
-for i, h in ipairs(H_CELLS) do
-  local id = "h." .. h.id
-  local nxt = H_CELLS[i + 1] and ("h." .. H_CELLS[i + 1].id) or nil
-  local prv = H_CELLS[i - 1] and ("h." .. H_CELLS[i - 1].id) or nil
-  local nbrs = {}
-  if nxt then table.insert(nbrs, nxt) end
-  if prv then table.insert(nbrs, prv) end
-  topology.cells[id].neighbors = nbrs
-end
+topology.SAMPLES = SMP_CELLS
 
 -- 2.6 the grove -- F (4) -----------------------------------------------------
 -- the pitch fields, mechanic unchanged (mode keys match grove.lua). trimmed
@@ -325,9 +340,16 @@ local GUST_CELLS = {
   {id = "haar",    x = 11, y = 8, root = 220.00, attack = 1.60, decay = 6.5},
 }
 
+-- numbered rather than named, for the same reason the clocks are: twelve
+-- cells of one mechanic that differ only in seat and envelope are twelve of
+-- one thing, and reading "Gust 7" off the panel tells you which of the twelve
+-- you are holding where "Skriker"-style folk names never did. the ids keep
+-- their old spellings so saved patches still load. they are numbered in
+-- registration order, which is the top row left-to-right (1-6) and then the
+-- bottom row left-to-right (7-12).
 for i, gu in ipairs(GUST_CELLS) do
   local id = "gu." .. gu.id
-  local name = gu.id:sub(1, 1):upper() .. gu.id:sub(2)
+  local name = "Gust " .. i
   local span = (gu.x - GUST_X_MIN) / (GUST_X_MAX - GUST_X_MIN)
   reg("GUST", id, name, {{gu.x, gu.y}}, {
     letter = "G",
@@ -358,6 +380,55 @@ for i, l in ipairs(LFO_CELLS) do
   local id = "lfo." .. l.id
   local name = l.id:sub(1, 1):upper() .. l.id:sub(2)
   reg("LFO", id, name, {{l.x, l.y}}, {index = i - 1})
+end
+
+-- what kind of thing this is, in a word ---------------------------------
+-- the screen used to print a cell's one-letter panel code in front of its
+-- name -- "M Oak", "T Hob", "R Tangle". the letter is the panel's own
+-- shorthand and it is silk-screened nowhere: on a monome there is no legend
+-- to look it up in, so it was a code you had to have memorised to read the
+-- header at all. these are the same information as a word.
+--
+-- kept short on purpose. the header shares one 128px line with the transport,
+-- the page dots and the tempo, so "Trigger Processor" would push the name
+-- itself off the end -- these are the longest forms that still leave room for
+-- the name beside them.
+local FAMILY = {
+  voice  = "Voice",
+  D      = "Trigger",
+  R      = "Process",   -- a trigger processor: the weave's rules
+  TM     = "Register",
+  C      = "Clock",
+  E      = "Exciter",
+  F      = "Field",
+  SMP    = "Sample",
+  GUST   = "Gust",
+  LFO    = "LFO",
+  O      = "Output",
+}
+
+-- the percussion cells are two families sharing one mechanic, and the panel
+-- already draws them as two ("F" and "N"); say which out loud rather than
+-- calling both of them one word.
+local GVOICE_FAMILY = {ping = "Drum", noise = "Noise"}
+
+function topology.family(cell)
+  if not cell then return "" end
+  if cell.type == "GVOICE" then
+    return GVOICE_FAMILY[cell.kind] or "Drum"
+  end
+  return FAMILY[cell.type] or cell.type
+end
+
+-- "Voice: Oak", "Trigger: Hob", "Exciter: Ember" -- what a cell is, then
+-- which one. a cell already named for its family ("Gust 7", "Clock 2") is
+-- left alone: prefixing it would only read "Gust: Gust 7".
+function topology.label(id_or_cell)
+  local cell = type(id_or_cell) == "string" and topology.get(id_or_cell) or id_or_cell
+  if not cell then return "" end
+  local fam = topology.family(cell)
+  if fam == "" or cell.name:sub(1, #fam) == fam then return cell.name end
+  return fam .. ": " .. cell.name
 end
 
 -- lookups -------------------------------------------------------------

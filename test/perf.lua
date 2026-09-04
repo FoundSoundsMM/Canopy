@@ -1,9 +1,10 @@
 arg = {os.getenv("ROOT")}
 dofile(os.getenv("SP") .. "/harness.lua")
--- the re-cut's population: 16 O + 4 voice + 8 D + 4 TM + 4 C(clock) + 4 H +
--- 4 F(grove) + 6 R + 6 GVOICE + 6 E + 10 GUST = 72 live cells (Climate, and
--- its 8 cells, are gone entirely; the ten cells that were the Q4/Q6 step
--- lanes are the gusts now, §2.11).
+-- the population: 16 O + 4 voice + 8 D + 4 TM + 4 C(clock) + 4 SMP +
+-- 4 F(grove) + 6 R + 6 GVOICE + 6 E + 12 GUST + 4 LFO = 78 live cells
+-- (Climate and its 8 cells are gone entirely; the ten cells that were the
+-- Q4/Q6 step lanes are the gusts now, §2.11; and the heartwood lattice's four
+-- seats are the sample cells, §2.5).
 local function bench(label, setup, scatter)
   local M = fresh(2)
   if scatter then M.state.global.scatter = scatter end
@@ -23,23 +24,28 @@ bench("modest patch (6 cables)", function(M)
   M.patch.add("d.gabriel", "hazel", 0.6)
   M.patch.add("d.shuck", "alder", 0.9)
 end)
--- the lattice is the one thing that adds work to the tick without a D cell
--- doing anything, so it gets its own row. Heartwood trimmed from a ring of 8
--- to a chain of 4 -- still every node cabled, fed continuously, at full
--- conductance.
-bench("heartwood, full conductance", function(M)
-  local hs = {}
-  for id, c in M.topology.each() do
-    if c.type == "H" then
-      table.insert(hs, id)
-      M.state.character[id] = 1.0
-    end
+-- the four LFOs, each aimed at a knob rather than at a bus: this is the one
+-- family that does real Lua work per frame (lfo.apply reads, sets, pushes and
+-- restores one parameter per cell), and it is worth knowing what four of them
+-- pointed at four different pages costs. driven here at the tick rather than
+-- at Canopy.lua's 40 Hz metro, so this is a deliberate overestimate.
+bench("LFOs, all four modulating a knob", function(M)
+  local pairs_ = {
+    {"lfo.flood", "gu.gale", "timbre"},
+    {"lfo.ebb", "oak", "damp"},
+    {"lfo.neap", "e.bracken", "character"},
+    {"lfo.spring", "gv.yaffle", "tone"},
+  }
+  for _, p in ipairs(pairs_) do
+    M.patch.add(p[1], p[2], 0.8)
+    M.lfo.set_target(p[1], p[2])
+    M.lfo.set_param_key(p[1], p[3])
+    M.state.set_vparam(p[1], "rate", 0.4)
   end
-  M.patch.add("d.gabriel", hs[1], 1.0)
-  M.patch.add("d.hunt", hs[3], 1.0)
-  M.patch.add(hs[2], "oak", 0.8)
-  M.patch.add(hs[4], "rowan", 0.8)
-  M.patch.add(hs[1], hs[4], 0.6) -- a shortcut across the chain
+  -- the scheduler tick is the only clock this harness runs, so hang the
+  -- modulation off it.
+  local base = M.rambler.tick
+  M.rambler.tick = function(...) M.lfo.apply(); return base(...) end
 end)
 
 -- the grove's continuous half is the other thing that costs something with

@@ -39,16 +39,16 @@ do
     "OOOOOOOOOOOOOOOO",
     ".M.M.FFFNNN.M.M.",
     "................",
-    "F..ttCTTTTCtt..H",
-    ".F...CTTTTC...H.",
-    "E.F...LLLL...H.R",
-    "EE.F.GGGGGG.H.RR",
+    "F..ttCTTTTCtt..S",
+    ".F...CTTTTC...S.",
+    "E.F...LLLL...S.R",
+    "EE.F.GGGGGG.S.RR",
     "EEE..GGGGGG..RRR",
   }
   -- the letter each type prints on the map above. lower case only to keep the
   -- two-character family (TM) to one column each.
   local LETTER = {O = "O", voice = "M", GVOICE = nil, D = "T", TM = "t",
-                  C = "C", H = "H", E = "E", R = "R", F = "F", GUST = "G",
+                  C = "C", SMP = "S", E = "E", R = "R", F = "F", GUST = "G",
                   LFO = "L"}
   local rows_ok = true
   local first_bad = nil
@@ -345,8 +345,8 @@ do
 
   -- everything else is unaffected: a source may still fan out anywhere else
   M.patch.add("oak", "o.5", 0.6)
-  M.patch.add("oak", "h.taproot", 0.6)
   M.patch.add("oak", "e.bracken", 0.6)
+  M.patch.add("oak", "e.gorse", 0.6)
   check("a source can still reach as many non-Output cells as it likes",
         M.patch.degree("oak") == 3, tostring(M.patch.degree("oak")))
   M.patch.add("oak", "o.9", 0.6)

@@ -16,8 +16,9 @@ state.cell_edit = nil
 state.vparam_focus = 1
 
 -- §5.2b which of the two full-screen pages the encoders and the screen are
--- on when no cell page is open: "global" (the seven macros) or "mixer" (the
--- four soundscape loops, lib/mixer.lua). K3 goes to the mixer from anywhere,
+-- on when no cell page is open: "global" (the ten patch-wide macros) or
+-- "mixer" (the master and one fader per active output, lib/mixer.lua). K3
+-- goes to the mixer from anywhere,
 -- K2 comes back -- and K3 from an open cell page goes to the mixer *and*
 -- drops the cell's focus, so there is never a page hiding behind the mixer.
 state.view = "global"
@@ -32,9 +33,10 @@ state.gparam_focus = 1
 -- knob (low half swing, high half chaos/wildness); gparam.lua now exposes
 -- them as independent params, so quantise.lua and every rhythm/field
 -- "wildness" read in rambler.lua/grove.lua that used to share the one
--- weather value now reads `scatter` directly. (`scatter` was called `rain`
--- until the Rain.wav ambience -- now one of the mixer's four loops, see
--- lib/mixer.lua -- took that name for something literal.)
+-- weather value now reads `scatter` directly. the global page calls it Rain
+-- on screen (gparam.lua); the key stays `scatter` because five other files
+-- read it and a rename of the word on the panel is not a rename of the
+-- mechanism.
 state.global = {
   swing = 0.8,       -- quantise.lua's swing() -- preserves the old default feel
   scatter = 0,       -- quantise.lua's chaos(), plus rhythm/field wildness
@@ -49,12 +51,12 @@ state.global = {
   -- "the transport says stopped" alongside "the gaits are frozen" is two
   -- things that can disagree, and the whole point is that they cannot.
   still = false,     -- K2, or an external transport Stop: freeze all gaits
-  -- §4.1b the mixer's faders, keyed by mixer.LOOPS' `key`. the single
-  -- `rain_volume` these replaced lived here too (as did `rain_excite`,
-  -- which has no successor -- the loops are a dry mix only now).
-  -- lib/mixer.lua owns the defaulting, so this starts empty rather than
-  -- naming four loops this file has no other business knowing about.
-  amb_level = {},    -- loop key -> dry level in the mix. all off by default.
+  -- §4.1b the mixer's per-output faders, keyed by Output cell id. the mixer
+  -- page grows a fader for each Out cell something is actually cabled to
+  -- (lib/mixer.lua), and this is where those numbers live so a PSET picks
+  -- them up with everything else. it owns the defaulting, so this starts
+  -- empty rather than naming sixteen cells up front.
+  out_level = {},    -- Out cell id -> that output's level. 1.0 by default.
   -- §2.11 the gusts' one shared delay line -- mix / time / feedback. same
   -- arrangement: lib/gust.lua owns the defaults and the ranges, this only
   -- holds the numbers so a PSET picks them up with everything else.
@@ -75,7 +77,16 @@ state.rooted = {}      -- D id -> locked to the norns clock? (the Clock row)
 state.rule = {}        -- R id -> weave rule key (the Rule row)
 state.mode = {}        -- F id -> pitch-field mode key (the Mode row)
 state.snap = {}        -- F id -> quantised to the scale? (the Snap row)
-state.vparam = {}      -- voice/GVOICE/TM/GUST id -> {key -> 0..1}
+state.vparam = {}      -- voice/GVOICE/TM/GUST/LFO/SMP id -> {key -> 0..1}
+
+-- §2.12 an LFO's destination: which of the cells it is cabled to it moves a
+-- knob on, and which knob (lib/lfo.lua's Target and Param rows). stored by
+-- id and by key rather than by list position, so adding a cable somewhere
+-- else does not silently re-aim an LFO that was already pointed at
+-- something. `lfo_param` holds lfo.SIGNAL, or nothing at all, for an LFO
+-- left as a plain audio-rate cable.
+state.lfo_target = {}  -- LFO id -> destination cell id
+state.lfo_param = {}   -- LFO id -> that cell's param key, or "signal"
 
 -- 0.5 is "whatever this sound's own default is"; the knob is symmetrical
 -- around it in both directions. voice.lua and exciter.lua own the mapping
@@ -88,13 +99,14 @@ end
 -- which cell's decay a gesture on this one moves, or nil if it moves none.
 -- the voice socket collapse means a voice's own point already carries its
 -- decay directly -- there is no separate socket to forward through any more.
--- D, R, H, F and C cells have no sound to decay -- they make pulses, bend
--- them, diffuse energy, choose pitches and track the clock -- and their
+-- D, R, F and C cells have no sound to decay -- they make pulses, bend
+-- them, choose pitches and track the clock -- and their
 -- E3-with-nothing-focused is deliberately inert rather than quietly storing
 -- a number nothing reads. a GVOICE cell is a sound of its own, same as a
--- voice or an E cell -- and so is a GUST cell, whose Decay row is the fall
--- half of its envelope (§2.11).
-local DECAY_TYPES = {voice = true, GVOICE = true, E = true, GUST = true}
+-- voice or an E cell -- and so are a GUST cell and a SMP cell, whose Decay
+-- rows are the fall half of their envelopes (§2.11, §2.5).
+local DECAY_TYPES = {voice = true, GVOICE = true, E = true, GUST = true,
+                     SMP = true}
 
 function state.decay_target(cell)
   if not cell or not DECAY_TYPES[cell.type] then return nil end
@@ -219,8 +231,8 @@ state.confirm = nil -- {label=, started=, duration=} or nil
 
 -- §5.1 "signal magnitude through it" -- a decaying flash for any cell whose
 -- pulse arrival is Lua-known (a socket strike/choke, a D->S grain firing),
--- the same flash-on-pulse-then-decay shape rambler.lua, weave.lua and
--- heartwood.lua each already keep for their own cells, just without a
+-- the same flash-on-pulse-then-decay shape rambler.lua and weave.lua each
+-- already keep for their own cells, just without a
 -- dedicated per-cell object to hang it on. continuous audio-rate response --
 -- a socket under a steady stream, S's own shimmer, a voice's amplitude
 -- envelope -- still needs the metering back-channel (§7.4) and isn't lit by

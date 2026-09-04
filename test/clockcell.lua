@@ -18,14 +18,12 @@ dofile(SP .. "/harness.lua")
 local TOLL, KNELL, CHIME, PEAL = "clk.toll", "clk.knell", "clk.chime", "clk.peal"
 
 local function ratio_char(target)
-  -- clockcell.ratio(id) maps state.character (0..1) onto RATIOS by
-  -- floor(char * 8 + 0.5); pick a char comfortably inside the band for each
-  -- ratio's index so float rounding never lands on a neighbour by accident.
-  local RATIOS = {0.125, 0.25, 1/3, 0.5, 1, 2, 3, 4, 8}
-  for i, r in ipairs(RATIOS) do
-    if math.abs(r - target) < 1e-9 then return (i - 1) / 8 end
-  end
-  error("no such ratio: " .. tostring(target))
+  -- clockcell owns the ratio list and the mapping onto it (the knob is split
+  -- at its centre so 1x sits on the middle detent, see clockcell.index_for),
+  -- so ask it rather than keeping a second copy of both here.
+  local c = wl("clockcell").char_for_ratio(target)
+  if c == nil then error("no such ratio: " .. tostring(target)) end
+  return c
 end
 
 print("\n-- four Clock cells, registered right --")

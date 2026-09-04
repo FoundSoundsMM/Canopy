@@ -34,7 +34,6 @@ local topology  = wl("topology")
 local patch     = wl("patch")
 local state     = wl("state")
 local dispatch  = wl("dispatch")
-local heartwood = wl("heartwood")
 local grove     = wl("grove")
 local quantise  = wl("quantise")
 local weave     = wl("weave")
@@ -383,10 +382,10 @@ function rambler.schedule(r, delay, w)
   rambler.push(util.time() + delay, r, w, false)
 end
 
--- a pulse arriving at a pulse cell from outside its own family -- one
--- emerging from the heartwood lattice, say. deferred by a tick and delivered
--- through the same inbox as cell-to-cell traffic, so a D->H->D loop is
--- bounded by construction in exactly the way a D->D one is.
+-- a pulse arriving at a pulse cell from outside its own family. deferred by
+-- a tick and delivered through the same inbox as cell-to-cell traffic, so a
+-- loop that leaves the family and comes back is bounded by construction in
+-- exactly the way a D->D one is.
 function rambler.inject(id, w, src, sign)
   local cell = topology.get(id)
   if not cell or not PULSE_CELL[cell.type] then return end
@@ -403,8 +402,8 @@ end
 -- cell cabled back round to its own trigger has to cost a tick per lap like
 -- everything else does. `except` is the cable the triggering pulse arrived
 -- on, if any -- a G cell needs it so it does not send its answer straight
--- back down its own input (the same rule weave.out and heartwood.inject
--- apply); a voice's O socket has no such cable, so it is simply omitted.
+-- back down its own input (the same rule weave.out applies); a voice's O
+-- socket has no such cable, so it is simply omitted.
 function rambler.post_source(id, w, except)
   if #sources >= MAX_SCHEDULED then return end
   table.insert(sources, {id = id, w = util.clamp(w or 1, 0, 1), except = except})
@@ -418,8 +417,7 @@ end
 -- `except` drops one cable from the fan-out: the one an arriving pulse came in
 -- on. cables are undirected, so without it a transform would send its output
 -- straight back down its own input, which is not coupling, it is a duplicate.
--- heartwood.lua excludes its `src` for exactly the same reason. a D cell
--- passes no `except` -- a pulse-maker answering its neighbour *is* the
+-- a D cell passes no `except` -- a pulse-maker answering its neighbour *is* the
 -- coupling, and §2.3 wants it.
 function rambler.emit_from(id, weight, only, except)
   if emits_this_tick >= MAX_EMITS_PER_TICK then return 0 end
@@ -614,15 +612,10 @@ function rambler.tick()
   -- traffic freeze with them rather than flushing on resume.
   if state.global.still then return end
 
-  -- 0. the heartwood's in-flight pulses (§2.5). first, so a signal emerging
-  --    from the lattice this tick reaches the inbox in time to be delivered
-  --    in step 3 rather than sitting a whole extra tick.
-  heartwood.tick(now)
-
-  -- 0b. the continuous half of the pitch fields (§2.6), and the weather that
-  --     is slowly moving everybody's knobs (§2.8). both decimate themselves;
-  --     both sit inside the Still check for the same reason the lattice does,
-  --     so a frozen patch is frozen in pitch and in weather too.
+  -- 0. the continuous half of the pitch fields (§2.6), and the weather that
+  --    is slowly moving everybody's knobs (§2.8). both decimate themselves;
+  --    both sit inside the Still check, so a frozen patch is frozen in pitch
+  --    and in weather too.
   grove.tick(now)
   clockcell.tick(now)
 
@@ -788,7 +781,6 @@ function rambler.resync()
   -- and the three other files that keep a queue or a beat position of their
   -- own behind this same tick, for exactly the same reason.
   weave.resync()
-  heartwood.resync()
   clockcell.resync()
 end
 

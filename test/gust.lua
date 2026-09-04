@@ -292,22 +292,28 @@ do
   M.gust.set_space("space", -3)
   check("mix cannot go negative", M.gust.get_space("space") == 0)
 
-  -- and the mixer page drives all three: they sit there rather than on the
-  -- global page, alongside the four soundscape faders and the master, which
-  -- is also what keeps that page to exactly one screen.
+  -- and the global page drives all three. they used to sit on the mixer,
+  -- back when that page had a fixed eight-row list to fill; the mixer is
+  -- built from the patch now (one fader per active output) and a room is not
+  -- a channel, so these three moved to where the rest of the patch-wide
+  -- numbers already were.
   local before = #CALLS.gust_space
   local rows = 0
-  for i = 1, M.mixer.PARAM_COUNT do
-    if M.mixer.param(i).key:match("^gust_") then
+  for i = 1, M.gparam.PARAM_COUNT do
+    if M.gparam.param(i).key:match("^gust_") then
       rows = rows + 1
-      M.mixer.nudge(i, 1, true)
+      M.gparam.nudge(i, 1, true)
     end
   end
-  check("the mixer page carries all three rows", rows == 3, tostring(rows))
+  check("the global page carries all three rows", rows == 3, tostring(rows))
   check("and each pushes the line", #CALLS.gust_space - before == 3,
         tostring(#CALLS.gust_space - before))
-  check("the mixer page still fits on one screen",
-        M.mixer.PARAM_COUNT == 8, tostring(M.mixer.PARAM_COUNT))
+  check("and none of them is on the mixer", (function()
+    for i = 1, M.mixer.PARAM_COUNT do
+      if M.mixer.param(i).key:match("^gust_") then return false end
+    end
+    return true
+  end)(), "a gust_ row is still on the mixer")
 
   -- the delay row's coarse step is in seconds, so nudging it up from the
   -- default must not blow past the cap or land somewhere unreadable.

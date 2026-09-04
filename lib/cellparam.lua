@@ -3,7 +3,7 @@
 --
 -- voice/GVOICE/TM cells each kept their own PARAMS list (voice.lua,
 -- gvoice.lua, tm.lua) because each is a real instrument with its own units.
--- everything else on the panel -- T, R, F, E, H, C, Out -- used to
+-- everything else on the panel -- T, R, F, E, C, Out -- used to
 -- have its settings scattered across gestures instead: E2 for "the one knob",
 -- K1+E2 to cycle a bank, K1+tap to flip a boolean, E3-with-nothing-focused
 -- for decay. that meant the same physical gesture did a different thing (or
@@ -247,54 +247,6 @@ PAGES.E = {
   end),
 }
 
--- H cells: one knob standing for two quantities (§2.5), so the rows under it
--- read both back plus what is actually still moving around the lattice.
-PAGES.H = {
-  character_row("Conduct", function(id)
-    local info = wl("heartwood").info(id)
-    return info and string.format("%.2f", info.conductance) or "-"
-  end, "lattice"),
-  {
-    key = "hop", label = "Hop", glyph = "spike",
-    get = function(id)
-      local info = wl("heartwood").info(id)
-      return info and util.clamp(1 - info.hop / 0.4, 0, 1) or 0
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("heartwood").info(id)
-      return info and string.format("%.0f ms", info.hop * 1000) or "-"
-    end,
-    push = function() end,
-  },
-  {
-    key = "loss", label = "Loss", glyph = "ramp",
-    get = function(id)
-      local info = wl("heartwood").info(id)
-      return info and util.clamp(1 - info.loss, 0, 1) or 0
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("heartwood").info(id)
-      return info and string.format("%.2f", 1 - info.loss) or "-"
-    end,
-    push = function() end,
-  },
-  {
-    key = "charge", label = "Charge", glyph = "rampup",
-    get = function(id)
-      local info = wl("heartwood").info(id)
-      return info and util.clamp(info.charge, 0, 1) or 0
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("heartwood").info(id)
-      return info and string.format("%.2f", info.charge) or "-"
-    end,
-    push = function() end,
-  },
-}
-
 -- C cells: a pure flasher, so its whole page is the one ratio.
 PAGES.C = {
   character_row("Ratio", function(id)
@@ -371,7 +323,7 @@ local function build(kind)
   return page
 end
 
--- the one entry point. voice/GVOICE/TM/GUST keep their own modules;
+-- the one entry point. voice/GVOICE/TM/GUST/LFO/SMP keep their own modules;
 -- everything else lands here. returns nil only for a type with nothing at
 -- all to show, which no registered type currently is.
 function cellparam.page(id)
@@ -381,6 +333,7 @@ function cellparam.page(id)
   if cell.type == "GVOICE" then return wl("gvoice") end
   if cell.type == "GUST" then return wl("gust") end
   if cell.type == "LFO" then return wl("lfo") end
+  if cell.type == "SMP" then return wl("sample") end
   if cell.type == "TM" then return wl("tm") end
   local p = pages[cell.type]
   if p == nil then

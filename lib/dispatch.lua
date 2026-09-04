@@ -6,9 +6,9 @@
 -- `on_pulse` -- event-driven, fires when a pulse-carrying cell speaks. it
 -- covers everything a pulse can land on: a voice (always a strike -- the
 -- socket collapse dropped the discrete choke gesture, see below), a GVOICE
--- cell (strike, same as a voice), a GUST cell (play its note, §2.11), an E
--- cell (fire a grain) and an H cell (into the lattice). pulse-cell to
--- pulse-cell traffic (D/R/TM) never comes here -- that is rambler's inbox,
+-- cell (strike, same as a voice), a GUST cell (play its note, §2.11), a
+-- Sample cell (play its recording, §2.5) and an E cell (fire a grain).
+-- pulse-cell to pulse-cell traffic (D/R/TM) never comes here -- that is rambler's inbox,
 -- because it is coupling rather than delivery. a CLOCK cell never receives
 -- one either: it is a pure source, the same shape climate used to be.
 -- neither does an O cell -- it is a source's destination, not something with
@@ -21,9 +21,9 @@
 --
 -- the voice socket collapse: four sockets (T/P/M/O) become one cable
 -- endpoint per voice, and what a cable does is decided entirely by what's at
--- the other end -- a pulse always strikes; a stream (E or H) always feeds the
--- mod path; a field or TM cabled in tunes it (unchanged, handled in
--- grove.lua/tm.lua, never through here); and cabling to an Output row cell
+-- the other end -- a pulse always strikes; a stream (an exciter, a gust, an
+-- LFO on "signal") always feeds the mod path; a field or TM cabled in tunes
+-- it (unchanged, handled in grove.lua/tm.lua, never through here); and cabling to an Output row cell
 -- is the only way a voice's own audio is ever heard. discrete choke is gone
 -- -- there is no socket left to carry the distinction -- but the voice
 -- answers into whatever it's cabled to the instant it's struck, same as
@@ -35,7 +35,6 @@ local topology  = wl("topology")
 local state     = wl("state")
 local bridge    = wl("bridge")
 local patch     = wl("patch")
-local heartwood = wl("heartwood")
 local grove     = wl("grove")
 
 local dispatch = {}
@@ -100,11 +99,10 @@ end
 -- every pulse strikes a voice, whatever the source type -- strike_voice
 -- never reads it. keyed as a single "voice" entry, not one alias per source
 -- type: an explicit list is one omission away from a source type silently
--- doing nothing when it lands on a voice, which is exactly what happened
--- here for H before this was simplified (heartwood.inject calls
--- dispatch.on_pulse directly for a non-pulse target, same as any other
--- source, and there is no reason a voice should treat that arrival any
--- differently from a T cell's).
+-- doing nothing when it lands on a voice, which is exactly what happened to
+-- the old heartwood family before this was simplified. every source calls
+-- dispatch.on_pulse the same way, and there is no reason a voice should
+-- treat one arrival differently from another.
 HANDLERS["voice"] = function(source_id, target_id, edge, weight)
   strike_voice(target_id, edge, weight)
 end
@@ -168,11 +166,14 @@ HANDLERS["F"] = function(source_id, target_id, edge, weight)
   grove.step(target_id, w, source_id)
 end
 
--- -> H: "pulse enters the lattice and diffuses" (§2.5, unchanged).
--- heartwood.lua walks it from there.
-HANDLERS["H"] = function(source_id, target_id, edge, weight)
-  local w = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
-  heartwood.inject(target_id, w, source_id)
+-- -> a Sample cell: §2.5, play its recording from the top under that cell's
+-- own slow attack and fall. it does not answer with a pulse of its own the
+-- way a drum or a gust does -- a fifteen-second swell is not an event
+-- anything downstream could sensibly be timed against, and a family with no
+-- answering pulse cannot become half of a feedback loop either.
+HANDLERS["SMP"] = function(source_id, target_id, edge, weight)
+  local force = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
+  wl("sample").play(target_id, wobble(force, 0.04, 0, 1))
 end
 
 -- -> a clock cell: nothing. it is a pure source -- the same "an earlier
@@ -220,16 +221,6 @@ local function e_to_voice_spec(e, voice, gain)
   }
 end
 
--- H -> a voice: "lattice returns to it" (§6, unconditional now).
-local function h_to_voice_spec(h, voice, gain)
-  return {
-    kind = "aa",
-    src = bridge.bus("heart_out", h.index),
-    dst = bridge.bus("mod_in", voice.index - 1),
-    gain = gain,
-  }
-end
-
 -- a voice <-> an E cell carries two different meanings at once, one per
 -- direction -- not the same transformation mirrored both ways the way
 -- voice<->voice or H<->H are, so each half gets its own one-way gate. a
@@ -246,59 +237,6 @@ local function voice_to_e_specs(voice, e, edge, out)
   if (not edge.oneway) or edge.a == e.id then
     table.insert(out, e_to_voice_spec(e, voice, edge.gain))
   end
-end
-
--- a voice <-> an H node, same shape as voice_to_e_specs above: the voice
--- pouring into the wood and the lattice returning into the voice are two
--- different specs, gated independently by which side a one-way cable starts
--- from.
-local function voice_to_h_specs(voice, h, edge, out)
-  if (not edge.oneway) or edge.a == voice.id then
-    table.insert(out, {
-      kind = "aa", src = bridge.bus("voice_out", voice.index - 1),
-      dst = bridge.bus("heart_in", h.index), gain = edge.gain,
-    })
-  end
-  if (not edge.oneway) or edge.a == h.id then
-    table.insert(out, h_to_voice_spec(h, voice, edge.gain))
-  end
-end
-
--- an H<->H cable is a second path between two points that already sit in one
--- lattice, so its gain rides on top of the ring's own. held well under unity:
--- heart_out -> heart_in closes a loop *outside* \wl_heartwood's own
--- normalisation, and the lattice is already tuned to sit just short of
--- self-oscillation at full conductance.
-local SHORTCUT_GAIN = 0.7
-
-local function h_to_h_specs(a, b, edge, out)
-  local function link(from, to)
-    table.insert(out, {
-      kind = "aa",
-      src = bridge.bus("heart_out", from.index),
-      dst = bridge.bus("heart_in", to.index),
-      gain = edge.gain * SHORTCUT_GAIN,
-    })
-  end
-  link(a, b)
-  -- a one-way shortcut is a genuinely different object from a two-way one.
-  if not edge.oneway then link(b, a) end
-end
-
--- E <-> H: "stream diffuses through the lattice" (§6, unchanged, renamed).
-local function e_to_h_specs(e, h, edge, out)
-  table.insert(out, {
-    kind = "aa",
-    src = bridge.bus("exc", e.index),
-    dst = bridge.bus("heart_in", h.index),
-    gain = edge.gain,
-  })
-  table.insert(out, {
-    kind = "ak",
-    src = bridge.bus("heart_out", h.index),
-    dst = bridge.bus("colour_mod", e.index),
-    gain = edge.gain,
-  })
 end
 
 -- a voice <-> a voice: fully symmetric now that each side is one point.
@@ -357,20 +295,6 @@ local function gust_to_voice_specs(gu, v, edge, out)
   end
 end
 
--- a gust <-> an H node, same shape again: the gust pouring into the wood and
--- the lattice coming back into its core.
-local function gust_to_h_specs(gu, h, edge, out)
-  if (not edge.oneway) or edge.a == gu.id then
-    table.insert(out, {
-      kind = "aa", src = bridge.bus("gust_out", gu.index - 1),
-      dst = bridge.bus("heart_in", h.index), gain = edge.gain,
-    })
-  end
-  if (not edge.oneway) or edge.a == h.id then
-    table.insert(out, to_gust_mod_spec(bridge.bus("heart_out", h.index), gu, edge.gain))
-  end
-end
-
 -- a gust <-> an E cell: the exciter's texture into the gust's core, and the
 -- gust's own tone riding the exciter's colour. same two-halves-one-cable
 -- shape voice<->E has, and for the same reason.
@@ -386,9 +310,9 @@ local function gust_to_e_specs(gu, e, edge, out)
   end
 end
 
--- §2.12 an LFO -> a voice: unconditional, one-directional, same shape as
--- e_to_voice_spec/h_to_voice_spec -- an LFO has no mod input of its own for
--- the voice's audio to land back on.
+-- §2.12 an LFO -> a voice, with Param on "signal": unconditional and
+-- one-directional, the same shape e_to_voice_spec has -- an LFO has no mod
+-- input of its own for the voice's audio to land back on.
 local function lfo_to_voice_spec(l, voice, gain)
   return {
     kind = "aa",
@@ -406,17 +330,6 @@ local function lfo_to_e_spec(l, e, gain)
     kind = "ak",
     src = bridge.bus("lfo_out", l.index),
     dst = bridge.bus("colour_mod", e.index),
-    gain = gain,
-  }
-end
-
--- an LFO -> the heartwood: pours straight into the lattice, same as a D/E
--- pulse-maker's own injection.
-local function lfo_to_h_spec(l, h, gain)
-  return {
-    kind = "aa",
-    src = bridge.bus("lfo_out", l.index),
-    dst = bridge.bus("heart_in", h.index),
     gain = gain,
   }
 end
@@ -500,33 +413,15 @@ local function specs_for(edge)
     return out
   end
 
-  x, y = ordered("GUST", "H")
-  if x then
-    gust_to_h_specs(x, y, edge, out)
-    return out
-  end
-
   x, y = ordered("E", "O")
   if x then
     table.insert(out, to_output_spec(bridge.bus("exc", x.index), y, edge.gain))
     return out
   end
 
-  x, y = ordered("H", "O")
-  if x then
-    table.insert(out, to_output_spec(bridge.bus("heart_out", x.index), y, edge.gain))
-    return out
-  end
-
   x, y = ordered("voice", "E")
   if x then
     voice_to_e_specs(x, y, edge, out)
-    return out
-  end
-
-  x, y = ordered("voice", "H")
-  if x then
-    voice_to_h_specs(x, y, edge, out)
     return out
   end
 
@@ -543,22 +438,16 @@ local function specs_for(edge)
     return out
   end
 
-  x, y = ordered("E", "H")
-  if x then
-    e_to_h_specs(x, y, edge, out)
-    return out
-  end
+  -- §2.12 the LFOs. an LFO pointed at a named knob on the cell at the other
+  -- end (lfo.lua's Target/Param rows) is not an audio cable at all -- Lua
+  -- moves that knob directly, a few dozen times a second -- so there is
+  -- nothing here to build, and building it anyway would make the same cable
+  -- heard twice. asked once, before any of the pairs below.
+  if a.type == "LFO" and wl("lfo").modulates(a.id, b.id) then return out end
+  if b.type == "LFO" and wl("lfo").modulates(b.id, a.id) then return out end
 
-  x, y = ordered("H", "H")
-  if x then
-    -- ordered() may have swapped them; the one-way rule is written in terms
-    -- of the edge's own a/b, so re-derive from those rather than from x/y.
-    h_to_h_specs(topology.get(edge.a), topology.get(edge.b), edge, out)
-    return out
-  end
-
-  -- §2.12 the LFOs: pure, one-directional continuous sources -- one spec each,
-  -- same shape E/H already have into a voice.
+  -- otherwise they are pure, one-directional continuous sources -- one spec
+  -- each, the same shape an exciter already has into a voice.
   x, y = ordered("LFO", "O")
   if x then
     table.insert(out, to_output_spec(bridge.bus("lfo_out", x.index), y, edge.gain))
@@ -574,12 +463,6 @@ local function specs_for(edge)
   x, y = ordered("LFO", "E")
   if x then
     table.insert(out, lfo_to_e_spec(x, y, edge.gain))
-    return out
-  end
-
-  x, y = ordered("LFO", "H")
-  if x then
-    table.insert(out, lfo_to_h_spec(x, y, edge.gain))
     return out
   end
 

@@ -1,183 +1,153 @@
 -- mixer.lua
--- §4.1b the mixer page: a fader for each of the four always-on soundscape
--- loops, the master, and the gusts' shared delay line.
+-- §4.1b the mixer page: the master, and a fader for every Output cell the
+-- patch is actually using.
 --
--- Rain used to be one entry on the global page and one hard-coded sample
--- path in Canopy.lua's init. it is four now -- rain, cicada, thunder, sea --
--- and four faders is a page of its own rather than four more rows pushed
--- onto a global list that was already two screens long. so the Rain row left
--- gparam.lua entirely and lives here.
+-- it used to be a fixed list of eight: four always-on soundscape loops, the
+-- master, and the gusts' shared delay line. two of those three moved out.
+-- the four loops are the four Sample cells now (§2.5, lib/sample.lua) --
+-- played rather than left running -- and the delay line went to the global
+-- page, where the rest of the patch-wide numbers live. what is left is the
+-- one thing a mixer is actually for.
 --
--- the loops are a dry mix and nothing else. gparam's old Excite -- the same
--- rain audio fed continuously into every voice's resonator -- is gone
--- rather than multiplied by four: these are soundscapes to sit the patch
--- inside, not exciters. lib/exciter.lua's six E cells are still the panel's
--- excitation sources and are unaffected.
+-- so: this page has no fixed contents at all. it is built from the patch. an
+-- Output cell nothing is cabled to is not a channel -- it is an empty seat --
+-- and putting sixteen faders on screen when one of them is carrying audio
+-- means reading fifteen labels to find the one that matters. so the list
+-- grows: cable a source to Out 5 and Out 5 appears as a fader, pull that
+-- cable and it goes again. an unpatched patch shows the master and nothing
+-- else; a fully patched one shows all sixteen, which is the cap because the
+-- Output row is sixteen cells long.
 --
--- it also carries the gusts' shared delay line (§2.11) -- see the comment
--- above those three rows for why it belongs here rather than on the global
--- page.
+-- the faders here and the cable gains on the Output row are deliberately two
+-- different things. a cable's gain says how much of THAT source arrives at
+-- THAT pan position -- it belongs to the cable, and several sources can land
+-- on one Out cell. this fader is the channel: everything arriving at that
+-- position, together, after the fact. it is the knob you reach for when one
+-- side of the stereo image is too loud, which is not a question about any one
+-- cable.
 --
--- the page object is the same shape as gparam's and every cell page's --
+-- the page object is the same shape gparam's and every cell page's is --
 -- PARAMS with get/set/text/frac/push, E1 to pick, E2/E3 to move coarse/fine
 -- -- so screenui and Canopy.lua drive it through the code path they already
--- had. it is reached with K3 from anywhere and left with K2 (Canopy.lua's
--- key handler); there is nothing modal about it beyond which page the
--- encoders are pointed at.
---
--- eight slots, which is exactly one screen: the four loop faders fill the
--- widget grid's top row (§5.2b), and the master plus the gusts' three
--- delay-line rows fill the second. no paging.
+-- had. it is reached with K3 and left with K2 (Canopy.lua's key handler).
 
-local state  = wl("state")
-local bridge = wl("bridge")
+local topology = wl("topology")
+local patch    = wl("patch")
+local state    = wl("state")
+local bridge   = wl("bridge")
 
 local mixer = {}
 
--- the loops, in engine index order -- `index` here IS Engine_Canopy.sc's
--- amb_load/amb_volume index, and `file` is a name under audio/.
--- Rain keeps index 0 so the one loop that already existed keeps its place.
-mixer.LOOPS = {
-  {key = "rain",    name = "Rain",    file = "Rain.wav"},
-  {key = "cicada",  name = "Cicada",  file = "Cicada.wav"},
-  {key = "thunder", name = "Thunder", file = "Thunder.wav"},
-  {key = "sea",     name = "Sea",     file = "Sea.wav"},
-}
-
-mixer.LOOP_COUNT = #mixer.LOOPS
-
-function mixer.loop(i)
-  return mixer.LOOPS[i]
-end
-
--- state ---------------------------------------------------------------------
--- kept on state.global (like every other player-set number) so a PSET can
--- pick the whole table up in one go when §7.5 persistence lands.
-
-local function levels()
-  state.global.amb_level = state.global.amb_level or {}
-  return state.global.amb_level
-end
-
--- every loop starts silent, the way the single Rain knob did: the script
--- says nothing until it is asked to.
-function mixer.get_level(key)
-  local t = levels()
-  if t[key] == nil then t[key] = 0 end
-  return t[key]
-end
-
-function mixer.set_level(key, v)
-  local t = levels()
-  t[key] = util.clamp(v, 0, 1)
-  return t[key]
-end
-
--- the page --------------------------------------------------------------------
--- eight rows: Rain, Cicada, Thunder, Sea, Master, then the gusts' Space,
--- Delay and Regen.
+-- the Output row is sixteen cells and cannot be more, so this is a statement
+-- of the shape of the panel rather than a limit anything has to enforce. it
+-- is named because the page's whole contract is "up to this many, and they
+-- appear as they are used".
+mixer.MAX_CHANNELS = topology.GRID_W
 
 local COARSE, FINE = 1 / 80, 1 / 500
 
--- §5.2c: these five deliberately share one shape where every other page in
--- the script insists on eight different ones. a mixer IS a row of identical
--- columns -- the repetition is what says "these are the same kind of thing,
--- compare them" -- so `fader` five times over is the reading, not a lapse.
-local function level_row(loop)
+-- state ---------------------------------------------------------------------
+-- kept on state.global, like every other player-set number, so a PSET can
+-- pick the whole table up in one go when §7.5 persistence lands.
+--
+-- a channel starts at unity rather than at zero: it appears the moment a
+-- cable lands on it, and a fader that materialised silent would read as the
+-- cable not having worked.
+
+local function levels()
+  state.global.out_level = state.global.out_level or {}
+  return state.global.out_level
+end
+
+function mixer.get_level(id)
+  local t = levels()
+  if t[id] == nil then t[id] = 1.0 end
+  return t[id]
+end
+
+function mixer.set_level(id, v)
+  local t = levels()
+  t[id] = util.clamp(v, 0, 1)
+  return t[id]
+end
+
+-- which Output cells are carrying anything, in row order (left to right,
+-- which is also hard left to hard right in the stereo field -- so the page
+-- reads like the image sounds).
+function mixer.active_outputs()
+  local out = {}
+  for id, cell in topology.each() do
+    if cell.type == "O" and patch.degree(id) > 0 then
+      table.insert(out, id)
+      if #out >= mixer.MAX_CHANNELS then break end
+    end
+  end
+  return out
+end
+
+-- the page ------------------------------------------------------------------
+
+-- §5.2c: every row on this page deliberately shares one shape where every
+-- other page in the script insists on eight different ones. a mixer IS a row
+-- of identical columns -- the repetition is what says "these are the same
+-- kind of thing, compare them" -- so `fader` over and over is the reading,
+-- not a lapse.
+local function channel_row(id, cell)
   return {
-    key = "lvl_" .. loop.key, label = loop.name, glyph = "fader",
+    key = "out_" .. id, label = cell.name, glyph = "fader",
     coarse = COARSE, fine = FINE, min = 0, max = 1,
-    get = function() return mixer.get_level(loop.key) end,
-    set = function(v) mixer.set_level(loop.key, v) end,
-    text = function() return string.format("%.2f", mixer.get_level(loop.key)) end,
-    frac = function() return mixer.get_level(loop.key) end,
-    push = function()
-      bridge.amb_volume(loop.index, mixer.get_level(loop.key))
-    end,
+    get = function() return mixer.get_level(id) end,
+    set = function(v) mixer.set_level(id, v) end,
+    text = function() return string.format("%.2f", mixer.get_level(id)) end,
+    frac = function() return mixer.get_level(id) end,
+    push = function() bridge.out_level(cell.index, mixer.get_level(id)) end,
   }
 end
 
-mixer.PARAMS = {}
-
-for i, loop in ipairs(mixer.LOOPS) do
-  loop.index = i - 1
-  mixer.PARAMS[i] = level_row(loop)
-end
-
--- the master is the fifth fader, not a footnote, so it sits on the same row
--- as the four loops. K1+E3 still moves it from anywhere, exactly as before
--- -- this is the same number, given a face.
-table.insert(mixer.PARAMS, {
+-- the master is the first fader rather than a footnote at the end: it is the
+-- one channel that is always there, and a list whose contents change under
+-- you wants a fixed thing at the top for the cursor to come back to. K1+E3
+-- still moves it from anywhere, exactly as before -- this is the same number,
+-- given a face.
+local MASTER_ROW = {
   key = "master", label = "Master", glyph = "fader",
-  coarse = COARSE, fine = FINE,
-  min = 0, max = 1,
+  coarse = COARSE, fine = FINE, min = 0, max = 1,
   get = function() return state.global.level or 0.8 end,
   set = function(v) state.global.level = util.clamp(v, 0, 1) end,
   text = function() return string.format("%.2f", state.global.level or 0.8) end,
   frac = function() return state.global.level or 0.8 end,
   push = function() bridge.master_level(state.global.level or 0.8) end,
-})
+}
 
--- §2.11 the gusts' one shared delay line -- "a globally defined delayline
--- that gives it space and ambience". it lands here rather than on the global
--- page for two reasons. it is the same kind of thing the four rows above it
--- are: a level and a room, not a macro that reaches into every voice's
--- parameters. and the arithmetic agrees -- four loops, the master and these
--- three is exactly eight, which is one screen (screenui.PARAMS_PER_PAGE),
--- where putting them on the global page would have pushed a seven-row list
--- onto a second page for the sake of three rows.
---
--- the numbers themselves live in lib/gust.lua, which owns their defaults and
--- their ranges; this is only the face.
-local function space_row(key, label, glyph, text_fn, frac_fn, coarse, fine)
-  return {
-    key = "gust_" .. key, label = label, glyph = glyph,
-    coarse = coarse, fine = fine,
-    get = function() return wl("gust").get_space(key) end,
-    set = function(v) wl("gust").set_space(key, v) end,
-    text = text_fn, frac = frac_fn,
-    push = function() wl("gust").push_space() end,
-  }
+mixer.PARAMS = {MASTER_ROW}
+mixer.PARAM_COUNT = 1
+
+-- rebuilt whenever the cable graph moves, which is the only thing that can
+-- change what is on this page. cheap (sixteen cells, user-driven) and it
+-- keeps every reader -- screenui's grid, Canopy.lua's encoder handler --
+-- reading a plain list rather than asking a question per frame.
+function mixer.rebuild()
+  local params = {MASTER_ROW}
+  for _, id in ipairs(mixer.active_outputs()) do
+    table.insert(params, channel_row(id, topology.get(id)))
+  end
+  mixer.PARAMS = params
+  mixer.PARAM_COUNT = #params
+  -- the cursor cannot be left pointing past the end of a list that just got
+  -- shorter, and the page it was on may not exist any more either.
+  state.mparam_focus = util.clamp(state.mparam_focus or 1, 1, mixer.PARAM_COUNT)
+  return mixer.PARAMS
 end
 
-table.insert(mixer.PARAMS, space_row("space", "Space", "peak",
-  function() return string.format("%.2f", wl("gust").get_space("space")) end,
-  function() return wl("gust").get_space("space") end,
-  COARSE, FINE))
-
--- in milliseconds, not a 0..1 knob: a delay time is a number you want to
--- read, and often one you want to match to the tempo by eye.
---
--- §5.2c took that number off the screen along with every other one, and this
--- is the row where that trade is most obviously a loss -- `steps` says how
--- far up the range you are but not that you are on a dotted eighth. it is
--- left consistent with the rest of the panel rather than made an exception,
--- because one row that prints a number is a row that looks broken. if the
--- exception is ever wanted, the cheap version is in screenui.lua's header
--- note: show the value in the name slot only while an encoder is turning.
-table.insert(mixer.PARAMS, space_row("delay", "Delay", "steps",
-  function() return string.format("%.0f ms", wl("gust").get_space("delay") * 1000) end,
-  function()
-    local g = wl("gust")
-    return (g.get_space("delay") - g.DELAY_MIN) / (g.DELAY_MAX - g.DELAY_MIN)
-  end,
-  0.01, 0.002))
-
-table.insert(mixer.PARAMS, space_row("regen", "Regen", "combs",
-  function() return string.format("%.2f", wl("gust").get_space("regen")) end,
-  function() local g = wl("gust"); return g.get_space("regen") / g.REGEN_MAX end,
-  COARSE, FINE))
-
-mixer.PARAM_COUNT = #mixer.PARAMS
+patch.on_change(mixer.rebuild)
 
 function mixer.param(i)
   return mixer.PARAMS[util.clamp(i, 1, #mixer.PARAMS)]
 end
 
 -- the same nudge contract gparam has: `coarse`/`fine` are the step in the
--- param's own units. the five faders are plain 0..1 knobs and clamp here;
--- the three delay rows have ranges of their own and clamp inside
--- gust.set_space, so they carry no min/max and this leaves them alone.
+-- param's own units. every row here is a plain 0..1 fader, so they all clamp
+-- the same way.
 function mixer.nudge(i, delta, is_coarse)
   local p = mixer.param(i)
   local step = (is_coarse and p.coarse or p.fine) or p.coarse
@@ -192,15 +162,21 @@ function mixer.push_all()
   for _, p in ipairs(mixer.PARAMS) do p.push() end
 end
 
--- ask the engine to load all four samples, then push every fader. the loads
--- are async on the SC side and the faders are held there whether or not the
--- buffer has landed, so the order of these two does not matter -- see
--- Engine_Canopy.sc's amb_load.
-function mixer.init(dir)
-  for _, loop in ipairs(mixer.LOOPS) do
-    bridge.amb_load(loop.index, dir .. loop.file)
+-- every Output cell's level, not just the ones on the page: a channel that
+-- has been cabled and then unpatched keeps its number here, and the engine
+-- has to be holding that same number for when it comes back.
+function mixer.push_every_output()
+  for id, cell in topology.each() do
+    if cell.type == "O" then
+      bridge.out_level(cell.index, mixer.get_level(id))
+    end
   end
-  mixer.push_all()
+end
+
+function mixer.init()
+  mixer.rebuild()
+  bridge.master_level(state.global.level or 0.8)
+  mixer.push_every_output()
 end
 
 return mixer

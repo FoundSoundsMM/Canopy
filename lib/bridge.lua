@@ -32,18 +32,21 @@ local bridge = {}
 -- §2.12's LFOs add one more: `lfo_out` is a cell's own sine tap, the only bus
 -- the family needs -- an LFO has no mod input of its own, so unlike a gust it
 -- is a pure source (the same shape a Clock cell is on the pulse side).
+--
+-- the two heartwood families (`heart_in` / `heart_out`) are gone with the
+-- lattice itself (§2.5); the four Sample cells that took those seats reach
+-- the mix on their own panned path inside the engine, exactly as a gust
+-- does, so they need no bus here either.
 bridge.BUS = {
   exc        = {base = 0,  n = 6},  -- E cell raw outputs
   colour_mod = {base = 6,  n = 6},  -- per-E colour cross-mod sum
   mod_in     = {base = 12, n = 4},  -- per-voice mod-path input sum
   voice_out  = {base = 16, n = 4},  -- per-voice audio tap
   gvoice_out = {base = 20, n = 6},  -- per-GVOICE (percussion) audio tap
-  heart_in   = {base = 26, n = 4},  -- per-H lattice injection sum
-  heart_out  = {base = 30, n = 4},  -- per-H lattice emergence tap
-  out        = {base = 34, n = 16}, -- the Output row's 16 fixed-pan buses
-  gust_out   = {base = 50, n = 12}, -- per-GUST audio tap
-  gust_mod   = {base = 62, n = 12}, -- per-GUST cross-mod input sum
-  lfo_out    = {base = 74, n = 4},  -- per-LFO sine tap
+  out        = {base = 26, n = 16}, -- the Output row's 16 fixed-pan buses
+  gust_out   = {base = 42, n = 12}, -- per-GUST audio tap
+  gust_mod   = {base = 54, n = 12}, -- per-GUST cross-mod input sum
+  lfo_out    = {base = 66, n = 4},  -- per-LFO sine tap
 }
 
 function bridge.bus(name, index)
@@ -262,13 +265,6 @@ function bridge.exciter_fm(index, ratio, depth)
   engine.exciter_fm(index, ratio, depth)
 end
 
--- §2.5 heartwood: per-node conductance (E2 while holding), which sets that
--- node's hop delay and loss on the continuous side. the discrete side's
--- copy of the same mapping lives in heartwood.lua.
-function bridge.heart_conductance(index, v)
-  engine.heart_conductance(index, v)
-end
-
 -- §7.3/§8 generic audio-rate patch matrix. `src`/`dst` are absolute
 -- patchBus numbers -- callers build them with bridge.bus(). `kind` is "aa"
 -- (straight pass) or "ak" (amplitude-follow into the target).
@@ -288,23 +284,58 @@ function bridge.master_level(v)
   engine.master_level(v)
 end
 
--- §4.1b the ambience bank (lib/mixer.lua): four always-on field-recording
--- loops, `index` 0-based and matching mixer.LOOPS' order. amb_load fires
--- once per loop at init with that sample's absolute path; the engine loads
--- each async and only starts that loop's \wl_amb once it's ready.
--- amb_volume is held engine-side whether or not the synth exists yet, so
--- pushing it before the buffer lands (which mixer.init always does) is safe
--- -- the value is applied when the synth starts.
---
--- these are a dry mix and nothing more. there is deliberately no excite
--- command: the old rain_excite, which fed the same audio continuously into
--- every voice's resonator, is gone.
-function bridge.amb_load(index, path)
-  engine.amb_load(index, path)
+-- §4.1b one level per Output-row cell (lib/mixer.lua's channel faders).
+-- `index` is the O cell's own 0-based `index`, which is also its channel in
+-- the engine's sixteen fixed-pan output buses. this is the channel, applied
+-- once to everything arriving at that pan position -- distinct from a
+-- cable's own gain, which decides how much of one source gets there.
+function bridge.out_level(index, v)
+  engine.out_level(index, v)
 end
 
-function bridge.amb_volume(index, v)
-  engine.amb_volume(index, v)
+-- §2.5 the four Sample cells (lib/sample.lua): Rain, Cicada, Thunder, Sea.
+-- `index` is 0-based and matches the cell's own `index` field, which is also
+-- the engine's buffer slot. smp_load fires once per cell at init with that
+-- sample's absolute path; the engine reads each async and only lets that slot
+-- sound once its buffer is ready. every knob below is held engine-side
+-- whether or not the buffer has landed, so pushing them straight after the
+-- load (which sample.init always does) loses nothing.
+--
+-- these replaced amb_load/amb_volume, which played the same four recordings
+-- as an always-on bed with a fader each. same files, same buffers -- they are
+-- triggered now rather than left running, so a level is no longer the only
+-- thing there is to say about one.
+function bridge.smp_load(index, path)
+  engine.smp_load(index, path)
+end
+
+-- the whole gesture in one message, the way `strike` is for a voice and
+-- `gust_note` is for a gust: play this sample from the top at this force.
+function bridge.smp_note(index, force)
+  engine.smp_note(index, force)
+end
+
+function bridge.smp_attack(index, seconds)
+  engine.smp_attack(index, seconds)
+end
+
+function bridge.smp_decay(index, seconds)
+  engine.smp_decay(index, seconds)
+end
+
+-- playback rate, as a ratio of the recording's own speed.
+function bridge.smp_speed(index, v)
+  engine.smp_speed(index, v)
+end
+
+function bridge.smp_level(index, v)
+  engine.smp_level(index, v)
+end
+
+-- where this cell sits in the stereo field. fixed by the cell's seat
+-- (topology's `pan`) and pushed once at init -- there is no knob for it.
+function bridge.smp_pan(index, v)
+  engine.smp_pan(index, v)
 end
 
 return bridge

@@ -470,7 +470,7 @@ function DRAW.wave(x, y, w, h, v, on)
   screen.stroke()
 end
 
--- lattice: a lattice, with charge in it. the heartwood, the weave -- cells
+-- lattice: a lattice, with charge in it. the weave -- cells
 -- whose one knob is about how freely something crosses a mesh.
 function DRAW.lattice(x, y, w, h, v, on)
   local cols, rows = 5, 4

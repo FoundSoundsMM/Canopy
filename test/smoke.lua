@@ -41,9 +41,9 @@ do
   -- widget vocabulary) and nothing else touches.
   local WANT = {
     "bridge", "cellparam", "clockcell", "dispatch", "exciter", "glyph",
-    "gparam", "gridui", "grove", "gust", "gvoice", "heartwood", "lexicon",
-    "lfo", "mixer", "patch", "quantise", "rambler", "screenui", "state",
-    "tm", "topology", "voice", "weave",
+    "gparam", "gridui", "grove", "gust", "gvoice", "lexicon",
+    "lfo", "mixer", "patch", "quantise", "rambler", "sample", "screenui",
+    "state", "tm", "topology", "voice", "weave",
   }
   check("exactly the expected modules, one copy each",
         table.concat(names, ",") == table.concat(WANT, ","),
@@ -55,7 +55,10 @@ end
 check("gridui and screenui share one patch graph",
       wl("patch") == M.patch and wl("state") == M.state)
 
-check("three metros started", #metros == 3 and metros[1].running and metros[3].running,
+-- four now: the screen, the grid, §2.12's control-rate LFO metro, and the
+-- scheduler's own inside rambler.start().
+check("four metros started", #metros == 4 and metros[1].running
+      and metros[3].running and metros[4].running,
       "#" .. #metros)
 
 -- hold Hob (7,4) -- Knocker's old coordinates, now Hob's -- and tap Oak
@@ -88,7 +91,7 @@ local ok, err = pcall(function()
   -- one representative of every current cell type, including the ones the
   -- re-cut added (O, GVOICE/E rename, C-as-clock) and the gusts (§2.11) that
   -- replaced the step-sequencer lanes -- one from each of their two rows.
-  for _, id in ipairs({"oak", "d.hob", "tm.padfoot", "clk.toll", "h.wyrd",
+  for _, id in ipairs({"oak", "d.hob", "tm.padfoot", "clk.toll", "smp.rain",
                        "f.cuckoo", "r.thicket", "gv.yaffle", "e.bracken",
                        "o.1", "gu.sough", "gu.squall", "lfo.flood"}) do
     local c = M.topology.get(id)

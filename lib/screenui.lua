@@ -228,10 +228,16 @@ local function tempo_text()
   return string.format("%.0f", bpm)
 end
 
--- tag: two or three characters saying what kind of page this is (a cell's
--- panel letter, "MIX", "MAP", "G"), dim, in front of the name. it is the one
--- thing the name alone cannot tell you -- "Bittern" does not say whether it
--- is a field or a drum, and the panel letter does.
+-- tag: what kind of page this is, dim, in front of the name. it is the one
+-- thing the name alone cannot tell you: "Bittern" does not say whether it is
+-- a pitch field or a drum.
+--
+-- it used to be the cell's one-letter panel code -- "M Oak", "T Hob",
+-- "R Tangle". that letter is silk-screened nowhere; on a monome there is no
+-- legend to look it up in, so reading the header at all meant having the
+-- alphabet memorised. it is a word now (topology.family), and the header
+-- reads "Voice: Oak", "Trigger: Hob", "Process: Tangle". the whole-page tags
+-- ("Mixer", "Map", "Canopy") are the same idea and were already words.
 function screenui.draw_header(tag, name, page, pages)
   draw_transport(1)
 
@@ -364,7 +370,7 @@ function screenui.draw_global()
   local focus = util.clamp(state.gparam_focus or 1, 1, gparam.PARAM_COUNT)
   local p = gparam.param(focus)
   local pages = math.ceil(gparam.PARAM_COUNT / PL_PER_PAGE)
-  screenui.draw_header("G", "Canopy", screenui.page_of(focus), pages)
+  screenui.draw_header("", "Canopy", screenui.page_of(focus), pages)
   draw_param_grid(gparam.PARAMS, focus,
                   function(q) return q.text() end,
                   function(q) return q.frac() end,
@@ -372,15 +378,16 @@ function screenui.draw_global()
 end
 
 -- §4.1b the mixer page (K3, back with K2) --------------------------------------
--- five faders: the four always-on soundscape loops and the master
--- (lib/mixer.lua). exactly one row of the grid, which is the whole reason the
--- list is five long.
+-- the master, then one fader per Output cell the patch is actually using
+-- (lib/mixer.lua). the list grows and shrinks with the cables, so the header
+-- says how many channels are open: with nothing patched this page is one
+-- fader and a lot of space, and that is the honest picture.
 
 function screenui.draw_mixer()
   local focus = util.clamp(state.mparam_focus or 1, 1, mixer.PARAM_COUNT)
-  local p = mixer.param(focus)
-  local pages = math.ceil(mixer.PARAM_COUNT / PL_PER_PAGE)
-  screenui.draw_header("MIX", "Mixer", screenui.page_of(focus), pages)
+  local pages = math.max(1, math.ceil(mixer.PARAM_COUNT / PL_PER_PAGE))
+  screenui.draw_header("Mixer", (mixer.PARAM_COUNT - 1) .. " out",
+                       screenui.page_of(focus), pages)
   draw_param_grid(mixer.PARAMS, focus,
                   function(q) return q.text() end,
                   function(q) return q.frac() end,
@@ -394,10 +401,13 @@ end
 -- everything that is not this cell (gridui.grid_redraw), so the panel is
 -- showing the same one thing the screen is.
 
+-- "Voice:" in the tag slot and "Oak" in the name slot. a cell already named
+-- for its family -- "Gust 7", "Clock 2" -- gets no tag: "Gust: Gust 7" says
+-- one thing twice, and the pixels are better spent on the name.
 local function cell_tag(cell)
-  local letter = cell.letter or cell.type
-  if cell.type == "voice" then letter = "M" end
-  return letter
+  local fam = topology.family(cell)
+  if fam == "" or cell.name:sub(1, #fam) == fam then return "" end
+  return fam .. ":"
 end
 
 -- "what does this cell do", under the grid rather than instead of it: it
@@ -613,7 +623,7 @@ function screenui.draw_map()
     if patch.degree(id) > 0 then active = active + 1 end
   end
 
-  screenui.draw_header("MAP", "Map " .. active .. "/" .. #topology.order)
+  screenui.draw_header("Map", active .. "/" .. #topology.order .. " patched")
 
   for id, cell in topology.each() do
     screen.level(patch.degree(id) > 0 and MAP_ON or MAP_OFF)
@@ -627,101 +637,124 @@ end
 
 -- edge view (two cells held) -------------------------------------------------
 
--- the socket collapse means a voice is one point that reacts to whatever's
--- at the other end of the cable: a pulse always strikes it; a stream (E/H)
--- always drives its mod path; a field or TM tunes it; another voice does
--- both a pulse-answer and a continuous mod-feed on the same cable, in both
--- directions. an Output cell is a pure destination -- only voice/GVOICE/E/H
--- reach it, and it never talks back.
+-- what a cable between two kinds of cell actually does, in one sentence. the
+-- edge view (two cells held) prints this under the two names, wrapped to
+-- three lines, so it is written the way the cell descriptions in
+-- lexicon.lua are: plain words, the effect first, no dashes standing in for
+-- a clause.
+--
+-- the shape of the matrix: a voice is one point that reacts to whatever is at
+-- the other end. a pulse always strikes it. a continuous stream (an exciter,
+-- a gust, an LFO) always drives its mod path. a pitch field or a register
+-- tunes it. another voice does both at once, in both directions. an Output
+-- cell is a pure destination and never talks back.
 local INTERACTION_DESC = {
-  ["voice|voice"] = "each voice's own audio feeds the other's mod path; either answers a strike",
-  ["voice|O"] = "the voice's audio reaches the speakers at this cell's pan position",
-  ["voice|D"] = "the pulse strikes the voice, which answers out of its own point",
-  ["voice|R"] = "the transformed pulse strikes the voice, which answers in turn",
-  ["voice|TM"] = "the pulse clocks the register and strikes the voice; also feeds its pitch",
-  ["voice|C"] = "the clock's pulse strikes the voice",
-  ["voice|E"] = "the stream drives the voice's mod path (Balance decides how)",
-  ["voice|H"] = "the lattice returns into the voice's mod path",
-  ["voice|F"] = "the field tunes the voice, scaled by its own Depth knob",
-  ["D|D"] = "mutual phase coupling (Kuramoto) + mutual triggering",
-  ["D|R"] = "the pulse goes through the transform on its way out",
-  ["R|R"] = "transforms in series -- the chain is the pattern",
-  ["D|E"] = "pulse envelopes the stream into a grain; free-running otherwise",
-  ["R|E"] = "the transformed pulse fires the grain",
-  ["D|H"] = "pulse enters the lattice and diffuses",
-  ["R|H"] = "the transformed pulse enters the lattice",
-  ["E|E"] = "cross-modulation: each modulates the other's colour",
-  ["E|H"] = "stream diffuses through the lattice",
-  ["E|O"] = "the stream reaches the speakers at this cell's pan position",
-  ["H|O"] = "the lattice's emergence reaches the speakers at this cell's pan position",
-  ["H|H"] = "direct link -- short-circuits two lattice points",
-  ["D|F"] = "each pulse steps the field to a new degree",
-  ["R|F"] = "the transformed pulse steps the field",
-  ["E|F"] = "the exciter's colour rides the field's line",
-  ["H|F"] = "a pulse out of the lattice steps the field",
-  ["F|F"] = "the two fields pull together (or apart, at negative gain)",
-  ["D|C"] = "no meaning: a clock cell is a pure source",
-  -- §2.7b: a GVOICE cell has no sockets, so it is struck directly and
-  -- answers with its own pulse out, the same shape as an R cell's transform.
-  ["D|GVOICE"] = "the pulse strikes it, which answers with a pulse of its own",
-  ["R|GVOICE"] = "the transformed pulse strikes it, which answers in turn",
-  ["E|GVOICE"] = "the drum's answering pulse fires the grain",
-  ["H|GVOICE"] = "a pulse out of the lattice strikes it, which answers into the lattice",
+  ["voice|voice"] = "each voice's sound modulates the other, and either one answers a strike",
+  ["voice|O"] = "the voice is heard, panned to where this output sits",
+  ["voice|D"] = "the pulse strikes the voice, which then answers with a pulse",
+  ["voice|R"] = "the changed pulse strikes the voice, which answers in turn",
+  ["voice|TM"] = "the pulse clocks the pattern and strikes the voice, and also tunes it",
+  ["voice|C"] = "the clock pulse strikes the voice",
+  ["voice|E"] = "the exciter drives the voice's mod path. Balance sets what it does",
+  ["voice|F"] = "the field tunes the voice, as far as its own Range knob allows",
+  ["D|D"] = "the two pull each other into time, and each also triggers the other",
+  ["D|R"] = "the pulse goes through this rule on its way out",
+  ["R|R"] = "two rules in series. the chain is the pattern",
+  ["D|E"] = "each pulse cuts the exciter into a short grain. it runs free otherwise",
+  ["R|E"] = "the changed pulse fires one grain of the exciter",
+  ["E|E"] = "each exciter modulates the other's colour",
+  ["E|O"] = "the exciter is heard, panned to where this output sits",
+  ["D|F"] = "each pulse steps the field to a new note",
+  ["R|F"] = "the changed pulse steps the field",
+  ["E|F"] = "the exciter's colour follows the field's line",
+  ["F|F"] = "the two fields pull together, or apart at negative gain",
+  ["D|C"] = "nothing. a clock cell only ever sends",
+  -- §2.7b a percussion cell has no separate trigger socket: it is struck
+  -- directly and answers with a pulse of its own a tick later.
+  ["D|GVOICE"] = "the pulse strikes the drum, which answers with a pulse of its own",
+  ["R|GVOICE"] = "the changed pulse strikes the drum, which answers in turn",
+  ["E|GVOICE"] = "the drum's answering pulse fires one grain of the exciter",
   ["F|GVOICE"] = "the drum's answering pulse steps the field",
   ["GVOICE|GVOICE"] = "one drum's answering pulse strikes the next",
-  ["GVOICE|O"] = "the drum's audio reaches the speakers at this cell's pan position",
-  -- §2.3b: a TM cell is a pulse cell like D and R, but has no gait of its
-  -- own -- every pulse that reaches it is one clock edge for its shift
-  -- register, and its own answering pulse is gated by whichever bit its Tap
-  -- knob picks. it is also a pitch source in its own right when cabled to a
-  -- voice, summed alongside whatever fields are cabled there (§2.6).
-  ["D|TM"] = "the pulse clocks the register, which answers with a pulse of its own",
-  ["R|TM"] = "the transformed pulse clocks the register, which answers in turn",
-  ["E|TM"] = "the register's answering pulse fires the grain",
-  ["H|TM"] = "a pulse out of the lattice clocks the register",
-  ["F|TM"] = "no meaning: TM takes a trigger, not a field",
-  ["TM|GVOICE"] = "the register's answering pulse strikes it, which answers in turn",
-  ["TM|TM"] = "each register's answering pulse clocks the other -- a mutual, evolving loop",
-  -- Clock cells: pure sources, flash on a multiple/division of the master
-  -- clock, feed anything pulse-shaped.
-  ["C|C"] = "no meaning: a clock cell has nothing to gate",
-  ["R|C"] = "the clock's pulse goes through the transform on its way out",
-  ["C|GVOICE"] = "the clock's pulse strikes it, which answers with a pulse of its own",
-  ["E|C"] = "the clock's pulse envelopes the stream into a grain",
-  ["H|C"] = "the clock's pulse enters the lattice",
-  ["F|C"] = "each clock pulse steps the field to a new degree",
-  ["C|TM"] = "the clock's pulse clocks the register",
-  ["C|GUST"] = "the clock's pulse sounds the gust's note",
-  -- §2.11 the gusts: a pulse sounds the note, and the gust answers with a
-  -- pulse of its own the way a drum does. a continuous cable lands on its
-  -- cross-mod input instead, where the cell's own Cross knob scales it into
-  -- pitch and fold -- which is why two gusts together read as modulation.
-  ["D|GUST"] = "the pulse sounds the note, which answers with a pulse of its own",
-  ["R|GUST"] = "the transformed pulse sounds the note, which answers in turn",
-  ["TM|GUST"] = "the register's answering pulse sounds the note",
-  ["GVOICE|GUST"] = "the drum's answering pulse sounds the note",
-  ["H|GUST"] = "a pulse out of the lattice sounds it; the lattice also bends its core",
-  ["GUST|GUST"] = "cross-modulation: each bends the other's pitch and fold",
-  ["voice|GUST"] = "the gust drives the voice's mod path; the voice bends the gust's core",
-  ["E|GUST"] = "the stream bends the gust's core; the gust rides the exciter's colour",
-  ["F|GUST"] = "no meaning: a gust takes its pitch from the Scale, not a field",
-  ["GUST|O"] = "a second copy at this cell's pan, on top of its automatic one",
+  ["GVOICE|O"] = "the drum is heard, panned to where this output sits",
+  -- §2.3b a register is a pulse cell like a trigger or a rule, but has no
+  -- rhythm of its own: every pulse in is one step, and its own pulse out is
+  -- gated by whichever bit its Tap knob is reading.
+  ["D|TM"] = "the pulse steps the pattern, which answers with a pulse of its own",
+  ["R|TM"] = "the changed pulse steps the pattern, which answers in turn",
+  ["E|TM"] = "the pattern's answering pulse fires one grain of the exciter",
+  ["F|TM"] = "nothing. a register takes a trigger, not a note",
+  ["TM|GVOICE"] = "the pattern's answering pulse strikes the drum, which answers in turn",
+  ["TM|TM"] = "each pattern steps the other. a loop that keeps changing",
+  -- clock cells: pure sources, in time with the transport at their own ratio.
+  ["C|C"] = "nothing. a clock cell only ever sends",
+  ["R|C"] = "the clock pulse goes through this rule on its way out",
+  ["C|GVOICE"] = "the clock pulse strikes the drum, which answers with a pulse",
+  ["E|C"] = "the clock pulse cuts the exciter into a short grain",
+  ["F|C"] = "each clock pulse steps the field to a new note",
+  ["C|TM"] = "the clock pulse steps the pattern",
+  ["C|GUST"] = "the clock pulse plays the gust's note",
+  -- §2.11 the gusts. a pulse plays the note and the gust answers with a pulse
+  -- the way a drum does. a continuous cable lands on its cross modulation
+  -- input instead, where the gust's own Cross knob scales it into pitch and
+  -- fold. that is why two gusts cabled together read as modulation.
+  ["D|GUST"] = "the pulse plays the gust's note, which answers with a pulse of its own",
+  ["R|GUST"] = "the changed pulse plays the note, which answers in turn",
+  ["TM|GUST"] = "the pattern's answering pulse plays the gust's note",
+  ["GVOICE|GUST"] = "the drum's answering pulse plays the gust's note",
+  ["GUST|GUST"] = "the two gusts FM each other. turn up Cross on both to hear it",
+  ["voice|GUST"] = "the gust drives the voice's mod path, and the voice bends the gust",
+  ["E|GUST"] = "the exciter bends the gust, and the gust rides the exciter's colour",
+  ["F|GUST"] = "nothing. a gust takes its pitch from the Scale, not from a field",
+  ["GUST|O"] = "a second copy of the gust here, on top of the one it mixes itself",
+  -- §2.5 the sample cells. a pulse plays the recording from the top; nothing
+  -- comes back out, because a swell seconds long is not an event anything
+  -- downstream could be timed against. they are heard without an output cable.
+  ["D|SMP"] = "the pulse plays the sample from the top",
+  ["R|SMP"] = "the changed pulse plays the sample from the top",
+  ["C|SMP"] = "the clock pulse plays the sample from the top",
+  ["TM|SMP"] = "the pattern's answering pulse plays the sample",
+  ["GVOICE|SMP"] = "the drum's answering pulse plays the sample",
+  ["voice|SMP"] = "the voice's own strike plays the sample",
+  ["E|SMP"] = "nothing continuous. only a pulse plays a sample",
+  ["F|SMP"] = "nothing. a sample cell takes a trigger, not a note",
+  ["GUST|SMP"] = "nothing. neither one sends the other a pulse",
+  ["LFO|SMP"] = "nothing. a sample cell has no knob a stream can move",
+  ["SMP|SMP"] = "nothing. a sample cell never sends a pulse",
+  ["SMP|O"] = "nothing. a sample cell mixes itself, and needs no output cable",
   -- the Output row is exclusive (patch.lua): a source sits at one pan
   -- position, and cabling it to a second Out cell moves it rather than
-  -- adding to it. two Out cells together is not a cable at all.
-  ["O|O"] = "no meaning: an Output cell is a destination, never a source",
-  -- §2.12 the LFOs: pure continuous sources, same shape a gust/E/H's stream
-  -- already has into these four destinations -- just a sine instead.
-  ["LFO|voice"] = "the sine rides the voice's mod path, bending its pitch/colour",
-  ["LFO|E"] = "the sine drives the exciter's colour",
-  ["LFO|H"] = "the sine pours into the lattice",
-  ["LFO|GUST"] = "the sine bends the gust's core -- pitch and fold together",
-  ["LFO|O"] = "heard directly -- turn Speed up into audio range for a plain tone",
+  -- adding to it. two Out cells together is not a cable at all -- and a
+  -- pulse cell reaching one is not either: an output carries audio, and a
+  -- trigger, a rule, a clock, a register and a field all make pulses and
+  -- notes rather than sound.
+  ["O|O"] = "nothing. an output is a destination, never a source",
+  ["D|O"] = "nothing. an output carries sound, and a trigger makes pulses",
+  ["R|O"] = "nothing. an output carries sound, and a rule makes pulses",
+  ["C|O"] = "nothing. an output carries sound, and a clock makes pulses",
+  ["TM|O"] = "nothing. an output carries sound, and a register makes pulses",
+  ["F|O"] = "nothing. an output carries sound, and a field makes notes",
+  -- a drum answers its own strike with a pulse a tick later, so it can drive
+  -- a voice the way a trigger does.
+  ["voice|GVOICE"] = "the drum's answering pulse strikes the voice, which answers in turn",
+  -- §2.12 the LFOs. cable one to a cell, then open the LFO's page and pick
+  -- which of that cell's knobs it moves.
+  ["LFO|voice"] = "open the LFO's page to pick which of the voice's knobs it moves",
+  ["LFO|E"] = "open the LFO's page to pick which of the exciter's knobs it moves",
+  ["LFO|GUST"] = "open the LFO's page to pick which of the gust's knobs it moves",
+  ["LFO|GVOICE"] = "open the LFO's page to pick which of the drum's knobs it moves",
+  ["LFO|TM"] = "open the LFO's page to pick which of the register's knobs it moves",
+  ["LFO|D"] = "open the LFO's page to pick which of the trigger's knobs it moves",
+  ["LFO|R"] = "open the LFO's page to pick which of the rule's knobs it moves",
+  ["LFO|F"] = "open the LFO's page to pick which of the field's knobs it moves",
+  ["LFO|C"] = "open the LFO's page to pick which of the clock's knobs it moves",
+  ["LFO|LFO"] = "nothing. an LFO has no knob another one can move",
+  ["LFO|O"] = "heard directly. turn Speed up into the audio range for a plain tone",
 }
 
 local TYPE_ORDER = {
-  LFO = 0, voice = 1, D = 2, R = 3, E = 4, H = 5, F = 6, C = 7, TM = 8,
-  GVOICE = 9, GUST = 10, O = 11,
+  LFO = 0, voice = 1, D = 2, R = 3, E = 4, F = 6, C = 7, TM = 8,
+  GVOICE = 9, GUST = 10, SMP = 11, O = 12,
 }
 
 local function interaction_text(ta, tb)
@@ -739,15 +772,15 @@ function screenui.draw_edge(id_a, id_b)
   -- same reason no widget prints its value (lib/glyph.lua): the bar below
   -- says which side of centre the cable is on and how far, which is the
   -- question you actually have while turning E3.
-  screenui.draw_header("<>", "cable")
+  screenui.draw_header("", "cable")
 
   -- two names on one line: split the width between them and let each give way
   -- on its own side rather than letting a long pair meet in the middle.
   screen.level(15)
   screen.move(2, 17)
-  screen.text(fit(a.name, 56))
+  screen.text(fit(topology.label(a), 56))
   screen.move(126, 17)
-  screen.text_right(fit(b.name, 56))
+  screen.text_right(fit(topology.label(b), 56))
   screen.level(4)
   screen.move(62, 17)
   screen.text("\xE2\x80\x94")
@@ -776,7 +809,7 @@ function screenui.draw_edge(id_a, id_b)
   else
     screen.level(4)
     screen.move(2, 32)
-    screen.text(fit("not cabled \xE2\x80\x94 tap-release one", 124))
+    screen.text(fit("not cabled. tap one to connect", 124))
   end
 
   screen.level(8)

@@ -182,7 +182,7 @@ end
 print("\n-- cells with no sound of their own have no decay --")
 do
   local M = fresh(17)
-  for _, id in ipairs({"d.skriker", "h.wyrd", "f.cuckoo"}) do
+  for _, id in ipairs({"d.skriker", "r.tangle", "f.cuckoo"}) do
     local cell = M.topology.get(id)
     check(cell.name .. " has no decay target",
           M.state.decay_target(cell) == nil, tostring(M.state.decay_target(cell)))

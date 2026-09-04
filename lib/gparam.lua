@@ -4,12 +4,19 @@
 -- already gave the sound page (§5.5), just for macros that reach every voice
 -- at once instead of one.
 --
--- it was nine rows; it is seven. Rain and Excite left for the mixer page
--- (§4.1b, lib/mixer.lua) when the one rain loop became four, and took their
--- bridge pushes with them -- and the gusts' shared delay line (§2.11) went
--- there rather than here for the same reason: it is a level and a room, not
--- a macro over the patch. everything still here reaches every voice at
--- once.
+-- ten rows, on two pages. the first seven reach every voice at once; the
+-- last three are the one delay line all twelve gusts are heard through
+-- (§2.11). those three sat on the mixer page while the mixer had a fixed
+-- eight-row list to fill; the mixer is built from the patch now
+-- (lib/mixer.lua) and a room is not a channel, so they came here, which is
+-- where the rest of the patch-wide numbers already were.
+--
+-- two of these rows are renamed and nothing else about them changed. Scatter
+-- is Rain: it is the knob that makes everything land a little off the grid
+-- and then a lot, which is what weather does to a rhythm, and "scatter" was
+-- a word about the mechanism rather than about the sound. Drops is Plonks,
+-- for the same reason -- it is the per-strike detune, and what you hear when
+-- you turn it up is notes plonking down slightly off where you left them.
 --
 -- each entry stores in whatever unit is natural to it (0..1 for a plain
 -- knob, real semitones/bpm for the ones that are), rather than forcing
@@ -23,7 +30,7 @@ local state    = wl("state")
 local gparam = {}
 
 -- §4.1 E3 is the transport: the whole patch quantises against it at low
--- Scatter, so it has to be reachable without diving into the list. norns' clock
+-- Rain, so it has to be reachable without diving into the list. norns' clock
 -- reads its tempo from the clock_tempo param rather than from a setter, so
 -- that is what gets written -- and it is guarded, because the offline test
 -- harness has no params menu.
@@ -63,10 +70,10 @@ function gparam.tempo()
   return state.global.bpm or 120
 end
 
--- Drops: semitones of extra per-strike detune range at full knob, on top of
+-- Plonks: semitones of extra per-strike detune range at full knob, on top of
 -- the 0.02 st floor every strike has always had (grove.on_strike) -- that
 -- floor is what an unpatched voice's "breathing" was before this param
--- existed, and it stays so Drops=0 sounds like today.
+-- existed, and it stays, so Plonks=0 sounds like it always did.
 gparam.DROPS_MAX_ST = 1.5
 
 -- global pitch: a straight transpose, both ways, wider than Tune's own span
@@ -81,21 +88,21 @@ local function voices()
   return ids
 end
 
--- the global Decay macro (below) reaches the GVOICE and GUST cells too --
--- each of their decay_seconds() already folds voice.decay_mult_ratio() in,
+-- the global Decay macro (below) reaches the GVOICE, GUST and SMP cells too
+-- -- each of their decay_seconds() already folds voice.decay_mult_ratio() in,
 -- same as voice.lua's own does, so this is the only other place that needs
 -- to know they exist as well as the four corner voices.
+local DECAY_MACRO_TYPES = {voice = true, GVOICE = true, GUST = true, SMP = true}
+
 local function sounding_cells()
   local ids = {}
   for id, cell in topology.each() do
-    if cell.type == "voice" or cell.type == "GVOICE" or cell.type == "GUST" then
-      table.insert(ids, id)
-    end
+    if DECAY_MACRO_TYPES[cell.type] then table.insert(ids, id) end
   end
   return ids
 end
 
--- the seven, in E1 order ------------------------------------------------------
+-- the ten, in E1 order -------------------------------------------------------
 -- `frac` is the screen's bar position, 0..1, kept separate from `get` since
 -- bpm/scale/pitch don't store in 0..1 themselves.
 
@@ -128,10 +135,11 @@ gparam.PARAMS = {
   {
     -- §4.1's old Weather knob, upper half: how much a pulse's landing is
     -- displaced from the grid, growing to "nothing is held at all" at 1
-    -- (quantise.lua's "scatter" reading). also scales the rhythm/field
-    -- wildness rambler.lua and grove.lua used to read off Weather directly.
-    -- called Rain until the actual Rain.wav ambience below took that name.
-    key = "scatter", label = "Scatter", glyph = "wander", coarse = 1 / 80, fine = 1 / 500,
+    -- (quantise.lua's reading of it). also scales the rhythm/field wildness
+    -- rambler.lua and grove.lua used to read off Weather directly. the state
+    -- key stays `scatter` -- it is read in five other files and the rename
+    -- is a rename of the word on the panel, not of the mechanism.
+    key = "scatter", label = "Rain", glyph = "wander", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
     get = function() return state.global.scatter or 0 end,
     set = function(v) state.global.scatter = util.clamp(v, 0, 1) end,
@@ -173,7 +181,7 @@ gparam.PARAMS = {
     end,
   },
   {
-    key = "drops", label = "Drops", glyph = "dots", coarse = 1 / 80, fine = 1 / 500,
+    key = "drops", label = "Plonks", glyph = "dots", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
     get = function() return state.global.drops or 0 end,
     set = function(v) state.global.drops = util.clamp(v, 0, 1) end,
@@ -215,6 +223,48 @@ gparam.PARAMS = {
     end,
   },
 }
+
+-- §2.11 the gusts' one shared delay line -- "a globally defined delayline
+-- that gives it space and ambience". one line for all twelve rather than one
+-- each: what it is for is putting the family in a room, and twelve rooms is
+-- not a room. the numbers themselves live in lib/gust.lua, which owns their
+-- defaults and their ranges; these three rows are only the face.
+--
+-- they are the second page of this list, which is what pushed the global page
+-- past one screen for the first time. that is the right trade: they belong
+-- with the other patch-wide settings, and a page of ten with three of them
+-- one E1 flick away beats a mixer that has to pretend a reverb is a channel.
+local function space_row(key, label, glyph, text_fn, frac_fn, coarse, fine)
+  return {
+    key = "gust_" .. key, label = label, glyph = glyph,
+    coarse = coarse, fine = fine,
+    get = function() return wl("gust").get_space(key) end,
+    set = function(v) wl("gust").set_space(key, v) end,
+    text = text_fn, frac = frac_fn,
+    push = function() wl("gust").push_space() end,
+  }
+end
+
+table.insert(gparam.PARAMS, space_row("space", "Space", "peak",
+  function() return string.format("%.2f", wl("gust").get_space("space")) end,
+  function() return wl("gust").get_space("space") end,
+  1 / 80, 1 / 500))
+
+-- in seconds on the wire and milliseconds on the screen, not a 0..1 knob: a
+-- delay time is a number you want to read, and often one you want to match to
+-- the tempo by eye.
+table.insert(gparam.PARAMS, space_row("delay", "Delay", "steps",
+  function() return string.format("%.0f ms", wl("gust").get_space("delay") * 1000) end,
+  function()
+    local g = wl("gust")
+    return (g.get_space("delay") - g.DELAY_MIN) / (g.DELAY_MAX - g.DELAY_MIN)
+  end,
+  0.01, 0.002))
+
+table.insert(gparam.PARAMS, space_row("regen", "Regen", "combs",
+  function() return string.format("%.2f", wl("gust").get_space("regen")) end,
+  function() local g = wl("gust"); return g.get_space("regen") / g.REGEN_MAX end,
+  1 / 80, 1 / 500))
 
 gparam.PARAM_COUNT = #gparam.PARAMS
 

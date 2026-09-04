@@ -50,8 +50,8 @@ do
 
   local page = M.cellparam.page(id)
   check("cellparam hands out the lfo page", page == M.lfo)
-  check("it has exactly one row", page.PARAM_COUNT == 1,
-        tostring(page.PARAM_COUNT))
+  check("it has four rows: Speed, Depth, Target, Param",
+        page.PARAM_COUNT == 4, tostring(page.PARAM_COUNT))
 
   local before = #CALLS.lfo_rate
   local p = page.nudge(id, 1, 0.1)
@@ -114,20 +114,128 @@ do
         found and found.kind or "nil")
 end
 
-print("\n-- wired to the heartwood: pours into heart_in --")
+print("\n-- Target: which of the cabled cells it is aimed at --")
 do
   local M = fresh(7)
-  M.patch.add("lfo.neap", "h.taproot", 0.5)
-  local l = M.topology.get("lfo.neap")
-  local h = M.topology.get("h.taproot")
-  local found
-  for _, c in ipairs(CALLS.patch_add) do
-    if c.src == M.bridge.bus("lfo_out", l.index)
-       and c.dst == M.bridge.bus("heart_in", h.index) then
-      found = c
-    end
+  local L = "lfo.neap"
+  check("no cables, no target", M.lfo.target(L) == nil)
+  check("and Param falls back to signal",
+        M.lfo.param_key(L) == M.lfo.SIGNAL, tostring(M.lfo.param_key(L)))
+
+  M.patch.add(L, "gu.squall", 0.5)
+  M.patch.add(L, "oak", 0.5)
+  local dests = M.lfo.destinations(L)
+  check("both cabled cells are destinations", #dests == 2, tostring(#dests))
+  check("the first is the default target", M.lfo.target(L) == dests[1],
+        tostring(M.lfo.target(L)))
+
+  M.lfo.set_target(L, "oak")
+  check("and a chosen one sticks", M.lfo.target(L) == "oak",
+        tostring(M.lfo.target(L)))
+
+  -- pulling that cable drops the target rather than leaving it pointed at
+  -- something it no longer reaches.
+  M.patch.remove(L, "oak")
+  check("pulling the cable drops it", M.lfo.target(L) == "gu.squall",
+        tostring(M.lfo.target(L)))
+end
+
+print("\n-- Param: which knob of the target it moves --")
+do
+  local M = fresh(17)
+  local L = "lfo.flood"
+  M.patch.add(L, "gu.gale", 0.5)
+  M.lfo.set_target(L, "gu.gale")
+
+  local keys = M.lfo.param_keys(L)
+  check("signal is the first option", keys[1] == M.lfo.SIGNAL, tostring(keys[1]))
+  check("and every row of the gust page is offered",
+        #keys == M.gust.PARAM_COUNT + 1, tostring(#keys))
+
+  check("signal is the default", M.lfo.param_key(L) == M.lfo.SIGNAL)
+  check("and on signal it is not modulating anything",
+        M.lfo.modulates(L, "gu.gale") == false)
+
+  M.lfo.set_param_key(L, "timbre")
+  check("a chosen key sticks", M.lfo.param_key(L) == "timbre",
+        tostring(M.lfo.param_key(L)))
+  check("and now it is modulating that cell",
+        M.lfo.modulates(L, "gu.gale") == true)
+  check("but only that cell", M.lfo.modulates(L, "gu.haar") == false)
+end
+
+print("\n-- apply(): it moves the knob and leaves the stored value alone --")
+do
+  local M = fresh(18)
+  local L = "lfo.flood"
+  M.patch.add(L, "gu.gale", 0.5)
+  M.lfo.set_target(L, "gu.gale")
+  M.lfo.set_param_key(L, "timbre")
+  M.state.set_vparam(L, "depth", 0.4)
+  M.state.set_vparam("gu.gale", "timbre", 0.5)
+
+  local before = #CALLS.gust_timbre
+  local seen = {}
+  -- a quarter of a cycle at a time, so the sine is somewhere different on
+  -- each of the four passes rather than all four landing on the same phase.
+  M.state.set_vparam(L, "rate", 0.5)
+  local hz = M.lfo.rate_hz(L)
+  for _ = 1, 4 do
+    M.lfo.apply()
+    T = T + (0.25 / hz)
+    table.insert(seen, CALLS.gust_timbre[#CALLS.gust_timbre].v)
   end
-  check("a straight pass into the lattice", found ~= nil)
+
+  check("it pushed the engine once per pass",
+        #CALLS.gust_timbre - before == 4,
+        tostring(#CALLS.gust_timbre - before))
+  check("the pushed value actually moves", seen[1] ~= seen[2] or seen[2] ~= seen[3],
+        table.concat({tostring(seen[1]), tostring(seen[2]), tostring(seen[3])}, " "))
+  check("and it stays inside the knob's own range", (function()
+    for _, v in ipairs(seen) do
+      if v < 0 or v > 1 then return false end
+    end
+    return true
+  end)())
+  check("the stored value never moved",
+        math.abs(M.state.get_vparam("gu.gale", "timbre", 0.5) - 0.5) < 1e-9,
+        tostring(M.state.get_vparam("gu.gale", "timbre", 0.5)))
+
+  -- and dropping back to "signal" puts the knob back where the player left
+  -- it rather than leaving the engine at whatever the sine was at.
+  M.lfo.set_param_key(L, M.lfo.SIGNAL)
+  M.lfo.apply()
+  local last = CALLS.gust_timbre[#CALLS.gust_timbre]
+  check("leaving it restores the base value", math.abs(last.v - 0.5) < 1e-9,
+        tostring(last.v))
+end
+
+print("\n-- a modulating LFO is not also an audio cable --")
+do
+  local M = fresh(19)
+  local L = "lfo.flood"
+  M.patch.add(L, "gu.gale", 0.5)
+  local l = M.topology.get("lfo.flood")
+  local gu = M.topology.get("gu.gale")
+  local function live()
+    local n = 0
+    for _, c in ipairs(CALLS.patch_add) do
+      if c.src == M.bridge.bus("lfo_out", l.index)
+         and c.dst == M.bridge.bus("gust_mod", gu.index - 1) then n = n + 1 end
+    end
+    return n - #CALLS.patch_free
+  end
+  check("on signal, the audio cable exists", live() == 1, tostring(live()))
+
+  M.lfo.set_target(L, "gu.gale")
+  M.lfo.set_param_key(L, "timbre")
+  check("aiming it at a knob frees that cable", #CALLS.patch_free >= 1,
+        tostring(#CALLS.patch_free))
+
+  local adds = #CALLS.patch_add
+  M.lfo.set_param_key(L, M.lfo.SIGNAL)
+  check("and coming back to signal rebuilds it", #CALLS.patch_add > adds,
+        tostring(#CALLS.patch_add - adds))
 end
 
 print("\n-- wired to a gust: lands on its cross-mod input --")

@@ -7,8 +7,8 @@ A monome norns script for grid (128). Full design in
 
 A second re-cut of the panel, on top of everything build phases 1–7 (and 6b,
 6c, 6d) already built: an explicit Output row, one cable point per voice
-instead of four sockets, Climate replaced by a small Clock family, and two
-new step-sequencer lanes. Full detail and rationale in
+instead of four sockets, and Climate replaced by a small Clock family. Full
+detail and rationale in
 [`docs/canopy-spec.md`](docs/canopy-spec.md) §2/§9; this is the short version.
 
 Since then, five changes that are all about *playing* it rather than about
@@ -22,24 +22,53 @@ what it can make (spec §4.1b, §4.3, §5.1b, §5.2b):
 - three more soundscape loops join Rain (Cicada, Thunder, Sea) on a new
   **mixer page**, reached with `K3` and left with `K2`.
 
+And an interface pass on top of that, which is where the panel stands now:
+
+- **the heartwood is gone**, and the four seats it had are four **sample
+  players** — Rain, Cicada, Thunder and Sea. A pulse plays one, under a slow
+  attack and a slow fall you set per cell. They mix themselves, so they need
+  no Output cable;
+- **the mixer is built from the patch**: the master, then one fader for every
+  Output cell something is actually cabled to, appearing and disappearing
+  with the cables, up to sixteen. The four soundscape loops it used to carry
+  are the sample cells above;
+- **an LFO picks what it moves.** Cable one to a cell and its page gains a
+  **Target** and a **Param** row: pick any knob on that cell's own settings
+  page and the LFO moves it, by **Depth**, around wherever you left it;
+- **the screen says what a cell is in words** — `Voice: Oak`, `Trigger: Hob`,
+  `Exciter: Ember` — instead of the one-letter panel code (`M Oak`, `T Hob`)
+  there was no legend to look up;
+- the gusts are **Gust 1–12** and the clocks **Clock 1–4**, twelve and four of
+  one thing rather than twelve and four folk names;
+- a **clock cell divides down to 1/128** of a beat, not 1/8, with 1× on the
+  middle detent;
+- **Cross on a gust is deep enough to hear**: two gusts cabled together now
+  genuinely FM each other, over two octaves at full Cross;
+- **Scatter is Rain** and **Drops is Plonks** on the global page, which also
+  took the gusts' Space / Delay / Regen rows back from the mixer.
+
 ```
      1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
 1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
 2    ·   M   ·   M   ·   F   F   F   N   N   N   ·   M   ·   M   ·
 3    ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·
-4    F   ·   ·  TM  TM   C   T   T   T   T   C  TM  TM   ·   ·   H
-5    ·   F   ·   ·   ·   C   T   T   T   T   C   ·   ·   ·   H   ·
-6    E   ·   F   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   H   ·   R
-7    E   E   ·   F   ·   ·  Q4  Q4  Q4  Q4   ·   ·   H   ·   R   R
-8    E   E   E   ·   ·  Q6  Q6  Q6  Q6  Q6  Q6   ·   ·   R   R   R
+4    F   ·   ·  TM  TM   C   T   T   T   T   C  TM  TM   ·   ·   S
+5    ·   F   ·   ·   ·   C   T   T   T   T   C   ·   ·   ·   S   ·
+6    E   ·   F   ·   ·   ·   L   L   L   L   ·   ·   ·   S   ·   R
+7    E   E   ·   F   ·   G   G   G   G   G   G   ·   S   ·   R   R
+8    E   E   E   ·   ·   G   G   G   G   G   G   ·   ·   R   R   R
 ```
+
+`O` output · `M` voice · `F`/`N` percussion (ping / noise) · `TM` register ·
+`C` clock · `T` trigger · `S` sample player · `E` exciter · `R` weave ·
+`G` gust · `L` LFO · `F` (column 1–4 diagonal) pitch field.
 
 `·` is dark and inert — an unregistered coordinate, not a cell you can
 reach. The shape of what is left is what makes the panel readable.
 
 - **Nothing is heard by default.** The top row is sixteen Output cells;
   position sets pan, hard left to hard right. Cabling a voice, a percussion
-  cell, an exciter or a heartwood node to one is the only way it's ever
+  cell or an exciter to one is the only way it's ever
   audible — the fixed automatic panning every voice used to get for free is
   gone, along with the always-on mix that used to carry it.
 - **One cable point per voice, not four.** The old T/P/M/O socket cluster is
@@ -50,8 +79,8 @@ reach. The shape of what is left is what makes the panel readable.
   pair down among the exciters and the weave read as scenery and the panel
   looked like it had two voices on it. What a cable does when it lands there is decided by what's at
   the other end: a pulse always strikes it now (discrete choke is gone —
-  there's no socket left to carry the difference); a stream (an exciter or
-  the heartwood) always drives its mod path, per the sound page's own new
+  there's no socket left to carry the difference); a stream (an exciter, a
+  gust, an LFO) always drives its mod path, per the sound page's own new
   **Balance** knob; a field or a Turing Machine cell tunes it, per the new
   **Depth** knob; cabling to another voice is fully symmetric — each side's
   audio feeds the other's mod path, and either can strike the other.
@@ -68,25 +97,26 @@ reach. The shape of what is left is what makes the panel readable.
   (three pinged filters, three noise bursts) are unchanged mechanically but
   now sit in row 2 next to the voices, reading **F** (ping) and **N**
   (noise) on the panel instead of **G**.
-- **Two new step-sequencer lanes, Q4 and Q6.** No phase of their own, like a
-  Turing Machine — only a pulse cabled in moves them. Every physical cell in
-  a lane is independently switchable on and off (`K1`+tap it, or the **Step**
-  row on its page) and independently cable-able; the *last* cell in a lane is
-  the "driver" — a pulse there advances the lane's shared playhead and fires
-  whichever step it lands on, while a pulse on any other cell in the lane
-  fires that step directly, bypassing the playhead entirely. Both lanes are
-  centred on the panel, Q4 sitting symmetrically inside Q6, and the three
-  states a cell can be in — empty, armed, and under the playhead — are spread
-  across the brightness range rather than bunched at the bottom, so a running
-  lane visibly runs.
-- **The weave, heartwood, grove and exciters are all trimmed**, not changed:
-  6 weave rules (was 14), a 4-node heartwood chain (was an 8-node ring), 4
-  pitch fields (was 8), 6 exciters (was 20). Every weave rule and grove mode
-  not given a dedicated seat is still reachable from the **Rule** / **Mode**
-  row on that cell's settings page.
+- **The bottom two rows are twelve gusts.** Two step-sequencer lanes (Q4 and
+  Q6) sat here briefly and are gone: what the panel wanted there was not
+  another way to make a pulse — it already has T, C, R and TM — but something
+  to *play*. A gust is a small drone synth, loosely a Ciat-Lonbarde Deerhorn:
+  a folded triangle under a slow swell and a slow fall you set per cell.
+  Press one and it sounds; a pulse cabled in sounds it too. Like a sample
+  cell it is heard without an Output cable, panned by the column it sits in,
+  and all twelve share one delay line off the global page. Cable two together
+  and they FM each other, as deeply as **Cross** on each is turned up.
+- **Four LFOs sit on the row above them.** Plain sines, one knob each until
+  you cable one somewhere — see **Target** and **Param** above.
+- **The weave, grove and exciters are all trimmed**, not changed: 6 weave
+  rules (was 14), 4 pitch fields (was 8), 6 exciters (was 20). Every weave
+  rule and grove mode not given a dedicated seat is still reachable from the
+  **Rule** / **Mode** row on that cell's settings page. The heartwood was
+  trimmed too, from an 8-node ring to a 4-node chain, before being cut
+  outright — see the sample players above.
 
 Everything from build phases 1–7 not mentioned above — the gait bank, the
-Kuramoto coupling, Swing/Scatter, Regrow (now also wiring exactly one Output
+Kuramoto coupling, Swing/Rain, Regrow (now also wiring exactly one Output
 cable per voice, or a regrown patch would be silent), the sound page shape —
 is unchanged. See `docs/canopy-spec.md` for the full build-order history.
 
@@ -127,46 +157,66 @@ panel has a gesture that only it responds to any more.
   close). A list longer than eight pages rather than crowding; the header's
   dots say which page you are on. What used to be a modifier gesture is a
   widget on the page now: a T cell's **Gait** and **Clock** (rooted / wild),
-  an R cell's **Rule**, an F cell's **Mode** and **Snap**, a sequencer
-  step's **Step**, an E cell's **Decay**.
+  an R cell's **Rule**, an F cell's **Mode** and **Snap**, a C cell's
+  **Ratio**, an E cell's **Decay**.
 - **With a page open, the panel dims to that cell.** The cell you are
   inspecting goes to full, what it is cabled to stays readable, and
   everything else drops to a floor — so the grid is showing the same one
   thing the screen is. Close the page and the panel comes back.
 - **`K1` + tap fires the cell**, whatever it is: a voice or a percussion cell
   strikes, an exciter fires one grain, a T / R / TM / C cell sends one pulse
-  out of its own door, and a Q4/Q6 cell puts its step in or takes it out.
-  This is how you audition a voice without patching anything — and if nothing
-  it makes can reach an Output cell, directly or down the chain, it says
-  **no output cable** rather than leaving you wondering.
-- Nothing held: `E1` picks one of seven global params (BPM, Swing, Scatter,
-  Scale, Drops, Decay, Pitch), `E2`/`E3` nudge it coarse/fine. `K1`+`E3` is
-  the master level.
+  out of its own door, and a gust or a sample cell plays. This is how you
+  audition a voice without patching anything — and if nothing it makes can
+  reach an Output cell, directly or down the chain, it says **no output
+  cable** rather than leaving you wondering. Gusts and sample cells are
+  exempt: they route themselves, so having no output cable is their normal
+  state rather than the confusing one that warning exists for.
+- Nothing held: `E1` picks one of ten global params — BPM, Swing, Rain,
+  Scale, Plonks, Decay, Pitch, then the gusts' shared delay line (Space,
+  Delay, Regen) on a second page — and `E2`/`E3` nudge it coarse/fine.
+  `K1`+`E3` is the master level.
 - **`K3` is the mixer, `K2` is back.** `K3` opens the mixer from anywhere,
   including from an open cell page — which it closes on the way, dropping
   that cell's focus. `K2` is the way back up: off the mixer, or out of a cell
   page, to the main screen. On the main screen, with nothing to come back
   from, `K2` is Still as it always was.
-- **Swing and Scatter are the groove knobs.** At Swing 0 / Scatter 0 every
+- **Swing and Rain are the groove knobs.** At Swing 0 / Rain 0 every
   pulse — however freely its cell runs — snaps onto a grid line, and
   unrelated gaits cohere into one groove: each cell quantises to the coarsest
   of 8th/16th/32nd/64th that fits inside its own cycle, and a burst is
   triggered on the beat with its ratchet on a subdivision. Turning Swing up
-  warps the grid so off-beats land late and beats stay put. Turning Scatter
+  warps the grid so off-beats land late and beats stay put. Turning Rain
   up loosens the snap and grows jitter in its place, until at 1 nothing is
-  held at all — Scatter also scales gait-rate drift, D↔D coupling and
-  pitch-field wander. What the weave emits is deliberately *not*
+  held at all — Rain also scales gait-rate drift, D↔D coupling and
+  pitch-field wander. (It reads **Rain** on the panel and `scatter` in the
+  code: the rename is of the word, not of the mechanism.) What the weave emits is deliberately *not*
   re-quantised — those pulses are derived from one that was already placed,
   and snapping a flam or a swung off-beat back onto the grid would undo the
   only thing it does.
-- **The mixer is four soundscape loops and the master.** `audio/Rain.wav`,
-  `Cicada.wav`, `Thunder.wav` and `Sea.wav` all loop from init regardless of
-  anything else on the panel; each fader is that loop's own dry level in the
-  mix, 0 by default, so nothing says anything until it is asked to. They are
-  a dry mix and nothing else — there is no path from a loop into a voice's
-  resonator. (There used to be, when Rain was alone: the old **Excite** knob.
-  It is gone rather than multiplied by four. The six E cells are still the
-  panel's excitation sources.)
+- **The mixer is the master and your live outputs.** It has no fixed
+  contents: a fader appears for an Output cell the moment something is cabled
+  to it, and goes again when the cable is pulled, up to sixteen. An unpatched
+  patch is one fader and a lot of space, which is the honest picture. A
+  channel starts at unity, so a fader that has just appeared is not also
+  silent. The fader and the cable's own gain are different things: the gain
+  says how much of *that source* arrives at that pan position, and the fader
+  is everything arriving there, together, after the fact.
+- **The four field recordings are cells now.** `audio/Rain.wav`,
+  `Cicada.wav`, `Thunder.wav` and `Sea.wav` used to loop from init with a
+  fader each. They are the four **S** cells on the right-hand diagonal
+  instead: a pulse plays one from the top under an attack and a fall you set
+  per cell, up to twenty seconds in and forty out. Like a gust, one is heard
+  without being cabled to the Output row — it pans itself by where it sits
+  and mixes itself in. There is no path from one into a voice's resonator;
+  the six E cells are still the panel's excitation sources.
+- **An LFO picks what it moves.** Cable one anywhere and its page gains
+  **Target** (which of the cells it is cabled to) and **Param** (which row of
+  *that cell's* own settings page). It then moves exactly that knob, by
+  **Depth**, around wherever you left it — the stored value never moves, so
+  the screen keeps showing where you put it and turning it still works while
+  the LFO runs. Param's first entry is **signal**, the old behaviour: no knob
+  is modulated and the cable stays the plain audio-rate one, which is what an
+  LFO cabled to an Output cell (a sine tone) wants.
 - **One source, one Output slot.** Position along the Output row *is* pan, so
   cabling a source to a second Out cell **moves** it rather than adding a
   second cable — the gesture reads as dragging it along the row. It keeps the
@@ -174,9 +224,10 @@ panel has a gesture that only it responds to any more.
 - **Externally clocked.** Set `PARAMS > CLOCK > source` to **MIDI** (or Link)
   and the whole patch runs off it: the tempo, every clock-rooted T cell, and
   Start / Stop. A **Stop** is Still — gaits freeze, resonators ring out, and
-  nothing that was in flight floods out when it resumes. A **Start** unfreezes
-  and puts both sequencer lanes back to the top. With an external source
-  selected, the BPM row becomes a readout and says `ext`.
+  nothing that was in flight floods out when it resumes. A **Start**
+  unfreezes and drops whatever the freeze caught mid-flight rather than
+  flushing it. With an external source selected, the BPM row becomes a
+  readout and says `ext`.
 - `K1`+`K2` (hold ~1s): Regrow — a seeded patch that already plays.
 - `K1`+`K3` (hold ~1s): Clearing — cut every cable.
 
@@ -188,40 +239,42 @@ lib/
   topology.lua              the map: cell records, coords, types, adjacency
   lexicon.lua               names, descriptions, each cell type's one knob
   patch.lua                 the cable graph: add/remove/trim, serialisation
-  quantise.lua              the groove: Swing/Scatter place a gait's emission
+  quantise.lua              the groove: Swing/Rain place a gait's emission
   state.lua                 shared runtime UI state
   gridui.lua                grid render + the one gesture vocabulary
   cellparam.lua             a settings page for every cell type that did
-                             not already have one (T, R, F, E, H, C, Q, Out)
+                             not already have one (T, R, F, E, C, Out)
   screenui.lua              the widget grid: the global page, the mixer
                              page, the cell page, the edge view, the map
   glyph.lua                 the shape vocabulary: twenty-two drawn shapes,
                              one per parameter, no two alike
-  mixer.lua                 the four soundscape loops + the master (§4.1b)
+  mixer.lua                 the master + one fader per live output (§4.1b)
   dispatch.lua              §6 type-interaction matrix: pulse events
-                             (-> voice, GVOICE, E, F, H) and the continuous
-                             patch matrix (E<->E, E->voice, E<->H, H<->H,
-                             H->voice, voice<->voice, *->O)
+                             (-> voice, GVOICE, GUST, SMP, E, F) and the
+                             continuous patch matrix (E<->E, E->voice,
+                             voice<->voice, GUST<->*, LFO->*, *->O)
   rambler.lua               the eight T-cell gaits, the coupling scheduler,
                              and the shared pulse bus everything emits through
   weave.lua                 the six R-cell pulse transforms
   clockcell.lua             the four C-cell clock flashers (§2.9)
-  sequencer.lua             the Q4/Q6 step-sequencer lanes (§2.10)
   voice.lua                 the eleven-parameter voice sound page (§5.5)
-  gparam.lua                the seven-parameter global page (§4.1, §5.2)
+  gparam.lua                the ten-parameter global page (§4.1, §5.2)
   exciter.lua               E-cell control layer: lazy alloc, gating, Colour
-  heartwood.lua             the diffusion lattice's discrete-event side
+  sample.lua                the four S-cell sample players (§2.5)
+  gust.lua                  the twelve G-cell drone synths (§2.11)
+  lfo.lua                   the four L-cell sines, and what each one moves
   grove.lua                 the pitch fields: modes, coupling, voice retuning
   gvoice.lua                the six GVOICE-cell drums + their sound page
   bridge.lua                Lua-side wrapper around the engine commands
   Engine_Canopy.sc          SC: four modal voices, six percussion cells, six
-                             exciters, the patch matrix, the four-node
-                             heartwood, the Output row's fixed-pan mix
+                             exciters, twelve gusts, four sample players,
+                             four sines, the patch matrix, the Output row's
+                             fixed-pan mix
 audio/
-  Rain.wav                  the four always-on soundscape loops, mixed on
-  Cicada.wav                 the mixer page (K3). ~66 MB together; Thunder
-  Thunder.wav                and Cicada are minutes long, so between them
-  Sea.wav                    they hold ~130 MB of scsynth buffer at runtime
+  Rain.wav                  one per S cell, played rather than looped.
+  Cicada.wav                 ~66 MB together; Thunder and Cicada are minutes
+  Thunder.wav                long, so between them they hold ~130 MB of
+  Sea.wav                    scsynth buffer at runtime
 test/
   run.sh                    offline test run (needs `lua`, no hardware)
   sc_check.sh               headless SuperCollider compile/load check
@@ -263,12 +316,6 @@ to actually render audio.
   the master clock, Ratio changes take effect, it never reacts to an
   incoming pulse (a pure source, same as Climate always was), and it
   freezes under Still.
-- `sequencer.lua` — Q4/Q6 lane registration and driver flags, toggling a
-  step affects only that step, a pulse on a non-driver step fires it
-  directly regardless of the playhead, a pulse on the driver advances the
-  playhead and fires whichever step it lands on only if that step is
-  active, and a SEQ↔SEQ cable loop stays bounded the same way a TM↔TM one
-  does.
 - `screen.lua` — nothing on the 128x64 panel may overlap anything else. A
   recording screen stub gives every draw a bounding box, and every view the
   script can be in — the global page, the mixer, every widget of every cell's
@@ -287,14 +334,14 @@ to actually render audio.
   a geometry check cannot tell you whether a Decay looks like a decay.
   `ROOT=$(pwd) SP=$(pwd)/test lua test/render.lua <outdir>`
 - `gridui.lua` — the panel is key-for-key what the sketch it was drawn from
-  says, all four voices are on row 2, both sequencer lanes are centred; a tap
-  opens and closes the settings page on every cell type; `K1`+tap strikes a
-  voice or a drum, grains an exciter, pulses a trigger and toggles a
-  sequencer step, and warns when a voice has no path to an Output; the
-  hold/tap cable gesture and its one-way variant are unharmed by either.
-- `groove.lua` — the Swing/Scatter groove: divisions, lock, Swing ramping in
+  says, all four voices are on row 2, and both gust rows and the LFO row
+  above them are centred; a tap opens and closes the settings page on every
+  cell type; `K1`+tap strikes a voice or a drum, grains an exciter, pulses a
+  trigger and sounds a gust, and warns when a voice has no path to an Output;
+  the hold/tap cable gesture and its one-way variant are unharmed by either.
+- `groove.lua` — the Swing/Rain groove: divisions, lock, Swing ramping in
   and landing off-beats late without moving the grid, bursts triggered on the
-  beat, Scatter letting go independently of Swing, and the grid following the
+  beat, Rain letting go independently of Swing, and the grid following the
   transport.
 - `decay.lua` — every voice decays against its own id directly (no more
   socket to forward through), an exciter gets the same knob as a ratio, and
@@ -304,12 +351,13 @@ to actually render audio.
   spec (the exciter driving the voice's mod path, and the voice colouring
   the exciter) on one ordinary cable, and to only the relevant half on a
   one-way one.
-- `heartwood.lua` — trimmed to the 4-node chain (`taproot`–`mycel`–`wyrd`–
-  `ley`): a pulse injected at one end emerges from the others later and
-  quieter, conductance spanning "dies within one hop" to "circulates", an
-  H↔H shortcut closing a loop a bare chain can't, a T→H→T loop staying
-  bounded, and the continuous matrix resolving a voice↔H cable to both
-  directions at once, the same shape as voice↔exciter.
+- `sample.lua` — the four sample cells on the seats the heartwood had, and
+  no `H` cell left anywhere; one buffer loaded per cell at the engine index
+  the `.sc` file expects; the envelope centred on each cell's own default and
+  reaching seconds at the middle of the knob; the global Decay macro reaching
+  them; a pulse playing one and — unlike a drum or a gust — nothing coming
+  back out, so a cable loop through one cannot run away; and `K1`+tap firing
+  one without the "no output cable" warning, because it needs none.
 - `grove.lua` — trimmed to the 4 surviving fields: a cabled field retunes
   the voice *before* the strike, Range bounds it, snap lands on scale
   tones, a pulse steps a field with nothing struck, F↔F converges at
@@ -329,17 +377,21 @@ to actually render audio.
   directly (no more P socket to route through).
 - `gparam.lua` — the global param page: E1 clamped at both ends, BPM's
   coarse/fine steps and clock/floor/ceiling clamping, Scale's one-entry-per-
-  flick detent, Drops widening the per-strike spread, global Decay and
-  Pitch reaching the engine for every voice at once, and an external clock
+  flick detent, Plonks widening the per-strike spread, global Decay and
+  Pitch reaching the engine for every voice at once, the gusts' delay line
+  closing the list on a second page, and an external clock
   source turning BPM into a readout that follows the incoming tempo.
-- `mixer.lua` — the four soundscape loops load once each at the engine
-  indices the `.sc` file expects, each fader is independent and forwards to
-  its own loop, no loop excites anything, `K3`/`K2` move between the main
-  screen, a cell page and the mixer in the documented order, and an external
-  Start/Stop freezes and unfreezes the patch, resets the sequencer lanes and
-  does not flood on resume.
+- `mixer.lua` — the four recordings load once each at the engine indices the
+  `.sc` file expects (they belong to the sample cells now, not to this page);
+  the page is built from the patch, growing a fader as an Output cell is
+  cabled to and losing it again when the cable is pulled, master always
+  first and never more than sixteen channels after it; each channel is an
+  independent 0..1 knob that forwards to its own output; `K3`/`K2` move
+  between the main screen, a cell page and the mixer in the documented order;
+  and an external Start/Stop freezes and unfreezes the patch without flooding
+  on resume.
 - `smoke.lua` — loads `Canopy.lua` itself and exercises every screen
-  view, the sound page, and every control against the new 72-cell panel.
+  view, the sound page, and every control against the 78-cell panel.
 - `soak.lua` — the same, but against a *strict* norns stub: `screen`, `util`
   and `clock` expose only the functions norns actually has, so calling one it
   doesn't is an error rather than a silent no-op. Redraws from every state
@@ -347,8 +399,9 @@ to actually render audio.
   global page with a live patch), thousands of random gestures with the
   scheduler running, and the per-frame screen command and paint budgets.
   This is the test that catches "the screen died but the grid still works".
-- `perf.lua` — what the 2 ms tick costs, including the new Clock and
-  sequencer ticks. Cheap on a dev machine, but the CM3 is the budget that
+- `perf.lua` — what the 2 ms tick costs, including the Clock cells and the
+  LFOs' control-rate work (driven there at the tick rather than at
+  Canopy.lua's 40 Hz metro, so that row is a deliberate overestimate). Cheap on a dev machine, but the CM3 is the budget that
   matters, so re-check it there if the scheduler ever feels like the thing
   making the UI stutter.
 
@@ -383,5 +436,5 @@ the same thing Maiden's compile log tells you on-device, runnable locally.
 `Crone.context` is only set once the server's async boot finishes, so the
 check polls for it rather than guessing a fixed delay (a fixed delay races
 the boot and makes `Engine_Canopy:alloc`'s `context.server` read a nil
-context). This check never calls `amb_load`, so it never touches the
-samples under `audio/` — an unloaded loop is silent, not an error.
+context). This check never calls `smp_load`, so it never touches the
+samples under `audio/` — an unloaded sample cell is silent, not an error.

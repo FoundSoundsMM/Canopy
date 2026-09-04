@@ -21,13 +21,67 @@ local state    = wl("state")
 
 local clockcell = {}
 
--- E2 (Ratio): a small integer division/multiplication of the master clock,
--- log-ish spaced around "1 x beat" so both directions get a fair share of
--- the knob.
+-- E2 (Ratio): a division or multiplication of the master clock, log-ish
+-- spaced around "1 x beat" so both directions get a fair share of the knob.
+--
+-- the slow end used to stop at 1/8 -- one pulse every eight beats, which at
+-- 120 BPM is a pulse every four seconds. that is nowhere near slow enough for
+-- what these cells are best at: a clock that fires once a bar is a rhythm,
+-- and a clock that fires once every thirty-two bars is an event you build a
+-- piece around. so it runs down to 1/128 now, which is one pulse every
+-- sixty-four seconds at 120 BPM, and the whole span reads in bars as well as
+-- in beats -- 1/4 is a bar in four, 1/16 is four bars, 1/64 is sixteen.
+--
+-- the fast end is unchanged. above 8x a clock cell stops being a clock and
+-- becomes a buzz, and there are eight free-running gaits (§2.3) for that.
+-- one more thing the low end costs: the list is no longer symmetric, and a
+-- knob that maps evenly across an asymmetric list does not put 1x at its
+-- centre. thirteen divisions and five multiples would leave the default (a
+-- fresh cell sits at 0.5) on 1/6, which is not a default anybody wants.
+--
+-- so the knob is split at the middle instead of spread evenly: the bottom
+-- half walks the divisions, the top half walks the multiples, and 1x sits
+-- exactly on the centre detent whatever is on either side of it. that is
+-- also the better feel -- "slower" is one direction and "faster" is the
+-- other, from a middle you can find without looking.
 local RATIOS = {
-  {1/8, "1/8 x"}, {1/4, "1/4 x"}, {1/3, "1/3 x"}, {1/2, "1/2 x"}, {1, "1 x"},
-  {2, "2 x"}, {3, "3 x"}, {4, "4 x"}, {8, "8 x"},
+  {1/128, "1/128"}, {1/96, "1/96"}, {1/64, "1/64"}, {1/48, "1/48"},
+  {1/32, "1/32"},   {1/24, "1/24"}, {1/16, "1/16"}, {1/12, "1/12"},
+  {1/8, "1/8"},     {1/6, "1/6"},   {1/4, "1/4"},   {1/3, "1/3"},
+  {1/2, "1/2"},
+  {1, "1 x"},                      -- UNITY, the centre of the knob
+  {2, "2 x"},       {3, "3 x"},     {4, "4 x"},     {6, "6 x"}, {8, "8 x"},
 }
+
+local UNITY = 14   -- index of {1, "1 x"} above
+
+clockcell.RATIOS = RATIOS
+clockcell.UNITY = UNITY
+
+-- 0..1 knob -> index into RATIOS, with 1x on the middle detent.
+function clockcell.index_for(v)
+  v = util.clamp(v or 0.5, 0, 1)
+  if v <= 0.5 then
+    return util.clamp(math.floor(1 + (v * 2) * (UNITY - 1) + 0.5), 1, UNITY)
+  end
+  return util.clamp(
+    math.floor(UNITY + ((v - 0.5) * 2) * (#RATIOS - UNITY) + 0.5), UNITY, #RATIOS)
+end
+
+-- the inverse, at the centre of that index's band -- what a test or a preset
+-- writes into state.character to land on a named ratio.
+function clockcell.char_for_index(i)
+  i = util.clamp(i, 1, #RATIOS)
+  if i <= UNITY then return (i - 1) / (2 * (UNITY - 1)) end
+  return 0.5 + (i - UNITY) / (2 * (#RATIOS - UNITY))
+end
+
+function clockcell.char_for_ratio(r)
+  for i, entry in ipairs(RATIOS) do
+    if math.abs(entry[1] - r) < 1e-9 then return clockcell.char_for_index(i) end
+  end
+  return nil
+end
 
 local cells = {}   -- id -> record
 local order = {}   -- ids, stable iteration order
@@ -39,8 +93,8 @@ end
 function clockcell.ratio(id)
   local c = cells[id]
   if not c then return 1, "1 x" end
-  local i = util.clamp(math.floor(char(c) * (#RATIOS - 1) + 0.5), 0, #RATIOS - 1) + 1
-  return RATIOS[i][1], RATIOS[i][2]
+  local entry = RATIOS[clockcell.index_for(char(c))]
+  return entry[1], entry[2]
 end
 
 for id, cell in topology.each() do

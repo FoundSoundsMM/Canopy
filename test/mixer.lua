@@ -1,10 +1,12 @@
 -- §4.1b the mixer page (lib/mixer.lua) and §4.3 the external transport
 -- (Canopy.lua's clock.transport handlers).
 --
--- covers: (1) the four soundscape loops are declared once and load once, at
--- the engine indices the .sc file expects; (2) each fader is an independent
--- 0..1 knob that reaches the engine, the master is the fifth, and the gusts'
--- shared delay line (§2.11) fills the page out to exactly one screen; (3) K3 and
+-- covers: (1) the four field recordings load once each at init, at the engine
+-- indices the .sc file expects -- they belong to the Sample cells now (§2.5)
+-- rather than to this page; (2) the page is built from the patch, growing a
+-- fader as an Output cell is cabled to and losing it again when the cable is
+-- pulled, with the master always first and never more than sixteen channels
+-- after it; (3) K3 and
 -- K2 move between the main screen, an open cell page and the mixer in the
 -- shape Canopy.lua's header describes -- including K3 dropping a cell's
 -- focus on the way; (4) an external Start/Stop freezes and unfreezes the
@@ -45,87 +47,146 @@ local function press(n)
   key(n, 0)
 end
 
--- 1: the loops ---------------------------------------------------------------
+-- 1: the sample cells' recordings load once each ----------------------------
 
-print("\n-- four loops, loaded once each --")
+print("\n-- the four recordings load once each, at the engine's own slots --")
 do
-  check("four of them", mixer.LOOP_COUNT == 4, tostring(mixer.LOOP_COUNT))
-  check("Rain keeps index 0", mixer.LOOPS[1].key == "rain"
-        and mixer.LOOPS[1].index == 0)
-
-  local names = {}
-  for _, l in ipairs(mixer.LOOPS) do names[l.key] = l end
-  for _, k in ipairs({"rain", "cicada", "thunder", "sea"}) do
-    check(k .. " is one of them", names[k] ~= nil)
-  end
-
-  check("init loaded exactly four samples", #CALLS.amb_load == 4,
-        tostring(#CALLS.amb_load))
+  -- these used to be the mixer's four always-on loops. they are the four
+  -- Sample cells now (§2.5, lib/sample.lua) and the mixer knows nothing about
+  -- them -- but they still have to be loaded exactly once at init, at the
+  -- indices the .sc file expects, which is what this checks.
+  check("init loaded exactly four samples", #CALLS.smp_load == 4,
+        tostring(#CALLS.smp_load))
   local seen, paths_ok = {}, true
-  for _, c in ipairs(CALLS.amb_load) do
+  for _, c in ipairs(CALLS.smp_load) do
     seen[c.index] = true
     if not c.path:match("/audio/[A-Za-z]+%.wav$") then paths_ok = false end
   end
   check("at indices 0..3", seen[0] and seen[1] and seen[2] and seen[3])
   check("each an absolute path under audio/", paths_ok,
-        CALLS.amb_load[1] and CALLS.amb_load[1].path)
+        CALLS.smp_load[1] and CALLS.smp_load[1].path)
+
+  check("and no ambience loop is left anywhere", engine.amb_load == nil
+        or CALLS.amb_load == nil)
 end
 
--- 2: the faders --------------------------------------------------------------
+-- 2: the page is built from the patch ----------------------------------------
 
-print("\n-- eight rows: four loops, the master, and the gusts' delay line --")
+print("\n-- with nothing patched, the mixer is the master and nothing else --")
 do
-  -- eight is exactly one screen (screenui.PARAMS_PER_PAGE), which is why the
-  -- gusts' shared delay line (§2.11) lives here rather than pushing the
-  -- seven-row global page onto a second page.
-  check("eight rows", mixer.PARAM_COUNT == 8, tostring(mixer.PARAM_COUNT))
-  check("the master closes the faders", mixer.PARAMS[5].key == "master")
-  check("then Space, Delay and Regen",
-        mixer.PARAMS[6].key == "gust_space"
-        and mixer.PARAMS[7].key == "gust_delay"
-        and mixer.PARAMS[8].key == "gust_regen")
+  patch.clear()
+  check("one row", mixer.PARAM_COUNT == 1, tostring(mixer.PARAM_COUNT))
+  check("and it is the master", mixer.PARAMS[1].key == "master")
+end
 
-  check("every loop starts silent",
-        mixer.get_level("rain") == 0 and mixer.get_level("sea") == 0)
+print("\n-- a fader appears as its output is used, and goes when it is not --")
+do
+  patch.clear()
+  patch.add("oak", "o.5", 0.8)
+  check("two rows now", mixer.PARAM_COUNT == 2, tostring(mixer.PARAM_COUNT))
+  check("the new one is Out 5", mixer.PARAMS[2].label == "Out 5",
+        mixer.PARAMS[2].label)
+  check("and it comes up at unity, not silent",
+        mixer.get_level("o.5") == 1, tostring(mixer.get_level("o.5")))
 
-  mixer.nudge(2, 10000, true)            -- Cicada, all the way up
-  check("a fader clamps at 1", mixer.get_level("cicada") == 1,
-        tostring(mixer.get_level("cicada")))
-  check("and reached the engine at its own index",
-        last_for(CALLS.amb_volume, 1)
-        and math.abs(last_for(CALLS.amb_volume, 1).v - 1) < 1e-6,
-        tostring(last_for(CALLS.amb_volume, 1)
-                 and last_for(CALLS.amb_volume, 1).v))
-  check("without moving anybody else", mixer.get_level("rain") == 0
-        and mixer.get_level("thunder") == 0 and mixer.get_level("sea") == 0)
+  patch.add("hazel", "o.2", 0.8)
+  check("a second output, a third row", mixer.PARAM_COUNT == 3,
+        tostring(mixer.PARAM_COUNT))
+  -- row order is Output-row order, which is also left-to-right in the stereo
+  -- field: the page reads the way the image sounds.
+  check("in row order, not the order they were patched",
+        mixer.PARAMS[2].label == "Out 2" and mixer.PARAMS[3].label == "Out 5",
+        mixer.PARAMS[2].label .. " " .. mixer.PARAMS[3].label)
+
+  -- two sources landing on one output is one channel, not two.
+  patch.add("alder", "o.2", 0.8)
+  check("two sources on one output is still one fader",
+        mixer.PARAM_COUNT == 3, tostring(mixer.PARAM_COUNT))
+
+  patch.remove("oak", "o.5")
+  check("pulling the cable takes the fader with it", mixer.PARAM_COUNT == 2,
+        tostring(mixer.PARAM_COUNT))
+  check("but the level it was left at is remembered",
+        mixer.get_level("o.5") == 1)
+
+  patch.clear()
+  check("clearing every cable leaves the master alone",
+        mixer.PARAM_COUNT == 1, tostring(mixer.PARAM_COUNT))
+end
+
+print("\n-- and never more than sixteen of them --")
+do
+  patch.clear()
+  for x = 1, 16 do patch.add("oak", "o." .. x, 0.5) end
+  -- the Output row is exclusive (patch.lua's displace_output): one source
+  -- sits at one pan position, so sixteen cables from one voice is one
+  -- channel. cable a different source to each to fill the row.
+  check("one source can only ever be on one output", mixer.PARAM_COUNT == 2,
+        tostring(mixer.PARAM_COUNT))
+
+  patch.clear()
+  local sources = {"oak", "hazel", "alder", "rowan",
+                   "gv.yaffle", "gv.knap", "gv.clapper",
+                   "gv.scree", "gv.chaff", "gv.rattle",
+                   "e.bracken", "e.gorse", "e.ember",
+                   "e.windfall", "e.mistle", "e.wisp"}
+  for x, src in ipairs(sources) do patch.add(src, "o." .. x, 0.5) end
+  check("a full row is sixteen faders and the master",
+        mixer.PARAM_COUNT == 17, tostring(mixer.PARAM_COUNT))
+  check("which is the cap the Output row itself sets",
+        mixer.PARAM_COUNT - 1 == mixer.MAX_CHANNELS)
+  patch.clear()
+end
+
+-- 3: the faders themselves ---------------------------------------------------
+
+print("\n-- each channel is an independent 0..1 knob that reaches the engine --")
+do
+  patch.clear()
+  patch.add("oak", "o.3", 0.8)
+  patch.add("hazel", "o.9", 0.8)
+  -- rows: 1 master, 2 Out 3, 3 Out 9
+  local o3 = mixer.PARAMS[2]
+  check("row 2 is Out 3", o3.label == "Out 3", o3.label)
 
   mixer.nudge(2, -10000, true)
-  check("and clamps at 0 on the way back", mixer.get_level("cicada") == 0)
+  check("a fader clamps at 0", mixer.get_level("o.3") == 0,
+        tostring(mixer.get_level("o.3")))
+  check("and reached the engine at that output's own index",
+        last_for(CALLS.out_level, 2)
+        and math.abs(last_for(CALLS.out_level, 2).v) < 1e-6,
+        tostring(last_for(CALLS.out_level, 2)
+                 and last_for(CALLS.out_level, 2).v))
+  check("without moving anybody else", mixer.get_level("o.9") == 1)
+
+  mixer.nudge(2, 10000, true)
+  check("and clamps at 1 on the way back", mixer.get_level("o.3") == 1)
 
   -- coarse and fine are the same two steps every other page uses
+  mixer.set_level("o.9", 0)
   mixer.nudge(3, 8, true)
-  local coarse = mixer.get_level("thunder")
+  local coarse = mixer.get_level("o.9")
   check("coarse is 1/80 a detent", math.abs(coarse - 8 / 80) < 1e-9,
         tostring(coarse))
   mixer.nudge(3, 8, false)
-  check("fine is 1/500", math.abs(mixer.get_level("thunder")
+  check("fine is 1/500", math.abs(mixer.get_level("o.9")
                                   - (coarse + 8 / 500)) < 1e-9,
-        tostring(mixer.get_level("thunder")))
+        tostring(mixer.get_level("o.9")))
 
   -- the master is the same number K1+E3 has always moved
   state.global.level = 0.8
-  mixer.nudge(5, 16, true)
-  check("the master fader is master level", math.abs(state.global.level - 1.0) < 1e-9,
-        tostring(state.global.level))
+  mixer.nudge(1, 16, true)
+  check("the master fader is master level",
+        math.abs(state.global.level - 1.0) < 1e-9, tostring(state.global.level))
 
-  -- and no fader has an excite of any kind: the loops are a dry mix
-  local excite_row = false
+  -- and the gusts' delay line is not here any more: it is a room, not a
+  -- channel, and it went to the global page (gparam.lua).
+  local room_row = false
   for _, p in ipairs(mixer.PARAMS) do
-    if p.key:match("exc") then excite_row = true end
+    if p.key:match("^gust") then room_row = true end
   end
-  check("no loop excites the voices", not excite_row)
-  check("and the engine was never asked to", engine.amb_excite == nil
-        or CALLS.amb_excite == nil)
+  check("no delay-line row is left on this page", not room_row)
+  patch.clear()
 end
 
 -- 3: K3 there, K2 back -------------------------------------------------------
@@ -170,19 +231,26 @@ do
   press(2)
   check("and resumes", state.global.still == false)
 
-  -- the encoders follow the screen
+  -- the encoders follow the screen. the page is built from the patch, so
+  -- give it something to show first -- with nothing cabled it is one row and
+  -- there is nothing for E1 to walk.
+  patch.clear()
+  patch.add("oak", "o.4", 0.8)
+  patch.add("hazel", "o.8", 0.8)
+  patch.add("alder", "o.12", 0.8)
   state.view = "mixer"
   state.mparam_focus = 1
   enc(1, 3)
   check("E1 walks the mixer's own focus", state.mparam_focus == 4,
         tostring(state.mparam_focus))
   enc(1, 99)
-  check("clamped to the last row", state.mparam_focus == 8,
-        tostring(state.mparam_focus))
+  check("clamped to the last row", state.mparam_focus == mixer.PARAM_COUNT,
+        tostring(state.mparam_focus) .. "/" .. tostring(mixer.PARAM_COUNT))
   local before = state.global.bpm
   enc(2, 5)
   check("E2 on the mixer does not touch the global page",
         state.global.bpm == before, tostring(state.global.bpm))
+  patch.clear()
   state.view = "global"
 end
 

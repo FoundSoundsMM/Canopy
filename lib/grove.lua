@@ -25,7 +25,7 @@
 -- itself exactly.
 --
 -- dependency note: dispatch.lua requires this file at load, so -- exactly as
--- in heartwood.lua -- this one must not require dispatch or rambler at load.
+-- this one must not require dispatch or rambler at load.
 -- both are fetched lazily inside the functions that need them.
 
 local topology = wl("topology")
@@ -333,7 +333,7 @@ function grove.degree(id)
 end
 
 -- link caching -----------------------------------------------------------------
--- same reasoning as rambler.lua's and heartwood.lua's: edges_at() allocates,
+-- same reasoning as rambler.lua's: edges_at() allocates,
 -- and this is read on the tick, so the lists are rebuilt only on a graph move.
 
 local function rebuild_links()
@@ -355,7 +355,7 @@ local function rebuild_links()
       local other_id = patch.other(edge, f.id)
       local other = topology.get(other_id)
       -- a one-way cable a->b only sends from a (§3), the rule rambler and
-      -- heartwood both use. a field is always the sender here: nothing on
+      -- the weave both use. a field is always the sender here: nothing on
       -- the far end of a P cable ever writes back into the field except
       -- another F cell, which is handled from that cell's own side.
       local can_send = (not edge.oneway) or (edge.a == f.id)
@@ -532,7 +532,7 @@ local function step_field(f, w, now)
 end
 
 -- a pulse cabled into an F cell (from a D or R cell, or one emerging from
--- the heartwood). dispatch routes it here; a field never emits a pulse of its
+-- a sample cell). dispatch routes it here; a field never emits a pulse of its
 -- own, which is what keeps an F cell out of every feedback path there is.
 function grove.step(f_id, w, src_id)
   local f = fields[f_id]

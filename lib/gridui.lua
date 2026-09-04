@@ -27,7 +27,7 @@ local topology   = wl("topology")
 local patch      = wl("patch")
 local state      = wl("state")
 local rambler    = wl("rambler")
-local heartwood  = wl("heartwood")
+local sample     = wl("sample")
 local grove      = wl("grove")
 local clockcell  = wl("clockcell")
 local gust       = wl("gust")
@@ -169,7 +169,7 @@ local EMITTERS = {D = true, R = true, TM = true, C = true}
 
 -- K1 + tap: do the thing this cell does. a synthetic full-gain cable stands
 -- in for the pulse's source, so a voice, a drum, an exciter, a field and a
--- heartwood node each answer through the same dispatch handler a real cable
+-- sample cell each answer through the same dispatch handler a real cable
 -- would have used -- no second, subtly different audition path to keep in
 -- step with the first.
 function gridui.act(id, cell)
@@ -186,9 +186,9 @@ function gridui.act(id, cell)
   end
 
   wl("dispatch").on_pulse(id, id, {id = -1, a = id, b = id, gain = 1.0}, 1.0)
-  -- a GUST cell is deliberately not in this check: §2.11 routes it to the
-  -- mix by itself, so "no output cable" is its normal state rather than the
-  -- confusing one this warning exists for.
+  -- GUST and SMP cells are deliberately not in this check: both route
+  -- themselves to the mix, so "no output cable" is their normal state rather
+  -- than the confusing one this warning exists for.
   if (cell.type == "voice" or cell.type == "GVOICE") and not reaches_output(id) then
     state.set_event(cell.name .. ": no output cable", 2.0)
   else
@@ -293,8 +293,8 @@ function gridui.brightness(id, cell)
   elseif cell.type == "E" then
     local base = patch.degree(id) > 0 and 5 or 3
     return state.flash_level(id, base)
-  elseif cell.type == "H" then
-    return heartwood.level(id, 2)
+  elseif cell.type == "SMP" then
+    return sample.level_at(id, 2)
   elseif cell.type == "F" then
     return grove.level(id, 2)
   elseif cell.type == "C" then

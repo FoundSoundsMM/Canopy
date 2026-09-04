@@ -325,39 +325,39 @@ do
 
   -- holding a cell from the map still goes straight to that cell's own
   -- settings page -- same as from any other screen -- rather than staying on
-  -- the map. the header carries the cell's own tag, not "MAP", and there are
+  -- the map. the header carries the cell's own tag, not "Map", and there are
   -- no 7x5 map fills at all: this is voice.PARAMS' widget grid.
   M.state.held = {"oak"}
   screenui.redraw()
   draws_clean("map, holding a cell")
   check("map, held: goes to the cell's own page, not the map",
-        not has_text("MAP") and #fills() == 0,
-        tostring(has_text("MAP")) .. "/" .. tostring(#fills()))
+        not has_text("Map") and #fills() == 0,
+        tostring(has_text("Map")) .. "/" .. tostring(#fills()))
   M.state.held = {}
 
   -- letting go comes back to the map -- state.view was never touched.
   screenui.redraw()
   check("map, after letting go: back on the map",
-        has_text("MAP"), tostring(has_text("MAP")))
+        has_text("Map"), tostring(has_text("Map")))
 
   -- tapping a cell open (state.cell_edit) does the same thing.
   M.state.cell_edit = "oak"
   screenui.redraw()
   draws_clean("map, oak's page open")
   check("map, cell_edit: goes to the cell's own page, not the map",
-        not has_text("MAP") and #fills() == 0,
-        tostring(has_text("MAP")) .. "/" .. tostring(#fills()))
+        not has_text("Map") and #fills() == 0,
+        tostring(has_text("Map")) .. "/" .. tostring(#fills()))
   M.state.cell_edit = nil
   screenui.redraw()
   check("map, after closing: back on the map",
-        has_text("MAP"), tostring(has_text("MAP")))
+        has_text("Map"), tostring(has_text("Map")))
 
   -- two cells held is still the edge view (cable gain), on this page same
   -- as any other.
   M.state.held = {"oak", "o.1"}
   screenui.redraw()
   check("map, two held: falls back to the edge view",
-        has_text("cable") and not has_text("MAP"), "")
+        has_text("cable") and not has_text("Map"), "")
   M.state.held = {}
 
   -- leave M exactly as the sections below expect to find it: no stray
@@ -406,7 +406,7 @@ end
 print("\n-- a heavily cabled cell --")
 do
   local M2 = fresh(2)
-  for _, other in ipairs({"o.1", "o.16", "e.bracken", "h.taproot", "d.hob",
+  for _, other in ipairs({"o.1", "o.16", "e.bracken", "smp.thunder", "d.hob",
                           "f.cuckoo", "tm.padfoot"}) do
     M2.patch.add("oak", other, 0.5)
   end
@@ -487,8 +487,12 @@ do
   end
   check("and it is the only one that does", #extra == 0,
         table.concat(extra, ","))
-  check("the global page fits on one",
-        screenui.page_of(M.gparam.PARAM_COUNT) == 1,
+  -- the global page is the one list that grew past a screen: the gusts'
+  -- three delay-line rows came back to it from the mixer (gparam.lua), which
+  -- is a second page for three rows that belong with the other patch-wide
+  -- numbers rather than a mixer channel that is not a channel.
+  check("the global page takes two",
+        screenui.page_of(M.gparam.PARAM_COUNT) == 2,
         tostring(M.gparam.PARAM_COUNT))
   check("and so does the mixer",
         screenui.page_of(M.mixer.PARAM_COUNT) == 1,
@@ -559,7 +563,9 @@ do
   --           is the reading (lib/mixer.lua says so at level_row).
   --   D       Gait is a bank of nine and Grid is a read-only quantise name.
   --           both are words, and a word has no other shape to be.
-  local ALLOWED = {mixer = true, D = true}
+  --   LFO     Target names a cell and Param names one of its knobs. same
+  --           reasoning as D: a name has no shape but its own letters.
+  local ALLOWED = {mixer = true, D = true, LFO = true}
   local dupes = {}
   for _, entry in ipairs(lists) do
     local name, params = entry[1], entry[2]

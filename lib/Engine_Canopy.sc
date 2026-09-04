@@ -5,7 +5,7 @@
 //
 // build phase 4 added the S-cell exciters (§2.4), the generic audio-rate
 // patch matrix (§7.3's \patch_aa / \patch_ak), and the stream inputs on the
-// voice synth. build phase 5 added \wl_heartwood, the continuous half of the
+// voice synth. build phase 5 added the continuous half of the
 // §2.5 diffusion lattice. 5b added `glide` and the per-voice detune `drift`.
 //
 // build phase 6 -- the re-cut -- changes three things here:
@@ -25,21 +25,16 @@
 // individually, so there is nothing left for a macro to hide.
 //
 // build phase 7, the re-name: Canopy -- the shared plate/hall reverb -- and
-// the output Compressor are both gone. what replaces Canopy on the global
-// page is literal rather than an effect: an always-on loop of a real field
-// recording, mixed dry into the output and fed continuously into every
-// voice's resonator as excitation -- the wood actually being rained on,
-// rather than a reverb pretending to be weather.
+// the output Compressor are both gone.
 //
-// the mixer: that one rain loop is now FOUR of them (\wl_amb x nAmb --
-// rain, cicada, thunder, sea), each with its own fader, which is what
-// lib/mixer.lua's page drives. rather than four buses, each loop scales
-// itself by its own fader and sums into ONE shared stereo bus, ambBus,
-// which \woodland_fx reads. the loops are a dry mix and nothing else:
-// the old rain_excite path -- the same audio fed continuously into every
-// voice's resonator -- is gone, and \woodland_voice is back to being
-// excited only by its own strike burst and by whatever is cabled into
-// its mod path.
+// the four field recordings (rain, cicada, thunder, sea) used to run as
+// always-on loops with a fader each. they are four playable cells now
+// (\wl_smp x nSmp, §2.5): the buffer is the same, but nothing sounds until a
+// pulse triggers it, and what it does then is swell in under an attack and
+// out under a fall the player sets per cell. each one pans itself by where
+// its cell sits and sums into ONE shared stereo bus, smpBus, which
+// \woodland_fx reads -- the same arrangement the loops had, and for the same
+// reason: four buses to carry one bed is three buses too many.
 //
 // the gusts (§2.11): the Q4/Q6 step-sequencer lanes' ten cells become ten
 // (later grown to twelve)
@@ -49,34 +44,36 @@
 // one. they are the single exception to "nothing is heard without a cable":
 // each pans itself by its cell's column into a shared bus, that bus runs
 // through one global delay line (\wl_gust_space), and \woodland_fx reads the
-// result alongside the Output row and the ambience loops.
+// result alongside the Output row and the sample cells.
 //
 // the grid overhaul changes \woodland_fx more than anything since build
 // phase 6: there is no automatic mix left at all. a voice's or percussion
-// cell's own tap bus, an exciter, and a heartwood node's emergence all used
-// to reach \woodland_fx directly, panned at a fixed compile-time position
-// per source; now NONE of them do, and \woodland_fx reads only a bank of
+// cell's own tap bus and an exciter both used to reach \woodland_fx
+// directly, panned at a fixed compile-time position per source; now NONE of them do, and \woodland_fx reads only a bank of
 // sixteen `outBus` channels (the Output row) that ordinary patch cables have
 // to be routed into for anything to be heard at all. discrete choke (a
 // pulse on the old M socket) is gone too -- every pulse strikes a voice now
 // -- so \woodland_voice lost its choke envelope along with `tapLevel`'s
 // separate output-level knob; loudness at each Output-row position is
-// purely that cable's own gain. exciters trimmed from twenty to six, the
-// heartwood lattice from an eight-node ring to a four-node chain.
+// purely that cable's own gain. exciters trimmed from twenty to six.
 
 Engine_Canopy : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
-	var patchBus, excMeterBus, ambBus, gustBus, gustSpaceBus;
+	var patchBus, excMeterBus, outLevelBus, smpBus, gustBus, gustSpaceBus;
 	var voiceSynths;
 	var gSynths;
 	var excSynths;
 	var patchSynths;
-	var heartSynth;
 	var fxSynth;
 	var excMeterSynth;
-	var ambBufs;
-	var ambSynths;
-	var ambVol;
+	// §2.5 the four sample cells. one buffer each, read async by smp_load;
+	// one always-on \wl_smp synth each, started as soon as that buffer lands.
+	// smpArgs holds every knob Lua has pushed for a slot, so a synth started
+	// after the knobs have moved comes up where the player left it rather
+	// than at the SynthDef's defaults.
+	var smpBufs;
+	var smpSynths;
+	var smpArgs;
 	var gustSynths;
 	var gustSpaceSynth;
 	var lfoSynths;
@@ -117,7 +114,7 @@ Engine_Canopy : CroneEngine {
 		\wl_g_noise, \wl_g_noise, \wl_g_noise
 	];
 
-	classvar nVoices = 4, nExc = 6, nG = 6, nH = 4, nOut = 16, nAmb = 4,
+	classvar nVoices = 4, nExc = 6, nG = 6, nOut = 16, nSmp = 4,
 		nGust = 12,
 		nLfo = 4;
 
@@ -133,13 +130,15 @@ Engine_Canopy : CroneEngine {
 	// addressable tap once they stopped reaching the speakers automatically)
 	// and `outBase` (the Output row -- nothing reaches `woodland_fx` at all
 	// any more except through an ordinary patch cable into one of these
-	// sixteen fixed-pan buses). `lfoOutBase` is the newest: one sine tap per
-	// LFO cell, no mod-input bus of its own since the family is a pure source
-	// (see bridge.lua's BUS comment).
+	// sixteen fixed-pan buses). `lfoOutBase` is one sine tap per LFO cell, no
+	// mod-input bus of its own since the family is a pure source (see
+	// bridge.lua's BUS comment). the heartwood's two bus families are gone
+	// with the lattice itself; the four sample cells that took its seats mix
+	// themselves on their own panned path and address no bus here.
 	classvar excBase = 0, colourModBase = 6, modInBase = 12,
-		voiceOutBase = 16, gvoiceOutBase = 20, heartInBase = 26,
-		heartOutBase = 30, outBase = 34, gustOutBase = 50,
-		gustModBase = 62, lfoOutBase = 74, patchTotal = 78;
+		voiceOutBase = 16, gvoiceOutBase = 20, outBase = 26,
+		gustOutBase = 42, gustModBase = 54, lfoOutBase = 66,
+		patchTotal = 70;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -167,14 +166,19 @@ Engine_Canopy : CroneEngine {
 		// addPoll funcs below -- no OSC round trip, so this is cheap even at
 		// full count.
 		excMeterBus = Bus.control(server, nExc);
-		// the always-on ambience loops (§4.1b the mixer): one stereo bus,
-		// always allocated, silent until amb_load's buffers finish loading
-		// and the \wl_amb synths start writing to it. every \wl_amb sums
-		// into it, already scaled by its own fader, and \woodland_fx reads
-		// it with a plain In.ar -- both live in groups after gSrc, so a
-		// block with nothing writing here is just a block of zeros, not
-		// stale data.
-		ambBus = Bus.audio(server, 2);
+		// §4.1b the mixer's channel faders: one control-rate value per
+		// Output-row cell, read by \woodland_fx. a control bus rather than
+		// sixteen synth arguments because the fader has to be settable one
+		// channel at a time and an array arg can only be set whole.
+		outLevelBus = Bus.control(server, nOut);
+		outLevelBus.setn(Array.fill(nOut, { 1.0 }));
+		// §2.5 the sample cells: one stereo bus, always allocated, silent
+		// until smp_load's buffers land and the \wl_smp synths start writing
+		// to it. each one pans itself into this, already scaled by its own
+		// Level, and \woodland_fx reads it with a plain In.ar -- both live in
+		// groups after gSrc, so a block with nothing writing here is just a
+		// block of zeros, not stale data.
+		smpBus = Bus.audio(server, 2);
 		// §2.11 the gusts. two stereo buses rather than one, because the
 		// family's automatic route to the mix runs through a delay line and
 		// the delay has to read the sum of all twelve before \woodland_fx sees
@@ -186,17 +190,18 @@ Engine_Canopy : CroneEngine {
 		gustBus = Bus.audio(server, 2);
 		gustSpaceBus = Bus.audio(server, 2);
 
-		// ambBufs/ambSynths hold one buffer and one \wl_amb synth per loop,
-		// filled in as amb_load's async reads land; ambVol is each loop's
-		// last-set fader value so a synth started after amb_volume already
-		// moved the knob comes up at the right level instead of 0. all three
-		// have to exist as arrays before amb_load/amb_volume can index into
-		// them -- without this, `ambSynths[i].notNil` and `ambVol[i] = ...`
-		// were both sent to nil and silently dropped the whole command, so
-		// no loop's synth was ever created no matter how far its fader moved.
-		ambBufs = Array.newClear(nAmb);
-		ambSynths = Array.newClear(nAmb);
-		ambVol = Array.fill(nAmb, { 0 });
+		// smpBufs/smpSynths hold one buffer and one \wl_smp synth per sample
+		// cell, filled in as smp_load's async reads land; smpArgs is every
+		// knob Lua has pushed for that slot, so a synth started after the
+		// knobs moved comes up where the player left it rather than at the
+		// SynthDef's defaults. all three have to exist as arrays before any
+		// smp_* command can index into them -- without that, `smpSynths[i]`
+		// and `smpArgs[i]` are both nil and the whole command is silently
+		// dropped, so no cell's synth is ever created no matter what is
+		// pushed at it.
+		smpBufs = Array.newClear(nSmp);
+		smpSynths = Array.newClear(nSmp);
+		smpArgs = Array.fill(nSmp, { () });
 
 		SynthDef(\woodland_voice, {
 			arg tapOut=0, t_trig=0, force=0.6, hardness=0.5, position=0.15,
@@ -239,10 +244,9 @@ Engine_Canopy : CroneEngine {
 			var env = EnvGen.ar(Env.perc(0.0003, burstDur), t_trig);
 			var exc = BPF.ar(PinkNoise.ar(1), bpFreq, exciteQ) * env * force;
 			// a voice is excited by its own strike burst and by whatever a
-			// cable puts on its mod path, and by nothing else. the mixer's
-			// ambience loops are a dry mix only -- the old rain_excite path
-			// that fed the same audio continuously into every resonator is
-			// gone.
+			// cable puts on its mod path, and by nothing else -- the old
+			// rain_excite path, which fed a field recording continuously into
+			// every resonator, is gone.
 			var totalExc = exc + (inject * 0.8);
 
 			// §8.5: amplitude-dependent pitch drop -- the "thunk" of a hard hit.
@@ -397,7 +401,7 @@ Engine_Canopy : CroneEngine {
 		// InFeedback on the mod bus, not In: this lives in gVoice, which runs
 		// after gPatch, but a gust cabled to another gust is a cycle -- there
 		// is no node order that resolves it, so one block of latency is the
-		// answer, exactly as it is for \wl_patch_aa and the heartwood.
+		// answer, exactly as it is for \wl_patch_aa.
 		SynthDef(\wl_gust, {
 			arg out=0, spaceOut=0, modIn=0, t_trig=0, force=0.8,
 				freq=220, atk=0.8, dcy=3.0, timbre=0.35, cross=0.3,
@@ -405,20 +409,37 @@ Engine_Canopy : CroneEngine {
 
 			var x = cross.clip(0, 1);
 			var modRaw = InFeedback.ar(modIn, 1);
-			// soft-limited before it is used for anything: a cross-mod loop
-			// between two gusts is a legal patch and this is what stops it
-			// from being a runaway one. the mod signal is deliberately kept
-			// bipolar (no rectification) so a negative-gain cable pulls the
-			// pitch the other way, the same as everywhere else on the panel.
-			var mod = modRaw.tanh * x;
+			// MOD_MAKEUP: what a gust's own tap actually carries, undone.
+			// this is the whole reason Cross did nothing audible before.
+			// \wl_gust writes its tap at `env * amp * 0.3` -- so a gust at
+			// its default Level of 0.7, sounding at full envelope, puts about
+			// 0.2 peak on the bus. straight into the fmSemis line below that
+			// is a fifth of a semitone at maximum Cross: a slight waver, not
+			// modulation. the tap level is right for a mix and wrong for a
+			// modulator, so it is scaled back up to something near unity here
+			// rather than made hotter at the source, where it would change
+			// what every cable OUT of a gust sounds like.
+			//
+			// soft-limited after that, and only then: a cross-mod loop
+			// between two gusts is a legal patch, and the tanh is what stops
+			// it from being a runaway one. the mod signal is deliberately
+			// kept bipolar (no rectification) so a negative-gain cable pulls
+			// the pitch the other way, the same as everywhere else on the
+			// panel.
+			var mod = (modRaw * 5).tanh * x;
 
 			// the two things a cable does to a gust, and the reason cabling
 			// two of them together reads as cross-modulation rather than as
-			// a mix: it bends the pitch (a fifth either way at full Cross,
-			// through .midiratio so the bend is musical rather than linear)
-			// and it opens the fold (below), so a modulating gust is heard
-			// in this one's timbre as well as in its tuning.
-			var fmSemis = mod * 7;
+			// a mix: it bends the pitch, and it opens the fold (below), so a
+			// modulating gust is heard in this one's timbre as well as in its
+			// tuning.
+			//
+			// two octaves either way at full Cross, through .midiratio so the
+			// bend stays musical rather than linear. this was a fifth, which
+			// at audio rate is a chorus and not an FM index -- at two octaves
+			// a pair of gusts cabled together and both turned up genuinely
+			// modulate each other, which is what Cross was always for.
+			var fmSemis = mod * 24;
 			// the tuned pitch, lagged so an OSC retune is a move rather than
 			// a step, and then the modulated one on top of it. the two are
 			// kept apart because only the oscillators want the modulated
@@ -447,7 +468,7 @@ Engine_Canopy : CroneEngine {
 			// fold amount rides on Timbre and on whatever is modulating it,
 			// so a cross-modulated gust buzzes on the peaks of the modulator
 			// and settles between them.
-			var foldAmt = (timbre.clip(0, 1) + (mod.abs * 0.6)).clip(0, 1.4);
+			var foldAmt = (timbre.clip(0, 1) + (mod.abs * 0.9)).clip(0, 1.6);
 			var tri = LFTri.ar(f);
 			var folded = (tri * (1 + (foldAmt * 3.5))).fold2(1);
 			// a second triangle a hair off the first, so a single held gust
@@ -515,12 +536,20 @@ Engine_Canopy : CroneEngine {
 
 		// the grid overhaul's Output row (§2's `O` cells): the only place
 		// audio reaches the speakers, and the only thing left in this synth
-		// that reads anything other than the ambience bus. by default nothing is
-		// patched into any of the sixteen `outBus` channels, so a fresh
-		// patch is silent until the player cables a voice, a GVOICE cell, an
-		// exciter or a heartwood node to one -- there is no automatic mix
-		// left at all, which is the entire point ("by default none of the
-		// voices are wired up to any outputs").
+		// that reads anything other than the sample and gust beds. by default
+		// nothing is patched into any of the sixteen `outBus` channels, so a
+		// fresh patch is silent until the player cables a voice, a GVOICE
+		// cell or an exciter to one -- there is no automatic mix left at all,
+		// which is the entire point ("by default none of the voices are wired
+		// up to any outputs").
+		//
+		// each channel also has a LEVEL, read from `lvlBus` -- the mixer
+		// page's faders (lib/mixer.lua). that is the channel: everything
+		// arriving at that pan position, together, after the fact -- distinct
+		// from a cable's own gain, which says how much of one source gets
+		// there. lagged, because a fader move on something already sounding
+		// is a fade rather than a step; squared, so the bottom of the fader's
+		// travel is usable rather than jumping straight to loud.
 		//
 		// each of the sixteen channels has a FIXED pan position, hard left
 		// at channel 0 to hard right at channel 15 (keep this identical to
@@ -530,24 +559,27 @@ Engine_Canopy : CroneEngine {
 		// cable's own gain (patch.lua's ordinary bipolar gain), the same way
 		// several cables landing on one mod-path bus already sum.
 		SynthDef(\woodland_fx, {
-			arg outBus=0, out=0, level=0.8, ambIn=0, gustIn=0;
+			arg outBus=0, out=0, level=0.8, lvlBus=0, smpIn=0, gustIn=0;
 			var chans = In.ar(outBus, nOut);
+			var lvls = Lag.kr(In.kr(lvlBus, nOut).clip(0, 1).squared, 0.08);
 			var panPos = Array.fill(nOut, { |i| -1 + (2 * i / (nOut - 1)) });
-			var dry = Mix.ar(Array.fill(nOut, { |i| Pan2.ar(chans[i], panPos[i]) }));
-			// the ambience loops' shared dry bus: each \wl_amb has already
-			// applied its own Level knob, so all that is left here is the
-			// 0.35 headroom factor every voice's own output already carries
-			// (Limiter... * amp * 0.35), so a full-level field recording
-			// doesn't sit hotter in the mix than a voice at the same knob
-			// position.
-			var ambDry = In.ar(ambIn, 2) * 0.35;
+			var dry = Mix.ar(Array.fill(nOut, { |i|
+				Pan2.ar(chans[i] * lvls[i], panPos[i]);
+			}));
+			// §2.5 the sample cells' shared dry bus: each \wl_smp has already
+			// applied its own Level knob and its own pan, so all that is left
+			// here is the 0.35 headroom factor every voice's own output
+			// already carries (Limiter... * amp * 0.35), so a full-level
+			// field recording doesn't sit hotter in the mix than a voice at
+			// the same knob position.
+			var smpDry = In.ar(smpIn, 2) * 0.35;
 			// §2.11 the gusts, already panned by cell position and already
 			// through their shared delay line -- the one thing here that
 			// arrives without a cable. it carries the same 0.35 headroom
 			// factor as everything else so a gust at Level 1 sits alongside
 			// a voice at Level 1 rather than over it.
 			var gustDry = In.ar(gustIn, 2) * 0.35;
-			var sig = (dry + ambDry + gustDry) * level;
+			var sig = (dry + smpDry + gustDry) * level;
 			Out.ar(out, sig);
 		}).add;
 
@@ -655,57 +687,6 @@ Engine_Canopy : CroneEngine {
 			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
 		}).add;
 
-		// §2.5 the heartwood. "not a bus. a diffusion lattice." trimmed from
-		// a ring of 8 to a chain of 4 for the grid overhaul -- each node
-		// still a short delay line that hands what reaches it on to its
-		// neighbours, quieter and later. streams patched into a node arrive
-		// on heartInBase+i; what emerges at a node is on heartOutBase+i, and
-		// that is what a cable out of a heartwood cell taps.
-		//
-		// adjacency duplicates topology.lua's 4-node chain, taproot first.
-		// the two lists have to agree; there is no way to check that from
-		// this side.
-		//
-		// InFeedback on the injection buses, and LocalIn/LocalOut for the
-		// lattice itself: this synth lives in gSrc, which runs *before* the
-		// gPatch synths that write the injection buses, and the lattice is a
-		// cyclic graph -- there is no node order that makes a chain acyclic
-		// once shortcut cables are patched onto it. one block of latency
-		// either way, which at 64 samples is inaudible.
-		//
-		// the /2.5 on the pass gain is what keeps the chain stable -- fewer
-		// nodes than the original ring, but the same headroom margin holds
-		// (a chain's mean degree is lower than a ring's, so if anything this
-		// is more conservative than it needs to be).
-		SynthDef(\wl_heartwood, {
-			arg inBus=0, outBus=0, c0=0.5, c1=0.5, c2=0.5, c3=0.5;
-
-			var conds = [c0, c1, c2, c3];
-			var hNbr = [[1], [0, 2], [1, 3], [2]];
-			var inj = InFeedback.ar(inBus, nH);
-			var fb = LocalIn.ar(nH);
-
-			var emerge = Array.fill(nH, { |i|
-				var arriving = hNbr[i].collect({ |j| fb[j] }).sum;
-				LeakDC.ar(inj[i] + arriving).tanh;
-			});
-
-			// what each node passes on: its own signal, delayed and attenuated
-			// by its own conductance. keep this mapping identical to the
-			// HOP_MIN/HOP_MAX and LOSS_MIN/LOSS_MAX pair in heartwood.lua, or
-			// one node's knob will mean two different things to the pulse and
-			// the stream halves of the same lattice.
-			var passed = Array.fill(nH, { |i|
-				var c = conds[i].clip(0, 1);
-				var hop = 0.35 - (c * 0.30);
-				var loss = 0.10 + (c * 0.80);
-				DelayC.ar(emerge[i], 0.4, hop) * (loss / 2.5);
-			});
-
-			LocalOut.ar(passed);
-			Out.ar(outBus, emerge);
-		}).add;
-
 		// §7.3's generic audio-rate patch matrix. one synth per live cable
 		// that means something continuous (§6): a stream into a voice's M
 		// socket is a straight pass (\wl_patch_aa); anything landing on a
@@ -738,20 +719,45 @@ Engine_Canopy : CroneEngine {
 			Out.kr(out, Amplitude.kr(sig, 0.005, 0.2));
 		}).add;
 
-		// one always-on ambience loop (§4.1b). a plain looping stereo
-		// playback of whatever amb_load hands it -- no envelope, no gate,
-		// because the whole point is that it is always running and the
-		// mixer's fader is the only thing that ever makes it audible. that
-		// fader lives HERE rather than at the reader so that four loops
-		// need only one shared bus.
+		// §2.5 one sample cell: Rain, Cicada, Thunder or Sea. these four
+		// recordings used to be always-on loops with a fader each; they are
+		// played now, and the whole instrument is the envelope over the top
+		// of them.
 		//
-		// squared, not linear, so the fader's low end is usable rather than
-		// jumping straight to "loud" in the first tenth of its travel.
-		// lagged, because a fader move on a continuously sounding source is
-		// a fade, not a step.
-		SynthDef(\wl_amb, { arg out=0, bufnum=0, vol=0;
-			var sig = PlayBuf.ar(2, bufnum, BufRateScale.kr(bufnum), loop: 1);
-			Out.ar(out, sig * Lag.kr(vol.clip(0, 1).squared, 0.1));
+		// the buffer still loops underneath, and deliberately so: a trigger
+		// restarts it from the top (PlayBuf's own `trigger`), but a second
+		// trigger arriving twenty seconds into a forty-second fall finds the
+		// recording still running rather than having stopped at its end and
+		// gone silent. what is heard is entirely the envelope.
+		//
+		// Env.perc with the same curve pair \wl_gust uses -- a \sin-ish rise
+		// (curve 3) is the shape of weather arriving rather than a ramp, and
+		// the -4 fall keeps a forty-second decay from sitting at half volume
+		// for twenty of them. the times are seconds and come straight from
+		// the cell's own two knobs.
+		//
+		// Lag on the envelope, not on the output: re-triggering part way up a
+		// swell restarts Env.perc from zero, and 5 ms turns the discontinuity
+		// that would be into a lift. that is inaudible against an attack
+		// measured in seconds.
+		//
+		// Level is squared for the same reason a fader is, and lagged so
+		// turning it while the cell is sounding is a fade.
+		SynthDef(\wl_smp, {
+			arg out=0, bufnum=0, t_trig=0, force=1,
+				atk=1.0, dcy=6.0, speed=1, level=0.7, pan=0;
+			var rate = BufRateScale.kr(bufnum) * speed.clip(0.125, 8);
+			var sig = PlayBuf.ar(2, bufnum, rate, trigger: t_trig, loop: 1);
+			var env = Lag.ar(
+				EnvGen.ar(Env.perc(atk.clip(0.02, 20), dcy.clip(0.1, 40), 1, [3, -4]),
+				          t_trig),
+				0.005
+			) * force.clip(0, 1);
+			var amp = Lag.kr(level.clip(0, 1).squared, 0.1);
+			// mono-summed before panning: these are field recordings, so the
+			// two channels are near enough the same thing, and panning a
+			// stereo file by cell position is otherwise a contradiction.
+			Out.ar(out, Pan2.ar(Mix.ar(sig) * 0.5 * env * amp, pan.clip(-1, 1)));
 		}).add;
 
 		server.sync;
@@ -811,18 +817,6 @@ Engine_Canopy : CroneEngine {
 		excSynths = Array.newClear(nExc);
 		patchSynths = Dictionary.new;
 
-		// in gSrc, so the emergence buses are already written by the time the
-		// gPatch cables that tap them run this block; the injection buses it
-		// reads are the ones gPatch wrote last block (hence InFeedback above).
-		// unlike the exciters this is not lazily allocated -- it is the wood
-		// itself, it costs nH delay lines, and a lattice that only exists
-		// once something is patched into it cannot ring on after the cable is
-		// pulled, which is precisely the thing §2.5 wants it to do.
-		heartSynth = Synth.new(\wl_heartwood, [
-			\inBus, patchBus.index + heartInBase,
-			\outBus, patchBus.index + heartOutBase
-		], gSrc);
-
 		// \woodland_fx reads only the Output row now (outBase) -- see its
 		// SynthDef comment above. gFx runs after gPatch (the group that
 		// writes outBus), so a plain In.ar there sees this block's data.
@@ -837,7 +831,8 @@ Engine_Canopy : CroneEngine {
 		fxSynth = Synth.new(\woodland_fx, [
 			\outBus, patchBus.index + outBase,
 			\out, context.out_b.index,
-			\ambIn, ambBus.index,
+			\lvlBus, outLevelBus.index,
+			\smpIn, smpBus.index,
 			\gustIn, gustSpaceBus.index
 		], gFx);
 
@@ -1191,54 +1186,95 @@ Engine_Canopy : CroneEngine {
 			};
 		});
 
-		// heart_conductance(index, v) -- §2.5 conductance, E2 on an H cell.
-		// sets that node's hop delay and loss; heartwood.lua applies the same
-		// mapping to the discrete side.
-		this.addCommand("heart_conductance", "if", { |msg|
-			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < nH }) {
-				heartSynth.set(("c" ++ i).asSymbol, msg[2]);
-			};
-		});
-
 		// not in §8's command list, but E3-with-nothing-held is spec'd as
 		// master level (§4.1) and needs somewhere to land.
 		this.addCommand("master_level", "f", { |msg|
 			fxSynth.set(\level, msg[1]);
 		});
 
-		// amb_load(index, path) -- §4.1b: one of the ambience loops. Lua
+		// out_level(index, v) -- §4.1b one Output-row channel's fader
+		// (lib/mixer.lua). a control bus rather than a synth argument so one
+		// channel can be set without resending the other fifteen.
+		this.addCommand("out_level", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nOut }) {
+				outLevelBus.setAt(i, msg[2].clip(0, 1));
+			};
+		});
+
+		// smp_load(index, path) -- §2.5: one of the four sample cells. Lua
 		// sends each absolute path once, at init; Buffer.read is async, so
-		// that loop's \wl_amb is only started once the read's completion
-		// action fires, and it starts with whatever Level/Excite the mixer
-		// has set in the meantime. before that (and if the read never
-		// arrives -- a missing file, or the offline sc_check with no Lua
-		// side to call this at all) that loop simply contributes nothing,
-		// which is indistinguishable from both its knobs being 0. the other
-		// three are unaffected either way.
-		this.addCommand("amb_load", "is", { |msg|
+		// that cell's \wl_smp is only started once the read's completion
+		// action fires, and it starts with whatever its knobs have been set
+		// to in the meantime (smpArgs). before that -- and if the read never
+		// arrives, a missing file, or the offline sc_check with no Lua side
+		// to call this at all -- that cell simply makes no sound, which is
+		// indistinguishable from its Level being 0. the other three are
+		// unaffected either way.
+		this.addCommand("smp_load", "is", { |msg|
 			var i = msg[1].asInteger;
 			var path = msg[2].asString;
-			if (i >= 0 and: { i < nAmb }) {
-				if (ambBufs[i].notNil) { ambBufs[i].free; ambBufs[i] = nil };
-				if (ambSynths[i].notNil) { ambSynths[i].free; ambSynths[i] = nil };
-				ambBufs[i] = Buffer.read(server, path, action: { |buf|
-					if (ambSynths[i].notNil) { ambSynths[i].free };
-					ambSynths[i] = Synth.new(\wl_amb, [
-						\out, ambBus.index,
-						\bufnum, buf.bufnum,
-						\vol, ambVol[i]
-					], gSrc);
+			if (i >= 0 and: { i < nSmp }) {
+				if (smpBufs[i].notNil) { smpBufs[i].free; smpBufs[i] = nil };
+				if (smpSynths[i].notNil) { smpSynths[i].free; smpSynths[i] = nil };
+				smpBufs[i] = Buffer.read(server, path, action: { |buf|
+					var args = [\out, smpBus.index, \bufnum, buf.bufnum];
+					if (smpSynths[i].notNil) { smpSynths[i].free };
+					smpArgs[i].keysValuesDo({ |k, v| args = args ++ [k, v] });
+					smpSynths[i] = Synth.new(\wl_smp, args, gSrc);
 				});
 			};
 		});
 
-		// amb_volume(index, v) -- that loop's own dry level in the mix.
-		this.addCommand("amb_volume", "if", { |msg|
+		// every smp_* setter below does the same two things: remember the
+		// value in smpArgs whether or not the synth exists yet, and forward
+		// it if it does. that is what lets Lua push a whole page of knobs the
+		// instant after smp_load, while the buffer read is still in flight.
+
+		this.addCommand("smp_note", "if", { |msg|
 			var i = msg[1].asInteger;
-			if (i >= 0 and: { i < nAmb }) {
-				ambVol[i] = msg[2];
-				if (ambSynths[i].notNil) { ambSynths[i].set(\vol, msg[2]) };
+			if (i >= 0 and: { i < nSmp } and: { smpSynths[i].notNil }) {
+				smpSynths[i].set(\force, msg[2].clip(0, 1), \t_trig, 1);
+			};
+		});
+
+		this.addCommand("smp_attack", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nSmp }) {
+				smpArgs[i][\atk] = msg[2];
+				if (smpSynths[i].notNil) { smpSynths[i].set(\atk, msg[2]) };
+			};
+		});
+
+		this.addCommand("smp_decay", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nSmp }) {
+				smpArgs[i][\dcy] = msg[2];
+				if (smpSynths[i].notNil) { smpSynths[i].set(\dcy, msg[2]) };
+			};
+		});
+
+		this.addCommand("smp_speed", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nSmp }) {
+				smpArgs[i][\speed] = msg[2];
+				if (smpSynths[i].notNil) { smpSynths[i].set(\speed, msg[2]) };
+			};
+		});
+
+		this.addCommand("smp_level", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nSmp }) {
+				smpArgs[i][\level] = msg[2];
+				if (smpSynths[i].notNil) { smpSynths[i].set(\level, msg[2]) };
+			};
+		});
+
+		this.addCommand("smp_pan", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nSmp }) {
+				smpArgs[i][\pan] = msg[2];
+				if (smpSynths[i].notNil) { smpSynths[i].set(\pan, msg[2]) };
 			};
 		});
 
@@ -1252,14 +1288,14 @@ Engine_Canopy : CroneEngine {
 		lfoSynths.do({ |s| if (s.notNil) { s.free } });
 		excSynths.do({ |s| if (s.notNil) { s.free } });
 		patchSynths.do({ |s| if (s.notNil) { s.free } });
-		if (heartSynth.notNil) { heartSynth.free };
 		if (fxSynth.notNil) { fxSynth.free };
 		if (excMeterSynth.notNil) { excMeterSynth.free };
-		ambSynths.do({ |s| if (s.notNil) { s.free } });
-		ambBufs.do({ |b| if (b.notNil) { b.free } });
+		smpSynths.do({ |s| if (s.notNil) { s.free } });
+		smpBufs.do({ |b| if (b.notNil) { b.free } });
 		patchBus.free;
 		excMeterBus.free;
-		ambBus.free;
+		outLevelBus.free;
+		smpBus.free;
 		gustBus.free;
 		gustSpaceBus.free;
 		gFx.free;
