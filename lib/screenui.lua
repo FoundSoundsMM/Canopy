@@ -24,19 +24,33 @@
 --
 -- so, three parts, and every page on the screen is made of them:
 --
---   * the header bar -- inverted, full width, always the same six things in
---     the same six places: the transport, what kind of page this is, which
---     page of it, its name, the value of whatever the cursor is on, and the
---     tempo. it never moves and it is never empty.
---   * a 4 x 2 grid of widgets, eight to a page. a continuous parameter draws
---     as a knob (a gauge arc plus a pointer); one whose value is a WORD --
---     a gait, a scale, on/off -- draws as a boxed readout instead, since a
---     pointer angle tells you nothing about "euclidean". the focused one is
---     drawn bright, everything else dim.
---   * the label under each widget, which is the parameter's name. the
---     *value* is never trimmed: whatever the cursor is on is spelled out in
---     full in the header, so a clipped "eucl" in the grid always has
---     "euclidean" above it.
+--   * the header bar -- the transport, what kind of page this is, its name,
+--     which page of it, and the tempo. it never moves and it is never empty.
+--   * a 4 x 2 grid of widgets, eight to a page. one drawn shape per
+--     parameter (lib/glyph.lua); one whose value is a WORD -- a gait, a
+--     scale, on/off -- draws as a boxed readout instead, since no shape
+--     tells you anything about "euclidean". the focused one is drawn
+--     bright, everything else dim.
+--   * under each widget, two lines: its value, then its name.
+--
+-- §5.2d the value line. §5.2c took every number off this panel on the
+-- grounds that the shapes already carried them, and lived with the cost it
+-- named at the time: nowhere to read an exact setting. the cost turned out
+-- to be the wrong way round. a shape is the fastest thing on the screen for
+-- "where is this set and is it moving", and no use at all for "set the other
+-- three to the same 0.42", "how long is this tail in seconds", "is Pitch on
+-- a semitone or between two". so every widget now prints its own reading
+-- under it, in the unit the parameter is actually in -- seconds, semitones,
+-- hertz, cents, x-multiples, per cent, a count of steps -- and the shape
+-- above it is unchanged in job: the glance, not the fact.
+--
+-- what it costs, exactly: seven pixels a row, which came off the shape
+-- (19px to 13px, lib/glyph.lua). four of the twenty-eight shapes had to be
+-- re-cut to survive that and are noted where they are drawn.
+--
+-- the value is shortened to fit its column rather than clipped, by `shorten`
+-- below -- a number cut off halfway is worse than no number, which is the
+-- one thing a clipped label is not.
 --
 -- four columns and not the Digitakt's five, for one reason: at five, a column
 -- is twenty-five pixels, and twenty-five pixels of this font is four or five
@@ -46,9 +60,9 @@
 -- which lands every page in the script except a voice's twelve on one screen.
 --
 -- what that buys, beyond looking like the thing it is inspired by: a grid of
--- eight can be taken in at once where eight rows of text cannot, and the
--- header's value readout means no page has to choose between showing a name
--- and showing a number.
+-- eight can be taken in at once where eight rows of text cannot, and no page
+-- has to choose between showing a name and showing a number -- it shows both,
+-- one under the other, under the shape they belong to.
 --
 -- text metrics, and why they are measured rather than assumed. the norns font
 -- is variable-width, so anything that shares a line with something else --
@@ -110,6 +124,50 @@ local function clip(str, limit)
   end
   return str
 end
+
+-- §5.2d the value under a widget. a row's `text()` is written for a line
+-- with a hundred pixels in it -- "1.20 s", "+12.0 st", "65% lock" -- and a
+-- column has twenty-eight. rather than have every parameter in the script
+-- keep a second, shorter string in step with the first, the one string is
+-- shortened here, in the order that costs the least meaning:
+--
+--   1. the space in front of a short unit.       "1.20 s"   -> "1.20s"
+--   2. decimal places, least significant first.  "+12.0st"  -> "+12st"
+--   3. whole words off the end.                  "65% lock" -> "65%"
+--
+-- what is never dropped is the sign and the leading digits, which is what
+-- stops "+12.0 st" from arriving on the panel as "12". a plain `clip` is the
+-- last resort and only reachable for a value that is one long word, where
+-- there is nothing to drop and the letters are the reading.
+--
+-- it measures rather than counts characters, so on hardware -- where the
+-- font is narrower than the offline harness's 5px-per-character estimate --
+-- more of the string survives than the tests assume, never less.
+local function shorten(str, limit)
+  str = str or ""
+  if text_w(str) <= limit then return str end
+
+  local s = str:gsub("([%d%%]) (%a%a?)$", "%1%2")
+  if text_w(s) <= limit then return s end
+
+  while true do
+    local head, dec, tail = s:match("^(.-%d)%.(%d+)(.*)$")
+    if not dec then break end
+    s = head .. ((#dec > 1) and ("." .. dec:sub(1, #dec - 1)) or "") .. tail
+    if text_w(s) <= limit then return s end
+  end
+
+  while true do
+    local t = s:gsub("%s*%S+$", "")
+    if t == s or t == "" then break end
+    s = t
+    if text_w(s) <= limit then return s end
+  end
+
+  return clip(s, limit)
+end
+
+screenui.shorten = shorten
 
 -- a label on the left and a value on the right of one line, guaranteed not to
 -- touch: the value is whole (it is the number you came to read) and the label
@@ -293,44 +351,72 @@ local PL_ROWS = 2
 local PL_PER_PAGE = PL_COLS * PL_ROWS
 
 -- the panel is 128 wide and 64 tall; the header takes the top eight, which
--- leaves two 27px blocks with two pixels to spare. within a block the shape
--- occupies the first nineteen rows and the label's baseline is at 26 -- so
--- the font's 5px ascenders start two pixels below where the shape stops, and
--- the bottom row's descenders land on 63.
+-- leaves two 27px blocks with two pixels to spare. within a block, and this
+-- is the whole of §5.2d's arithmetic:
+--
+--   rows 0..12   the shape (glyph.H)
+--   row  13      blank
+--   rows 14..20  the value,  baseline at 19
+--   rows 21..27  the label,  baseline at 26
+--
+-- text at baseline y occupies y-5 .. y+1 in this font, so the two lines are
+-- seven apart rather than six: a value ending in a descender and a label
+-- starting with an ascender are then adjacent rather than sharing a row.
+-- the bottom row's descenders land on 63, as before.
 local COL_W = 32
 local COL_X0 = 0                    -- left edge of column 1
 local BLOCK_TOP = {9, 37}           -- top of each widget row
 local BLOCK_H = 27
 local GLYPH_W, GLYPH_H = glyph.W, glyph.H
 local GLYPH_DX = math.floor((COL_W - GLYPH_W) / 2)
+local VALUE_DY = 19                 -- value baseline, from the block's top
 local LABEL_DY = 26                 -- label baseline, from the block's top
+local TEXT_W = COL_W - 4            -- both lines: 2px of gutter either side
 
 screenui.PARAMS_PER_PAGE = PL_PER_PAGE
 screenui.BLOCK_TOP = BLOCK_TOP
 screenui.BLOCK_H = BLOCK_H
 screenui.HEADER_H = HDR_H
+screenui.VALUE_DY = VALUE_DY
+screenui.LABEL_DY = LABEL_DY
+screenui.TEXT_W = TEXT_W
 
 -- 1-based page number a given row lives on.
 function screenui.page_of(i)
   return math.floor((i - 1) / PL_PER_PAGE) + 1
 end
 
--- one widget: the shape, then the name. nothing else -- see lib/glyph.lua.
+-- what a widget is made of: the shape, then its reading, then its name.
 --
 -- the label is clipped rather than fitted: a trailing full stop costs a whole
 -- character here and says nothing the widget's position in the grid does not.
+-- the value is shortened instead (see `shorten`) -- a name that gives way at
+-- the end is still the name, and a number that does is a different number.
 -- the four pixels held back are the gutter -- at the full column width two
 -- long labels in neighbouring columns run into each other.
-local function draw_widget(slot, p, text, frac, on, data)
-  local col = slot % PL_COLS
-  local row = math.floor(slot / PL_COLS) + 1
-  local top = BLOCK_TOP[row]
-  local x = COL_X0 + col * COL_W + GLYPH_DX
+--
+-- the value sits a level above the label when the widget is not focused (9
+-- against 6): with eight of them on screen the numbers are what you are
+-- scanning, and the names are what you already know.
+--
+-- `word` draws no value line at all. its box IS the value spelled out, and
+-- printing "dorian" a second time six pixels under the first is not a second
+-- fact -- it is the one place on the panel where the shape and the reading
+-- are the same object (glyph.reads_own_value).
+-- the reading, ready to draw, or nil for a row that is already its own
+-- (a `word` box). hoisted out of draw_param_grid rather than closed over it:
+-- redraw runs at frame rate and this would be a fresh closure every frame.
+local function value_of(w)
+  if glyph.reads_own_value(w.p.glyph) then return nil end
+  return shorten(w.text, TEXT_W)
+end
 
-  glyph.draw(p.glyph, x, top, GLYPH_W, GLYPH_H, frac, on, text, data)
+local function widget_x(slot)
+  return COL_X0 + (slot % PL_COLS) * COL_W + GLYPH_DX
+end
 
-  screen.level(on and 15 or 6)
-  centred(x + GLYPH_W / 2, top + LABEL_DY, clip(p.label, COL_W - 4))
+local function widget_top(slot)
+  return BLOCK_TOP[math.floor(slot / PL_COLS) + 1]
 end
 
 -- draw one page of a PARAMS list. `text_fn`/`frac_fn`/`data_fn` adapt the two
@@ -338,16 +424,50 @@ end
 -- page's take nothing) so this routine never learns which kind of list it has.
 -- `data_fn` is the extras a few shapes need -- a bank position, a shift
 -- register -- and is nil for every row that does not declare glyph_data.
+--
+-- §5.2d it draws in passes -- every shape, then every dim value, then every
+-- dim label, then the focused widget's two lines -- rather than finishing one
+-- widget before starting the next. that is not tidiness, it is the frame
+-- budget (test/soak.lua): screen.level is a socket message like any other, and
+-- a level per line per widget is sixteen of them where a level per BAND is
+-- three. the value line cost eight commands a page instead of twenty-four for
+-- exactly this reason, which is what kept the Colour page under its 200.
 local function draw_param_grid(params, focus, text_fn, frac_fn, data_fn)
   local page = screenui.page_of(focus)
   local first = (page - 1) * PL_PER_PAGE + 1
+
+  local shown = {}
   for slot = 0, PL_PER_PAGE - 1 do
     local p = params[first + slot]
     if p then
-      draw_widget(slot, p, text_fn(p), frac_fn(p), (first + slot) == focus,
-                  data_fn and data_fn(p) or nil)
+      local on = (first + slot) == focus
+      local text = text_fn(p)
+      local x, top = widget_x(slot), widget_top(slot)
+      glyph.draw(p.glyph, x, top, GLYPH_W, GLYPH_H, frac_fn(p), on, text,
+                 data_fn and data_fn(p) or nil)
+      shown[#shown + 1] = {p = p, text = text, on = on,
+                           cx = x + GLYPH_W / 2, top = top}
     end
   end
+
+  screen.level(9)
+  for _, w in ipairs(shown) do
+    if not w.on then centred(w.cx, w.top + VALUE_DY, value_of(w)) end
+  end
+
+  screen.level(6)
+  for _, w in ipairs(shown) do
+    if not w.on then centred(w.cx, w.top + LABEL_DY, clip(w.p.label, TEXT_W)) end
+  end
+
+  screen.level(15)
+  for _, w in ipairs(shown) do
+    if w.on then
+      centred(w.cx, w.top + VALUE_DY, value_of(w))
+      centred(w.cx, w.top + LABEL_DY, clip(w.p.label, TEXT_W))
+    end
+  end
+
   return page, math.max(1, math.ceil(#params / PL_PER_PAGE))
 end
 
@@ -845,10 +965,11 @@ function screenui.draw_edge(id_a, id_b)
   local edge_id = patch.has(id_a, id_b)
   local edge = edge_id and patch.get(edge_id) or nil
 
-  -- the gain used to be printed in the header. it is not any more, for the
-  -- same reason no widget prints its value (lib/glyph.lua): the bar below
-  -- says which side of centre the cable is on and how far, which is the
-  -- question you actually have while turning E3.
+  -- the bar below says which side of centre the cable is on and how far,
+  -- which is the question you have while turning E3; §5.2d puts the number
+  -- back beside it, which is the one you have when you are trying to give
+  -- two cables the same gain. it sits on the line under the bar rather than
+  -- in the header, so it is next to the thing it describes.
   screenui.draw_header("", "cable")
 
   -- two names on one line: split the width between them and let each give way
@@ -883,6 +1004,9 @@ function screenui.draw_edge(id_a, id_b)
       screen.move(2, 32)
       screen.text("one-way")
     end
+    screen.level(13)
+    screen.move(126, 32)
+    screen.text_right(string.format("%+.2f", edge.gain))
   else
     screen.level(4)
     screen.move(2, 32)

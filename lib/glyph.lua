@@ -19,12 +19,20 @@
 --
 -- three consequences, all of them deliberate:
 --
---   * no numbers. a shape that fills, tilts, thickens or slides has already
---     said where the parameter is; printing "0.58" underneath says the same
---     thing again in the slower of the two languages, and it costs 7px per
---     row -- which is exactly what pays for a 19px-tall shape instead of an
---     11px one. the cost is real and named in the header comment of
---     screenui.lua: there is now nowhere on the panel to read an exact value.
+--   * numbers, after all. this file used to say "no numbers": a shape that
+--     fills, tilts, thickens or slides has already said where the parameter
+--     is, and printing "0.58" underneath says it again in the slower of the
+--     two languages. that is true of WHERE and false of WHAT -- a tail that
+--     is two thirds along says two thirds of what, and the answer is 1.4
+--     seconds or 0.66 or +7 semitones depending on the row, which is the
+--     thing you need when you are matching one cell to another, writing a
+--     patch down, or coming back to it tomorrow. the shape is still the
+--     glance; the number is the check. so every widget draws its own reading
+--     under it (screenui's VALUE_DY), in the parameter's own unit, and the
+--     7px that pays for it comes off the shape: 19px tall became 13.
+--     everything below is drawn for that box, and the four that could not
+--     survive the cut honestly -- `word`, `dots`, `stack`, `squash` -- were
+--     re-cut rather than squashed.
 --   * no knobs. a gauge is a picture of a physical control this instrument
 --     does not have, and it spends a whole circle saying one number. the
 --     default here is `fader` -- a column that fills -- which reads at a
@@ -65,8 +73,18 @@
 local glyph = {}
 
 -- the box screenui hands every shape. exported so the tests and the layout
--- arithmetic have one place to read it from.
-glyph.W, glyph.H = 26, 19
+-- arithmetic have one place to read it from. 13 tall rather than 19 since
+-- §5.2d put a value line back under every widget -- see the note above.
+glyph.W, glyph.H = 26, 13
+
+-- the shapes that already draw their own reading, and so get no value line
+-- under them. exactly one: `word` IS its value spelled out in a box, and
+-- printing "dorian" twice, six pixels apart, is not a second fact.
+local READS_OWN = {word = true}
+
+function glyph.reads_own_value(name)
+  return READS_OWN[name] == true
+end
 
 -- brightness, in three bands. the focused widget is the brightest thing on
 -- the panel; an unfocused one has to stay legible at half that, so the dim
@@ -171,16 +189,21 @@ function DRAW.channel(x, y, w, h, v, on, _, d)
   local cx = x + math.floor((w - (bw + gap + mw)) / 2 + 0.5)
   local mx = cx + bw + gap
 
-  screen.level(lo(on)); frame(cx, y, bw, h)
+  -- the frame and the floor the meter stands on (so an idle channel is still
+  -- a shape rather than an empty gap next to the fader) are the same level,
+  -- so they are drawn together and cost one screen.level between them -- the
+  -- mixer is eight of these on one page and the only thing on the panel that
+  -- draws two controls per widget.
+  screen.level(lo(on))
+  frame(cx, y, bw, h)
+  bar(mx, y + h - 1, mw, 1)
+
   local fh = math.floor(v * (h - 2) + 0.5)
   if fh > 0 then
     screen.level(md(on) + (on and 4 or 2))
     bar(cx + 2, y + h - 1 - fh, bw - 4, fh)
   end
 
-  -- the floor the meter stands on, so an idle channel is still a shape
-  -- rather than an empty gap next to the fader.
-  screen.level(lo(on)); bar(mx, y + h - 1, mw, 1)
   local m = util.clamp((d and d.meter) or 0, 0, 1)
   local mh = math.floor(m * (h - 1) + 0.5)
   if mh > 0 then
@@ -306,8 +329,8 @@ end
 -- unlit cells stay as single pixels rather than going blank, so the field
 -- keeps its shape at zero and you can see it is a field.
 function DRAW.dots(x, y, w, h, v, on)
-  local cols, rows = 9, 5
-  local dx, dy = 3, 4
+  local cols, rows = 9, 4
+  local dx, dy = 3, 3
   local x0 = x + math.floor((w - (cols - 1) * dx - 2) / 2 + 0.5)
   local lit = {}
   for j = 0, rows - 1 do
@@ -322,6 +345,11 @@ function DRAW.dots(x, y, w, h, v, on)
   -- frame whatever the value was and took the global page to 186 of its 200
   -- -- one new parameter from breaking. four corner marks say "this is a
   -- field, and it is empty" for four commands, which is the same sentence.
+  --
+  -- §5.2d: 9 x 4 on a 3px pitch rather than 9 x 5 on a 4px one, which is what
+  -- fits the shorter box. nine fewer cells is nine fewer steps of resolution
+  -- in the field, and that is the trade the value line pays for: the density
+  -- is the glance, "65%" underneath is the reading.
   screen.level(lo(on))
   local x9, y9 = x0 + (cols - 1) * dx, y + 1 + (rows - 1) * dy
   fill_all({{x0, y + 1, 1, 1}, {x9, y + 1, 1, 1},
@@ -352,18 +380,30 @@ function DRAW.steps(x, y, w, h, v, on, _, d)
   screen.level(hi(on)); fill_all(on_r)
 end
 
--- stack: how many of them, stacked. Bits. eight rows in nineteen pixels
--- leaves no room to separate lit from unlit by height, so an empty row is
--- narrower as well as dimmer -- and the 1px-bar/1px-gap pitch keeps them
--- countable rather than merging into a block.
+-- stack: how many of them, stacked. Bits. an empty row is narrower as well
+-- as dimmer, since eight rows in thirteen pixels leaves no room to separate
+-- lit from unlit by height.
+--
+-- §5.2d the pitch is derived rather than fixed. it was a 1px bar every 2px,
+-- which needs sixteen pixels and now has thirteen; spreading n rows across
+-- (h-1) puts two of the eight pairs shoulder to shoulder with no gap. that is
+-- the one place in this file where the shape stopped being exactly countable,
+-- and it is also the one row whose value line spells the count out in words
+-- ("5 bits") -- which is the whole bargain §5.2d struck: the shape for the
+-- glance, the number for the fact.
+--
+-- it stays a vertical stack rather than becoming a row of eight, which would
+-- fit the width easily, because Length and Tap are already rows of eight on
+-- this same page and three of them would read as one repeated widget.
 function DRAW.stack(x, y, w, h, v, on, _, d)
   local n = (d and d.n) or 8
   local bw = 15
   local cx = x + math.floor((w - bw) / 2 + 0.5)
   local lit = (d and d.lit) or math.floor(v * n + 0.5)
+  local pitch = (h - 1) / math.max(1, n - 1)
   local on_r, off_r = {}, {}
   for j = 0, n - 1 do
-    local by = y + h - 1 - j * 2
+    local by = y + h - 1 - math.floor(j * pitch + 0.5)
     if j < lit then on_r[#on_r + 1] = {cx, by, bw, 1}
     else off_r[#off_r + 1] = {cx + 5, by, bw - 10, 1} end
   end
@@ -514,15 +554,19 @@ end
 -- reading -- but the box now carries what the old one could not: tick marks
 -- saying there are nine gaits and you are on the second.
 function DRAW.word(x, y, w, h, v, on, text, d)
-  local bh = 13
-  local by = y + 1
+  -- §5.2d a 10px box at the top of a 13px shape: five for the letters, two
+  -- of padding, and the three rows underneath are the bank ticks. the box is
+  -- the only widget on the panel with no value line under it (glyph.
+  -- reads_own_value) -- it is already the word spelled out.
+  local bh = 10
+  local by = y
   if on then
     screen.level(15); screen.rect(x, by, w, bh); screen.fill()
   else
     screen.level(4); frame(x, by, w, bh)
   end
   screen.level(on and 0 or 10)
-  glyph.centred(x + w / 2, by + 9, text or "", w - 4)
+  glyph.centred(x + w / 2, by + 7, text or "", w - 4)
   local total = d and d.total
   local idx = d and d.idx
   if total and total > 1 and idx then
@@ -539,7 +583,7 @@ end
 -- flag: on, or off. Clock, Snap, Gate. a filled block or an empty one --
 -- the one place where two states is the whole vocabulary.
 function DRAW.flag(x, y, w, h, v, on)
-  local s = 13
+  local s = 11
   local x0 = x + math.floor((w - s) / 2 + 0.5)
   local y0 = y + math.floor((h - s) / 2 + 0.5)
   if v >= 0.5 then
@@ -686,7 +730,11 @@ function DRAW.alias(x, y, w, h, v, on)
   curve(x + w * 0.64, my + amp * 1.3, x + w * 0.86, my + amp * 1.3,
         x + w - 1, my)
   screen.stroke()
-  local n = math.max(3, math.floor(13 - v * 10 + 0.5))
+  -- §5.2d nine holds at the fine end rather than thirteen: in a 13px box the
+  -- four extra samples were a pixel apart in height and read as one line, and
+  -- they were four rects a frame on the page with the least room in its
+  -- budget (test/soak.lua).
+  local n = math.max(3, math.floor(9 - v * 6 + 0.5))
   local sw = (w - 1) / n
   local rs = {}
   for j = 0, n - 1 do
@@ -727,7 +775,10 @@ end
 -- behind, and the same run pulled toward one height in front -- loud ones
 -- down, quiet ones up. at zero the two coincide and it reads as a plain
 -- waveform, which is what no compression is.
-local SQUASH_PEAKS = {1.0, 0.32, 0.78, 0.22, 0.95, 0.4, 0.68}
+-- §5.2d five peaks rather than seven: the run has to say "loud ones down,
+-- quiet ones up" and five does that with the same silhouette for four fewer
+-- rects a frame.
+local SQUASH_PEAKS = {1.0, 0.32, 0.78, 0.22, 0.95}
 
 function DRAW.squash(x, y, w, h, v, on)
   local my = y + math.floor(h / 2 + 0.5)

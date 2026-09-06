@@ -1119,10 +1119,11 @@ since "Bittern" does not say whether it is a field or a drum), the name, page
 dots, and the tempo. The value readout is gone: every widget draws its own.
 
 **The block.** 128 × 64, header 8, two blocks of 27 — 62, with two spare. In
-a block the shape occupies the first 19 rows and the label's baseline is at
-26, so the ascenders start two pixels below where the shape stops and the
-bottom row's descenders land on 63. Four columns of 32; the shape is 26 wide,
-inset 3 either side.
+a block the shape occupied the first 19 rows and the label's baseline was at
+26, so the ascenders started two pixels below where the shape stopped and the
+bottom row's descenders landed on 63. Four columns of 32; the shape is 26
+wide, inset 3 either side. (§5.2d re-cut the inside of the block to fit a
+value line back in; the block, the columns and the header are unchanged.)
 
 **Curves, but only cheap ones.** `test/soak.lua` caps `redraw()` at 200
 screen commands a frame, because a queue matron cannot drain blocks the Lua
@@ -1139,18 +1140,18 @@ wherever the pen was, which is the bug the old `draw_knob` carried two extra
 
 Shapes that draw many cells (a dot field, a row of steps, a register) issue
 their rects into one path and paint with a single `screen.fill()` — the rects
-accumulate, the fill is what costs. The measured cost of a full page is 145
-commands on the global page, 147 on a voice's, 142 on the mixer.
+accumulate, the fill is what costs. The measured cost of a full page was 145
+commands on the global page, 147 on a voice's, 142 on the mixer; §5.2d's
+value line put those at 166, 174 and 161.
 
-**What it costs.** There is now nowhere on the panel to read an exact number.
-You can set Tune by ear but not to `+3.00 st`, and you cannot match two cells
-by eye — the mixer's Delay row, whose whole point was a millisecond figure
-you match to the tempo, is where that bites hardest, and it is left
-consistent with everything else rather than made an exception, because one
-row that prints a number is a row that looks broken. If the exception is ever
-wanted, the cheap version keeps all of the above: show the value in the
-header's name slot **only while an encoder is actually turning**, and let it
-fall back to the name a second later.
+**What it cost, and what was done about it.** There was now nowhere on the
+panel to read an exact number. You could set Tune by ear but not to
+`+3.00 st`, and you could not match two cells by eye — the gusts' Delay row,
+whose whole point is a millisecond figure you match to the tempo, is where
+that bit hardest, and it was left consistent with everything else rather than
+made an exception, because one row that prints a number is a row that looks
+broken. That is the cost §5.2d went back and paid off, for every row at once
+rather than one exception at a time.
 
 **Four columns, not the Digitakt's five.** At five a column is 25px, and 25px
 of this font is four or five characters — which would turn two adjacent
@@ -1187,6 +1188,80 @@ which are both words and have no other shape to be.
 into a PGM per view, so the drawing can be looked at without a norns on the
 desk. It asserts nothing — geometry tests cannot tell you whether a Decay
 looks like a decay.
+
+### 5.2d Screen — the value line, back
+
+§5.2c took every number off the panel and named the cost in its own last
+paragraph. This is that paragraph being paid.
+
+The claim was that a shape which fills, tilts, thickens or slides has already
+said where the parameter is set. That is true of **where** and false of
+**what**: a tail two thirds along says two thirds of *something*, and the
+answer is 1.4 seconds, or 0.66, or +7 semitones, depending on which row you
+are looking at. Which is precisely the thing you need when you are matching
+one cell to another, writing a patch down, tuning to something outside the
+box, or coming back to it tomorrow. The shape is the glance. The number is
+the check. There was never a reason they could not both be there.
+
+**So every widget prints its own reading**, in the unit the parameter is
+actually in — `1.20 s`, `+3.5 st`, `220 Hz`, `2.4 st`, `x1.25`, `65% lock`,
+`12 steps`, `on`. Each row's `text()` already produced exactly that string;
+§5.2c simply stopped drawing it.
+
+**What it costs, in the same currency §5.2c spent.** 7px a row, and it comes
+straight back off the shape: **19px tall becomes 13**. Four of the
+twenty-eight shapes could not survive that as drawn and were re-cut rather
+than squashed:
+
+| shape | was | is |
+|-|-|-|
+| `word` | a 13px box at `y+1` | a 10px box at the top, ticks under it |
+| `dots` | 9 × 5 cells on a 4px pitch | 9 × 4 on a 3px pitch |
+| `stack` | 8 rows, 1px bar every 2px (needs 16px) | 8 rows spread over 12, two pairs touching |
+| `flag` | a 13px block | 11px, with air around it |
+
+`stack` is the one place a shape stopped being exactly countable, and it is
+also the row whose value line reads `5 bits` — which is the whole bargain in
+one widget. It stays a vertical stack rather than becoming a row of eight,
+which would fit easily, because Length and Tap are already rows of eight on
+that same page and three of them would read as one repeated widget.
+
+**The block, re-cut.** Rows 0–12 the shape, row 13 blank, the value's
+baseline at 19, the label's at 26. Text at baseline *y* covers *y*−5 … *y*+1
+in this font, so the two lines sit **seven** apart rather than six: a value
+ending in a descender and a label starting with an ascender are then adjacent
+rather than sharing a row. The bottom row's descenders still land on 63, and
+the header, the columns and the two 27px blocks are all untouched.
+
+**Shortening, not clipping.** A row's `text()` is written for a line with a
+hundred pixels in it and a column has 28. A name that gives way at the end is
+still the name; a number that does is a *different number*. So `screenui.
+shorten` gives way in the order that costs the least meaning — the space in
+front of a short unit (`1.20 s` → `1.20s`), then decimal places from the
+right (`+12.0st` → `+12st`), then whole trailing words (`65% lock` → `65%`) —
+and never the sign or the leading digits. It measures with
+`screen.text_extents` rather than counting characters, so on hardware, where
+the font is narrower than the test harness's pessimistic 5px-per-character
+estimate, more of the string survives than the tests assume, never less.
+
+**The one row with no value line** is `word` — a bank of names in a box. It
+*is* its value spelled out, and printing `dorian` a second time six pixels
+under the first is not a second fact (`glyph.reads_own_value`).
+
+**The cable, too.** The edge view (two cells held) prints its gain under the
+bipolar bar, right-aligned, for the same reason: the bar says which side of
+centre and how far, and the number is what you need to give a second cable
+the same gain.
+
+**The frame budget** (`test/soak.lua`, 200 commands) is why the grid now
+draws in *passes* — every shape, then every dim value, then every dim label,
+then the focused widget's two lines — rather than finishing one widget before
+starting the next. `screen.level` is a socket message like any other, and a
+level per line per widget is sixteen of them where a level per band is three.
+That, plus three shapes trimmed (`channel` draws its frame and its meter
+floor at one level, `alias` holds nine samples rather than thirteen, `squash`
+runs five peaks rather than seven), is what keeps the Colour page — the
+tightest on the panel — at 187 of its 200 with the value line on it.
 
 ### 5.3 Screen — Cell view (a cell held or open)
 
@@ -1385,10 +1460,11 @@ Canopy/
     mixer.lua                 -- master + one fader per live output (§4.1b)
     colour.lua                -- the master colour chain's page (§4.4)
     gridui.lua                -- grid render + hold/tap state machine
-    screenui.lua              -- the widget grid (§5.2c): global / mixer /
+    screenui.lua              -- the widget grid (§5.2c/d): global / mixer /
                                  cell / edge views, plus the map (§4.1d)
     glyph.lua                 -- the shape vocabulary (§5.2c): one drawn
-                                 shape per parameter, named by its `glyph`
+                                 shape per parameter, named by its `glyph`,
+                                 26 x 13 under §5.2d's value line
     bridge.lua                -- engine command wrapper
   lib/Engine_Canopy.sc      -- SC: modal voices, GVOICE drums, exciters, the
                                gusts and their delay line, the four sample
@@ -1757,6 +1833,15 @@ instrument as it stood before the grid overhaul; what follows is additive.
       `lib/glyph.lua` (§5.2c) to keep the "no two alike" rule on a page that
       is half degradation.
     - **Swing defaults to 0** (§4.1). A fresh patch arrives straight.
+    - **The value line, back** (§5.2d). Every widget on every page prints its
+      own reading between the shape and the name, in the parameter's own
+      unit, and the edge view prints its cable's gain — which is §5.2c's one
+      named cost, paid off. The shape box goes from 26×19 to 26×13 to fit it;
+      `word`, `dots`, `stack` and `flag` re-cut for the shorter box;
+      `screenui.shorten` gives a long reading up at the unit, then the
+      decimals, then whole words, and never at the front. The widget grid
+      draws in passes rather than widget by widget, purely so the level calls
+      the value line would have cost stay inside the frame budget.
 
 ---
 

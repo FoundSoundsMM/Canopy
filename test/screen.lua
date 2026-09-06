@@ -329,10 +329,20 @@ end
 -- topology.order against just the 7x5 fills, in order, recovers which level
 -- each cell got.
 
+-- §5.2d: 7x5 is no longer a size only the map draws. the shape box lost six
+-- pixels to the value line, and a bipolar column at rest is now exactly 7x5
+-- -- so a voice's Bend widget was being counted as a map cell and "this page
+-- is not the map" started failing on a page that is not the map. the map's
+-- own cells are on an 8x6 lattice from MAP_TOP, and a widget's are not, so
+-- that is what identifies them.
+local MAP_TOP, MAP_W, MAP_H = 11, 8, 6
+
 local function fills()
   local out = {}
   for _, b in ipairs(boxes) do
-    if b.kind == "fill" and (b.x1 - b.x0) == 7 and (b.y1 - b.y0) == 5 then
+    if b.kind == "fill" and (b.x1 - b.x0) == 7 and (b.y1 - b.y0) == 5
+       and b.x0 % MAP_W == 0 and b.y0 >= MAP_TOP
+       and (b.y0 - MAP_TOP) % MAP_H == 0 then
       table.insert(out, b)
     end
   end
@@ -674,26 +684,147 @@ do
 end
 
 -- 7: the block arithmetic ----------------------------------------------------
--- the header shrank from 11 to 8 and the widget grew from 11 to 19, and the
--- value line went. those three numbers have to still add up to 64 -- the old
--- layout's failure mode was a row that overran the panel by two pixels and
--- only showed up on hardware.
+-- the header is 8, the shape is 13, and under it are two lines of text. those
+-- numbers have to still add up to 64 -- the old layout's failure mode was a
+-- row that overran the panel by two pixels and only showed up on hardware.
 
 print("\n-- the block arithmetic --")
 do
   local glyph = wl("glyph")
   local top = screenui.BLOCK_TOP
+  local VAL, LAB = screenui.VALUE_DY, screenui.LABEL_DY
   check("the header is 8px", screenui.HEADER_H == 8, tostring(screenui.HEADER_H))
   check("row 1 starts below it", top[1] >= screenui.HEADER_H,
         tostring(top[1]))
   check("row 2 starts below row 1's label",
-        top[2] >= top[1] + glyph.H + 6, tostring(top[2]))
+        top[2] >= top[1] + LAB + DESCENT, tostring(top[2]))
   -- the label baseline is 26 from the block top; the font's descender lands
   -- one pixel under it, so the bottom row's last lit pixel is at top[2] + 27.
   check("and the bottom label's descender is still on the panel",
-        top[2] + 27 <= 64, tostring(top[2] + 27))
-  check("the shape is 26 x 19", glyph.W == 26 and glyph.H == 19,
+        top[2] + LAB + DESCENT <= 64, tostring(top[2] + LAB + DESCENT))
+  check("the shape is 26 x 13", glyph.W == 26 and glyph.H == 13,
         glyph.W .. "x" .. glyph.H)
+  -- §5.2d the two text lines. a run at baseline y covers y-5 .. y+1, so the
+  -- value has to start below the shape and the label has to start below the
+  -- value's descender -- seven apart, not six.
+  check("the value line clears the shape",
+        VAL - ASCENT > glyph.H, VAL - ASCENT .. " vs " .. glyph.H)
+  check("and the label clears the value",
+        LAB - ASCENT > VAL + DESCENT,
+        (LAB - ASCENT) .. " vs " .. (VAL + DESCENT))
+end
+
+-- 7b: the value line ---------------------------------------------------------
+-- §5.2d. every widget prints its own reading between the shape and the name,
+-- and there are two ways that can be wrong without any of the geometry checks
+-- above noticing: a row can quietly draw no value at all (a page of shapes
+-- with nothing under them, which is what this replaced), and a value can be
+-- shortened to something that is not the number -- a bare "12" where the
+-- parameter said "+12.0 st", or a stub like "0." with the digits gone.
+--
+-- so: count them, measure them, and compare every string against what
+-- screenui.shorten makes of the row's own text().
+
+print("\n-- the value line --")
+do
+  local glyph = wl("glyph")
+  local W = screenui.TEXT_W
+
+  -- the text drawn on either row's value baseline, left to right, top row
+  -- first -- which is the order the widgets are drawn in.
+  local function values()
+    local out = {}
+    for _, row in ipairs(screenui.BLOCK_TOP) do
+      local band = {}
+      for _, b in ipairs(boxes) do
+        if b.kind == "text" and b.y0 == row + screenui.VALUE_DY - ASCENT then
+          table.insert(band, b)
+        end
+      end
+      table.sort(band, function(a, b) return a.x0 < b.x0 end)
+      for _, b in ipairs(band) do table.insert(out, b) end
+    end
+    return out
+  end
+
+  local function expect(name, params, focus, id)
+    local first = (screenui.page_of(focus) - 1) * screenui.PARAMS_PER_PAGE + 1
+    local want = {}
+    for i = first, math.min(#params, first + screenui.PARAMS_PER_PAGE - 1) do
+      local p = params[i]
+      if not glyph.reads_own_value(p.glyph) then
+        table.insert(want, screenui.shorten(id and p.text(id) or p.text(), W))
+      end
+    end
+    local got = values()
+    check(name .. ": one value per widget, minus the word rows",
+          #got == #want, #got .. " drawn, " .. #want .. " expected")
+    local bad
+    for i, b in ipairs(got) do
+      if b.text ~= want[i] then
+        bad = bad or ("'" .. tostring(b.text) .. "' vs '" .. tostring(want[i]) .. "'")
+      end
+      if (b.x1 - b.x0) > W then
+        bad = bad or ("'" .. tostring(b.text) .. "' is " .. (b.x1 - b.x0) .. "px")
+      end
+    end
+    check(name .. ": each is the row's own reading, and fits its column",
+          bad == nil, tostring(bad))
+  end
+
+  M.state.gparam_focus = 1
+  screenui.redraw()
+  expect("global", M.gparam.PARAMS, 1)
+
+  M.state.view = "colour"
+  M.state.cparam_focus = 1
+  screenui.redraw()
+  expect("colour", M.colour.PARAMS, 1)
+
+  M.state.view = "gusts"
+  M.state.guparam_focus = 1
+  screenui.redraw()
+  expect("gusts", M.gust.MACROS, 1)
+  M.state.view = "global"
+
+  -- and a cell page, on both of its pages, since the second is the one an
+  -- earlier layout bug drew on top of the first.
+  for _, page in ipairs({1, 9}) do
+    M.state.held = {"oak"}
+    M.state.vparam_focus = page
+    screenui.redraw()
+    expect("oak, page " .. screenui.page_of(page), M.voice.PARAMS, page, "oak")
+    M.state.held = {}
+  end
+  M.state.vparam_focus = 1
+
+  -- the one row on the panel that draws no value line: a bank of words is
+  -- already its own reading, in a box, and printing it twice is not a second
+  -- fact. Scale is on the global page, so this is checked where it lives.
+  check("a word row draws no value line",
+        glyph.reads_own_value("word") and not glyph.reads_own_value("fader"))
+
+  -- what shorten actually does, on the strings the panel really produces.
+  local cases = {
+    {"1.20 s", "1.20s"}, {"+12.0 st", "+12st"}, {"65% lock", "65%"},
+    {"12 steps", "12"}, {"8 bits", "8"}, {"0.42", "0.42"},
+    {"220.0 Hz", "220Hz"}, {"bit 4", "bit 4"}, {"on", "on"},
+  }
+  local wrong
+  for _, c in ipairs(cases) do
+    local got = screenui.shorten(c[1], W)
+    if got ~= c[2] then
+      wrong = wrong or (c[1] .. " -> '" .. got .. "', wanted '" .. c[2] .. "'")
+    end
+  end
+  check("a long reading gives way at the unit, then the decimals, then the words",
+        wrong == nil, tostring(wrong))
+  -- the sign and the leading digits are what a number IS: at half a column,
+  -- where the unit and both decimals have already gone, they are still what
+  -- is left.
+  check("and never at the front",
+        screenui.shorten("-12.0 st", 20):sub(1, 3) == "-12",
+        screenui.shorten("-12.0 st", 20))
 end
 
 -- 8: the scopes --------------------------------------------------------------

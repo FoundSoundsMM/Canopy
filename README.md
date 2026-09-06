@@ -15,7 +15,9 @@ Since then, five changes that are all about *playing* it rather than about
 what it can make (spec §4.1b, §4.3, §5.1b, §5.2b):
 
 - the screen draws **one shape per parameter** — a 4×2 grid where no two
-  widgets look alike, under an 8px header, with no numbers on it at all;
+  widgets look alike, under an 8px header, each with its own reading printed
+  under it in whatever unit the parameter is in (seconds, semitones, hertz,
+  cents, ×multiples, per cent, a count of steps);
 - the whole patch can be **externally clocked and started/stopped over MIDI**;
 - opening a cell's page **dims the rest of the panel** down to that cell;
 - a source can only sit in **one Output slot** — a second one moves it;
@@ -199,8 +201,8 @@ panel has a gesture that only it responds to any more.
 | **hold** a cell + `K2`+`K3` | sever every cable at that cell |
 
 - **The settings page.** Every cell type has one, and it is the same object
-  every time: a grid of eight widgets, `E1` to pick one, `E2`/`E3` to move it
-  coarsely and finely. It is the same page whether you tapped it open or are
+  every time: a grid of eight widgets — a shape, its value, its name — `E1`
+  to pick one, `E2`/`E3` to move it coarsely and finely. It is the same page whether you tapped it open or are
   just holding the cell — holding is a glance that borrows the encoders and
   gives them back, tapping latches it (press `K2`, or tap the cell again, to
   close). A list longer than eight pages rather than crowding; the header's
@@ -308,7 +310,8 @@ lib/
                              page, the mixer, the Colour page, the cell
                              page, the edge view, the map
   glyph.lua                 the shape vocabulary: twenty-eight drawn shapes,
-                             one per parameter, no two alike
+                             one per parameter, no two alike, 26 x 13 with
+                             the value line under each (§5.2d)
   mixer.lua                 one named, metered channel per live output (§4.1b)
   dispatch.lua              §6 type-interaction matrix: pulse events
                              (-> voice, GVOICE, GUST, SMP, E, F) and the
