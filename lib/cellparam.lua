@@ -247,12 +247,21 @@ PAGES.E = {
   end),
 }
 
--- C cells: a pure flasher, so its whole page is the one ratio.
+-- C cells: the ratio, and §2.9b the one switch that decides whether the
+-- ratio means anything. Mode: Clock is what this family has always been, a
+-- pulse on a division of the transport; High is a trigger that is simply
+-- always up, holding whatever it is cabled to open rather than striking it.
+-- Ratio stays on the page in High -- it is where the cell will be when it
+-- comes back, and blanking a knob you are about to want again is worse than
+-- leaving it showing a number nothing is currently reading.
 PAGES.C = {
   character_row("Ratio", function(id)
     local info = wl("clockcell").info(id)
     return info and info.param or "-"
   end, "word"),
+  flag_row("Mode", "high", "clock",
+    function(id) return wl("clockcell").is_high(id) end,
+    function(id, on) wl("clockcell").set_high(id, on) end),
 }
 
 -- Out cells: nothing to set -- position along the row *is* the pan -- so the

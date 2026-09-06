@@ -194,6 +194,48 @@ HANDLERS["O"] = function() end
 -- there is nothing here for a pulse arriving down a cable to do.
 HANDLERS["LFO"] = function() end
 
+-- §2.9b the gates. a Clock cell set to High (lib/clockcell.lua) does not
+-- pulse; it holds every cell it is cabled to open for as long as it is set
+-- that way. this is the level version of HANDLERS above -- one entry per
+-- family that can sound, saying what "held open" means to it -- and, like
+-- HANDLERS, a type missing from the table is a type for which the answer is
+-- "nothing", which is not an error.
+--
+-- the four that are here are the four with an envelope to hold. an exciter
+-- is deliberately absent: it free-runs unless a trigger cell gates it
+-- (exciter.lua's GATING_TYPES, which a clock cell has never been in), so it
+-- is already doing exactly what a held cell does. so are the fields, the
+-- registers and the transforms, which have no sound of their own at all.
+local GATES = {}
+
+GATES["voice"] = function(cell, on)
+  bridge.voice_hold(cell.index - 1, on)
+end
+
+GATES["GVOICE"] = function(cell, on)
+  bridge.g_hold(cell.index, on)
+end
+
+GATES["GUST"] = function(cell, on)
+  bridge.gust_hold(cell.index, on)
+end
+
+GATES["SMP"] = function(cell, on)
+  bridge.smp_hold(cell.index, on)
+end
+
+-- hold `target_id` open, or let it go. clockcell.resync_gates is the only
+-- caller, and it only calls on a change -- a gate is a level, so re-sending
+-- the one it is already at is noise on the wire.
+function dispatch.set_gate(target_id, on)
+  local cell = topology.get(target_id)
+  if not cell then return false end
+  local f = GATES[cell.type]
+  if not f then return false end
+  f(cell, on and true or false)
+  return true
+end
+
 -- fires when `source_id` speaks and has a cable to `target_id`. also the path
 -- a pulse *emerging* from the lattice takes, with the H node standing in for
 -- the source cell.
@@ -382,7 +424,17 @@ local function specs_for(edge)
     return out
   end
 
-  -- a gust is the one source already reaching the speakers without a cable
+  -- §2.5 a sample cell. this used to be the second family that mixed itself
+  -- (the engine panned it by its own seat), and it is an ordinary cabled
+  -- source now: the Out cell is the only route to a speaker and the only
+  -- thing that decides where in the image it lands.
+  x, y = ordered("SMP", "O")
+  if x then
+    table.insert(out, to_output_spec(bridge.bus("smp_out", x.index), y, edge.gain))
+    return out
+  end
+
+  -- a gust is the one source left reaching the speakers without a cable
   -- (§2.11: the engine pans it by its own column and mixes it in). an
   -- Output cable is therefore an *addition* rather than the only route --
   -- a second, deliberately-placed copy at whatever gain and pan position

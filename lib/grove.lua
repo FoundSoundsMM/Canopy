@@ -121,11 +121,17 @@ end
 --
 -- pentatonic only, on purpose: every entry here is a five-note anhemitonic
 -- set, so nothing this quantises to a scale can land a semitone against
--- itself. "Pent" is the shared shorthand (screenui's value column is narrow)
--- -- Equi Pent and Equi Pent 2 are the two distinct 12-TET roundings of a
--- true five-equal-step (slendro-style) division of the octave that aren't
--- already major or minor pentatonic under some rotation.
-grove.SCALE_NAMES = {"Pent Maj", "Pent Min", "Equi Pent", "Equi Pent2"}
+-- itself. E.Pn1 and E.Pn2 are the two distinct 12-TET roundings of a true
+-- five-equal-step (slendro-style) division of the octave that aren't already
+-- major or minor pentatonic under some rotation.
+--
+-- the names are abbreviations rather than words, and deliberately so: the
+-- Scale row draws with `word` (lib/glyph.lua), whose box is 26px wide -- five
+-- characters of norns' font. "Pent Maj" was clipped to "Pent " there, which
+-- named the family and hid the only part that differed between the four. so
+-- the shared half is the one that gets abbreviated: P.Maj / P.Min / E.Pn1 /
+-- E.Pn2 all fit whole, and index 0 stays the word "free".
+grove.SCALE_NAMES = {"P.Maj", "P.Min", "E.Pn1", "E.Pn2"}
 grove.SCALES = {
   {0, 2, 4, 7, 9},                -- major pentatonic
   {0, 3, 5, 7, 10},               -- minor pentatonic (grove.SCALE's own scale)

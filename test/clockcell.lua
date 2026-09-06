@@ -143,6 +143,112 @@ do
         M.clockcell.level(TOLL, 4) >= 0 and M.clockcell.level(TOLL, 4) <= 15)
 end
 
+-- §2.9b Mode: High ------------------------------------------------------------
+
+print("\n-- set High, a clock cell stops clocking and starts holding --")
+do
+  local M = fresh(1)
+  local RAIN = "smp.rain"
+  check("a fresh cell is a clock", M.clockcell.is_high(TOLL) == false)
+
+  M.patch.add(TOLL, RAIN, 1.0)
+  run(M, 4)
+  check("as a clock it plays the sample over and over", #CALLS.smp_note > 1,
+        tostring(#CALLS.smp_note))
+  check("and holds nothing", #CALLS.smp_hold == 0, tostring(#CALLS.smp_hold))
+
+  local notes = #CALLS.smp_note
+  M.clockcell.set_high(TOLL, true)
+  check("switching to High holds the cell it is cabled to",
+        #CALLS.smp_hold == 1 and CALLS.smp_hold[1].on == 1,
+        tostring(#CALLS.smp_hold))
+  run(M, 8)
+  check("and it stops firing entirely", #CALLS.smp_note == notes,
+        "grew by " .. (#CALLS.smp_note - notes))
+  check("the panel shows it lit rather than blinking",
+        M.clockcell.level(TOLL, 2) == 12, tostring(M.clockcell.level(TOLL, 2)))
+  check("and its readout says so", M.clockcell.info(TOLL).param == "high",
+        M.clockcell.info(TOLL).param)
+
+  -- letting go, three ways: the mode, the cable, and a clear.
+  M.clockcell.set_high(TOLL, false)
+  check("back to Clock, it lets go", #CALLS.smp_hold == 2
+        and CALLS.smp_hold[2].on == 0, tostring(#CALLS.smp_hold))
+  run(M, 4)
+  check("and clocks again", #CALLS.smp_note > notes)
+
+  M.clockcell.set_high(TOLL, true)
+  M.patch.remove(TOLL, RAIN)
+  check("pulling the cable lets go too",
+        CALLS.smp_hold[#CALLS.smp_hold].on == 0,
+        tostring(CALLS.smp_hold[#CALLS.smp_hold].on))
+end
+
+print("\n-- a High cell holds whatever family is at the other end --")
+do
+  local M = fresh(2)
+  M.clockcell.set_high(TOLL, true)
+
+  M.patch.add(TOLL, "oak", 1.0)
+  check("a modal voice", #CALLS.voice_hold == 1 and CALLS.voice_hold[1].on == 1,
+        tostring(#CALLS.voice_hold))
+  M.patch.add(TOLL, "gu.gale", 1.0)
+  check("a gust", #CALLS.gust_hold == 1 and CALLS.gust_hold[1].on == 1,
+        tostring(#CALLS.gust_hold))
+  M.patch.add(TOLL, "gv.yaffle", 1.0)
+  check("a drum", #CALLS.g_hold == 1 and CALLS.g_hold[1].on == 1,
+        tostring(#CALLS.g_hold))
+
+  -- and the families with no envelope to hold are silently skipped rather
+  -- than erroring: a field takes a note, a register takes a trigger.
+  local before = #CALLS.voice_hold + #CALLS.gust_hold + #CALLS.g_hold
+                 + #CALLS.smp_hold
+  M.patch.add(TOLL, "cuckoo", 1.0)
+  M.patch.add(TOLL, "tm.stitch", 1.0)
+  check("a field and a register are held by nothing",
+        #CALLS.voice_hold + #CALLS.gust_hold + #CALLS.g_hold
+        + #CALLS.smp_hold == before)
+
+  M.patch.clear()
+  check("and clearing the patch lets go of all three",
+        CALLS.voice_hold[#CALLS.voice_hold].on == 0
+        and CALLS.gust_hold[#CALLS.gust_hold].on == 0
+        and CALLS.g_hold[#CALLS.g_hold].on == 0)
+end
+
+print("\n-- two High cells on one target is one grip, not two --")
+do
+  local M = fresh(3)
+  M.clockcell.set_high(TOLL, true)
+  M.clockcell.set_high(KNELL, true)
+  M.patch.add(TOLL, "oak", 1.0)
+  M.patch.add(KNELL, "oak", 1.0)
+  check("the second one sends nothing new", #CALLS.voice_hold == 1,
+        tostring(#CALLS.voice_hold))
+  M.clockcell.set_high(TOLL, false)
+  check("and letting go of one does not release the voice",
+        #CALLS.voice_hold == 1, tostring(#CALLS.voice_hold))
+  M.clockcell.set_high(KNELL, false)
+  check("only the last one does", #CALLS.voice_hold == 2
+        and CALLS.voice_hold[2].on == 0, tostring(#CALLS.voice_hold))
+end
+
+print("\n-- the Mode row on the cell page is the switch --")
+do
+  local M = fresh(4)
+  local page = M.cellparam.page(TOLL)
+  check("the clock page has two rows now", page.PARAM_COUNT == 2,
+        tostring(page.PARAM_COUNT))
+  local mode = page.PARAMS[2]
+  check("the second is Mode", mode.label == "Mode", tostring(mode.label))
+  check("reading clock", mode.text(TOLL) == "clock", mode.text(TOLL))
+  mode.set(TOLL, 1)
+  check("setting it flips the cell", M.clockcell.is_high(TOLL) == true)
+  check("and the row says so", mode.text(TOLL) == "high", mode.text(TOLL))
+  mode.set(TOLL, 0)
+  check("and back", M.clockcell.is_high(TOLL) == false)
+end
+
 print("\n-- Still freezes it, same as everything else --")
 do
   local M = fresh(1)

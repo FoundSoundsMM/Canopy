@@ -41,11 +41,17 @@ state.global = {
   swing = 0.8,       -- quantise.lua's swing() -- preserves the old default feel
   scatter = 0,       -- quantise.lua's chaos(), plus rhythm/field wildness
   bpm = 120,         -- transport tempo, mirrored onto the norns clock param
-  scale_i = 0,       -- global pitch quantisation; 0 = free (grove.SCALES)
+  -- global pitch quantisation, an index into grove.SCALES; 0 = free. it
+  -- starts on 1 (P.Maj) rather than on free: every pitched family on the
+  -- panel -- voices, gusts, the fields that tune them -- is more listenable
+  -- in tune than out of it, and "free" is the deliberate choice you make
+  -- after hearing what the panel does in a scale, not the state you have to
+  -- find your way out of on first boot.
+  scale_i = 1,
   drops = 0,         -- per-strike random pitch offset range
   decay_mult = 0.5,  -- global decay multiplier, 0.5 = x1 (voice.lua)
   pitch_offset = 0,  -- global transpose, semitones (grove.lua)
-  level = 0.8,       -- K1+E3, and the mixer's fifth fader: master level
+  level = 0.8,       -- K1+E3: master level (the mixer page has no fader for it)
   -- §4.3: the ONE flag a freeze lives in, whether it came from K2 or from an
   -- external transport Stop. deliberately not two -- a separate record of
   -- "the transport says stopped" alongside "the gaits are frozen" is two

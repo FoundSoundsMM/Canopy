@@ -147,6 +147,48 @@ function DRAW.fader(x, y, w, h, v, on)
   end
 end
 
+-- channel: a fader with a meter beside it. the mixer page and nothing else
+-- (lib/mixer.lua) -- the one place on the panel where a knob has a live
+-- signal behind it, so the widget can say where the fader is AND whether
+-- anything is coming through it, which is the question you actually open a
+-- mixer to answer. a fader at 0.8 on a channel that is silent and one on a
+-- channel that is roaring look identical to every other shape in this file.
+--
+-- the fader is the outlined column, exactly as `fader` draws it, and the
+-- meter is a solid bar down its right-hand side with no outline of its own:
+-- the fader is a setting and reads as a control, the meter is a
+-- measurement and reads as a level. the meter is post-fader engine-side, so
+-- pulling the fader down pulls the bar down with it -- what the widget says
+-- and what you hear are one statement.
+--
+-- `d.meter` is 0..1 and comes from the row's glyph_data; with no data at all
+-- (a caller that has not wired the meter up) the bar simply does not draw and
+-- what is left is a plain fader.
+function DRAW.channel(x, y, w, h, v, on, _, d)
+  local bw = 9
+  local gap = 2
+  local mw = 4
+  local cx = x + math.floor((w - (bw + gap + mw)) / 2 + 0.5)
+  local mx = cx + bw + gap
+
+  screen.level(lo(on)); frame(cx, y, bw, h)
+  local fh = math.floor(v * (h - 2) + 0.5)
+  if fh > 0 then
+    screen.level(md(on) + (on and 4 or 2))
+    bar(cx + 2, y + h - 1 - fh, bw - 4, fh)
+  end
+
+  -- the floor the meter stands on, so an idle channel is still a shape
+  -- rather than an empty gap next to the fader.
+  screen.level(lo(on)); bar(mx, y + h - 1, mw, 1)
+  local m = util.clamp((d and d.meter) or 0, 0, 1)
+  local mh = math.floor(m * (h - 1) + 0.5)
+  if mh > 0 then
+    screen.level(hi(on))
+    bar(mx, y + h - 1 - mh, mw, mh)
+  end
+end
+
 -- bipolar: the same column, filling out of the middle either way. the fill
 -- never disappears -- at centre it is a 2px bar sitting on the mid line, so
 -- "no bend" reads as a statement rather than as an empty box.
@@ -387,6 +429,84 @@ function DRAW.wander(x, y, w, h, v, on)
                      my + sign * amp * (0.5 + hash(i, 9) * 0.5)}
   end
   screen.level(hi(on)); path(pts)
+end
+
+-- rain: rainfall, falling. the one parameter on the panel actually named
+-- after weather, so it is the one shape here that draws the thing rather than
+-- an abstraction of it -- and the only one that MOVES on its own.
+--
+-- three quantities rise together with the knob, which is what makes light
+-- rain and heavy rain read as the same weather at two strengths rather than
+-- as two different pictures: how many streaks there are (3 -> 14), how long
+-- each one is (2px -> 7px), and how fast they fall (about half a box a
+-- second at the bottom, three and a half at the top). the slant comes in
+-- with the speed as well, so heavy rain is being driven rather than
+-- dropped.
+--
+-- animated, unlike everything else in this file, and deliberately so: the
+-- other twenty-two shapes are functions of their parameter alone, because a
+-- widget that moves when the value has not is a widget that cannot be read.
+-- rainfall is the exception where standing still is the misreading -- frozen
+-- streaks are hatching, not rain -- and the motion is unconditional, so it
+-- never competes with the value for the eye. it costs the frame budget
+-- nothing extra: the streaks accumulate into one path and paint once (see
+-- fill_all), so this is the same order of commands as `wander`, which it
+-- replaced on the global page.
+--
+-- the columns and the per-streak head start are hashed, not random, so the
+-- shower has a fixed shape that scrolls through the box rather than
+-- reshuffling itself every frame -- and math.random() is untouched, which
+-- every module's offline test depends on the stream position of.
+local RAIN_MIN, RAIN_MAX = 3, 14
+
+-- the order the streaks are switched on in, as slot numbers across the box.
+-- adding one at a time from left to right would make light rain a puddle in
+-- the corner; this walks the box wide-then-fine, so three streaks are spread
+-- across it and fourteen fill it evenly, and -- because a streak keeps its
+-- slot once it has one -- turning the knob up ADDS rain between what is
+-- already falling rather than reshuffling the shower.
+local RAIN_ORDER = {1, 8, 4, 12, 2, 10, 6, 14, 3, 11, 7, 13, 5, 9}
+
+function DRAW.rain(x, y, w, h, v, on)
+  local n = math.floor(RAIN_MIN + v * (RAIN_MAX - RAIN_MIN) + 0.5)
+  local len = 2 + v * 5
+  local speed = 0.5 + v * 3.0
+  local slant = v * 2.2
+  -- the fall runs past the bottom of the box by a streak's length, so a
+  -- streak leaves the frame instead of blinking out at the last row.
+  local span = h + len
+  local t = (util.time and util.time() or 0) * speed
+
+  -- the ground the rain is falling onto. dim, and drawn first, so a streak
+  -- reaching the bottom crosses it rather than stopping short of it.
+  screen.level(lo(on)); seg(x, y + h - 1, x + w - 1, y + h - 1)
+
+  local drops = {}
+  for i = 1, n do
+    local slot = RAIN_ORDER[i]
+    -- each streak owns a column and a head start; both are fixed for the
+    -- life of the panel, so what moves is only where in its own fall it is.
+    local phase = (t + hash(slot, 3)) % 1
+    -- a third of a streak either side of the nominal length. without it
+    -- fourteen identical dashes read as a texture rather than as weather.
+    local llen = len * (0.7 + hash(slot, 5) * 0.6)
+    local top = phase * span - llen
+    -- evenly spaced, then nudged a pixel either way by the hash: an even
+    -- comb reads as hatching and a purely hashed scatter clumps at this
+    -- width, and neither of those is rain.
+    local col = math.floor((slot - 0.5) / RAIN_MAX * (w - 1)
+                           + (hash(slot, 11) - 0.5) * 2.4 + 0.5)
+    -- the slant is applied per streak, from its own top: a column of rain
+    -- leaning over as it falls, not a box of rain sheared sideways.
+    local dx = math.floor(phase * slant + 0.5)
+    local y0 = math.max(y, y + top)
+    local y1 = math.min(y + h - 1, y + top + llen)
+    if y1 > y0 then
+      drops[#drops + 1] = {util.clamp(x + col + dx, x, x + w - 1),
+                           y0, 1, y1 - y0}
+    end
+  end
+  screen.level(hi(on)); fill_all(drops)
 end
 
 -- word: the word, and where it sits in its bank. Gait, Rule, Mode, Scale.

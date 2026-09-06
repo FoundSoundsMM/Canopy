@@ -15,17 +15,24 @@
 -- and twelve to leave -- that swell is the whole instrument, and it is the
 -- one thing the page is about.
 --
--- two things it shares with a gust (§2.11) rather than with a voice:
+-- it holds its own Level knob, the way a gust does, because a field
+-- recording's loudness is a property of the recording rather than of the
+-- cable carrying it -- Thunder.wav and Sea.wav are nowhere near each other
+-- to start with, and levelling them at the mixer would mean re-levelling
+-- every time one is re-cabled.
 --
---   * it is heard without being cabled to the Output row. the engine pans it
---     by where the cell sits and mixes it in, so a sample cell that has been
---     triggered is audible with no output patching at all.
---   * it holds its own level, because there is no Output cable whose gain
---     would otherwise be deciding that.
+-- what it no longer does is mix itself. it used to reach the speakers with
+-- no patching at all, panned by where the cell sits, exactly as a gust
+-- still does; it is cabled to an Output cell now like every other source on
+-- the panel, and the Out cell it lands on is what pans it. one rule about
+-- what is audible, for every family that makes a sound -- which is also what
+-- lets the four of them appear on the mixer page under their own names.
 --
 -- the four loops these samples used to play as an always-on bed (the mixer's
 -- old Rain/Cicada/Thunder/Sea faders) are gone with the same change: the same
--- four recordings are these four cells now, played rather than left running.
+-- four recordings are these four cells now, played rather than left running
+-- -- and back on the mixer page, but as channels of the patch rather than as
+-- four fixed rows nothing could remove.
 --
 -- the page object is the same shape voice.lua/gust.lua/lfo.lua expose --
 -- PARAMS with get/set/text/push, plus nudge/param/PARAM_COUNT -- so
@@ -213,9 +220,6 @@ function sample.init(dir)
   for _, id in ipairs(sample.each()) do
     local cell = topology.get(id)
     bridge.smp_load(cell.index, dir .. cell.file)
-    -- pan is fixed by where the cell sits and is the only thing here the
-    -- player cannot move, so it is pushed once and never again.
-    bridge.smp_pan(cell.index, cell.pan or 0)
     sample.push_all(id)
   end
 end

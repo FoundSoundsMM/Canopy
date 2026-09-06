@@ -34,9 +34,11 @@ local bridge = {}
 -- is a pure source (the same shape a Clock cell is on the pulse side).
 --
 -- the two heartwood families (`heart_in` / `heart_out`) are gone with the
--- lattice itself (§2.5); the four Sample cells that took those seats reach
--- the mix on their own panned path inside the engine, exactly as a gust
--- does, so they need no bus here either.
+-- lattice itself (§2.5). the four Sample cells that took those seats used to
+-- reach the mix on their own panned path inside the engine, exactly as a gust
+-- does, and needed no bus here; they are ordinary cabled sources now
+-- (`smp_out`), so an SFX loop is heard the same way a voice is -- through an
+-- Output-row cell or not at all.
 bridge.BUS = {
   exc        = {base = 0,  n = 6},  -- E cell raw outputs
   colour_mod = {base = 6,  n = 6},  -- per-E colour cross-mod sum
@@ -47,6 +49,7 @@ bridge.BUS = {
   gust_out   = {base = 42, n = 12}, -- per-GUST audio tap
   gust_mod   = {base = 54, n = 12}, -- per-GUST cross-mod input sum
   lfo_out    = {base = 66, n = 4},  -- per-LFO sine tap
+  smp_out    = {base = 70, n = 4},  -- per-SMP (sample cell) audio tap
 }
 
 function bridge.bus(name, index)
@@ -304,7 +307,9 @@ end
 -- these replaced amb_load/amb_volume, which played the same four recordings
 -- as an always-on bed with a fader each. same files, same buffers -- they are
 -- triggered now rather than left running, so a level is no longer the only
--- thing there is to say about one.
+-- thing there is to say about one. there is no smp_pan: a sample cell used to
+-- pan itself by its seat on the panel, and is cabled to an Output cell now
+-- (`smp_out` above), so the Out cell it lands on is what places it.
 function bridge.smp_load(index, path)
   engine.smp_load(index, path)
 end
@@ -332,10 +337,30 @@ function bridge.smp_level(index, v)
   engine.smp_level(index, v)
 end
 
--- where this cell sits in the stereo field. fixed by the cell's seat
--- (topology's `pan`) and pushed once at init -- there is no knob for it.
-function bridge.smp_pan(index, v)
-  engine.smp_pan(index, v)
+-- §2.9b the four gates. a Clock cell set to High (lib/clockcell.lua) holds
+-- a cable up instead of pulsing it, and these are what that means to each
+-- family that can sound: hold the note/recording/ring open for as long as
+-- the gate is up, rather than striking it and letting it fall.
+--
+-- `on` is 0 or 1 rather than a boolean because that is what the OSC message
+-- carries, and because every one of the four synthdefs crossfades between
+-- its struck path and its held one on exactly this number -- at 0 the held
+-- path contributes nothing at all, so a patch with no High clock in it
+-- sounds precisely as it did before any of this existed.
+function bridge.voice_hold(voice_index, on)
+  engine.voice_hold(voice_index, on and 1 or 0)
+end
+
+function bridge.g_hold(index, on)
+  engine.g_hold(index, on and 1 or 0)
+end
+
+function bridge.gust_hold(index, on)
+  engine.gust_hold(index, on and 1 or 0)
+end
+
+function bridge.smp_hold(index, on)
+  engine.smp_hold(index, on and 1 or 0)
 end
 
 return bridge

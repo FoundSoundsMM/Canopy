@@ -168,9 +168,9 @@ end
 -- a pulse (or K1+tap) plays that sample under an envelope with a slow attack
 -- and a slow fall the player sets per cell, so the same four soundscapes that
 -- used to sit under the patch as always-on loops are now something the patch
--- can actually play. like a gust, a sample cell is heard WITHOUT being cabled
--- to the Output row: it panned by where it sits and mixed in automatically.
--- see lib/sample.lua.
+-- can actually play. it is cabled to an Output cell like every other source
+-- -- these four used to be the exception, panned by their own seat and mixed
+-- in automatically, and are not any more. see lib/sample.lua.
 --
 -- `file` is a name under audio/ and `index` is the engine's own sample slot
 -- (0-based), which is also the buffer amb_load fills.
@@ -181,9 +181,10 @@ local SMP_CELLS = {
   {id = "sea",     name = "Sea",     file = "Sea.wav",     x = 13, y = 7, attack = 2.5, decay = 9.0},
 }
 
--- pan, like a gust's, comes from the column and nothing else -- these four
--- sit on a diagonal from the right edge inward, so they spread from hard
--- right toward the middle rather than piling up in one place.
+-- these four sit on a diagonal from the right edge inward. they used to
+-- carry a `pan` of their own, taken from the column the way a gust's is,
+-- because they mixed themselves; the Out cell each is cabled to decides that
+-- now, so there is nothing left here but the recording and its envelope.
 for i, sm in ipairs(SMP_CELLS) do
   reg("SMP", "smp." .. sm.id, sm.name, {{sm.x, sm.y}}, {
     letter = "S",
@@ -191,7 +192,6 @@ for i, sm in ipairs(SMP_CELLS) do
     file = sm.file,
     attack = sm.attack,
     decay = sm.decay,
-    pan = 0.8 - (i - 1) * 0.45,
   })
 end
 

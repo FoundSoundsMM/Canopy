@@ -378,16 +378,26 @@ function screenui.draw_global()
 end
 
 -- §4.1b the mixer page (K3, back with K2) --------------------------------------
--- the master, then one fader per Output cell the patch is actually using
--- (lib/mixer.lua). the list grows and shrinks with the cables, so the header
--- says how many channels are open: with nothing patched this page is one
--- fader and a lot of space, and that is the honest picture.
+-- one channel per Output cell the patch is actually using, each named after
+-- the instrument cabled to it and each carrying a live meter (lib/mixer.lua).
+-- there is no master row: that is one number over the whole instrument rather
+-- than a channel, and K1+E3 moves it from this screen as from every other.
+--
+-- the list grows and shrinks with the cables, so the header says how many
+-- channels are open. with nothing patched this page is empty, and that is the
+-- honest picture of a patch that makes no sound -- so it says so in words
+-- rather than showing a grid of nothing.
 
 function screenui.draw_mixer()
-  local focus = util.clamp(state.mparam_focus or 1, 1, mixer.PARAM_COUNT)
-  local pages = math.max(1, math.ceil(mixer.PARAM_COUNT / PL_PER_PAGE))
-  screenui.draw_header("Mixer", (mixer.PARAM_COUNT - 1) .. " out",
-                       screenui.page_of(focus), pages)
+  local count = mixer.PARAM_COUNT
+  local focus = util.clamp(state.mparam_focus or 1, 1, math.max(1, count))
+  local pages = math.max(1, math.ceil(count / PL_PER_PAGE))
+  screenui.draw_header("Mixer", count .. " ch", screenui.page_of(focus), pages)
+  if count == 0 then
+    screen.level(4)
+    centred(64, BLOCK_TOP[1] + 20, "no outputs cabled")
+    return
+  end
   draw_param_grid(mixer.PARAMS, focus,
                   function(q) return q.text() end,
                   function(q) return q.frac() end,
@@ -719,9 +729,9 @@ local INTERACTION_DESC = {
   ["E|SMP"] = "nothing continuous. only a pulse plays a sample",
   ["F|SMP"] = "nothing. a sample cell takes a trigger, not a note",
   ["GUST|SMP"] = "nothing. neither one sends the other a pulse",
-  ["LFO|SMP"] = "nothing. a sample cell has no knob a stream can move",
+  ["LFO|SMP"] = "the LFO moves one knob on the sample. pick which on its Param row",
   ["SMP|SMP"] = "nothing. a sample cell never sends a pulse",
-  ["SMP|O"] = "nothing. a sample cell mixes itself, and needs no output cable",
+  ["SMP|O"] = "the sample is heard, panned to where this output sits",
   -- the Output row is exclusive (patch.lua): a source sits at one pan
   -- position, and cabling it to a second Out cell moves it rather than
   -- adding to it. two Out cells together is not a cable at all -- and a
@@ -757,10 +767,38 @@ local TYPE_ORDER = {
   GVOICE = 9, GUST = 10, SMP = 11, O = 12,
 }
 
+-- §2.9b a Clock cell set to High is a different cable from the same seat: it
+-- sends no pulse at all and holds the far end open instead, so every "the
+-- clock pulse ..." line above is the wrong sentence for it. keyed on the
+-- OTHER end's type alone, since the near end is a High clock by definition.
+-- a type missing here falls through to the ordinary table, which is right:
+-- a High cell cabled to a field or a register does exactly what it says
+-- there, which is nothing.
+local HIGH_DESC = {
+  voice = "the voice is held open and rings continuously, never struck",
+  GVOICE = "the drum is held open and rings continuously, never struck",
+  GUST = "the gust swells in and stays there for as long as this is high",
+  SMP = "the sample plays continuously instead of swelling and going",
+  E = "the exciter runs free, which is what it does uncabled anyway",
+  C = "nothing. a clock cell is a source, held or not",
+  O = "nothing. an output carries sound, and this carries a gate",
+}
+
 local function interaction_text(ta, tb)
   local a, b = ta, tb
   if (TYPE_ORDER[a] or 99) > (TYPE_ORDER[b] or 99) then a, b = b, a end
   return INTERACTION_DESC[a .. "|" .. b] or "no direct interaction defined"
+end
+
+-- the same question asked of two actual cells rather than two types, which is
+-- what the edge view has and what a mode-dependent answer needs.
+local function interaction_text_for(a, b)
+  local clockcell = wl("clockcell")
+  local other
+  if a.type == "C" and clockcell.is_high(a.id) then other = b
+  elseif b.type == "C" and clockcell.is_high(b.id) then other = a end
+  if other and HIGH_DESC[other.type] then return HIGH_DESC[other.type] end
+  return interaction_text(a.type, b.type)
 end
 
 function screenui.draw_edge(id_a, id_b)
@@ -813,7 +851,7 @@ function screenui.draw_edge(id_a, id_b)
   end
 
   screen.level(8)
-  local desc_lines = wrap(interaction_text(a.type, b.type), 30)
+  local desc_lines = wrap(interaction_text_for(a, b), 30)
   for i, line in ipairs(desc_lines) do
     if i > 3 then break end
     screen.move(2, 33 + i * 9)

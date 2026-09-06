@@ -33,6 +33,7 @@ local clockcell  = wl("clockcell")
 local gust       = wl("gust")
 local weave      = wl("weave")
 local cellparam  = wl("cellparam")
+local mixer      = wl("mixer")
 
 local gridui = {}
 
@@ -97,7 +98,7 @@ function gridui.on_grid_key(x, y, z, keystate)
     if anchor and held_dur < gridui.TAP_THRESHOLD then
       local anchor_cell = topology.get(anchor)
       local oneway = keystate and keystate.k1
-      local result = patch.toggle(anchor, id, oneway, 0.6)
+      local result, _, replaced = patch.toggle(anchor, id, oneway, 0.6)
       -- "moved" is patch.lua's Output-row exclusivity (§2.1): the source was
       -- already on the row, so this tap slid it to a new pan position rather
       -- than adding a second one. worth its own word -- the cable count did
@@ -106,7 +107,15 @@ function gridui.on_grid_key(x, y, z, keystate)
                 or (result == "moved") and "=>"
                 or (result == "removed") and "x" or nil
       if verb then
-        state.set_event(anchor_cell.name .. " " .. verb .. " " .. cell.name, 1.5)
+        local msg = anchor_cell.name .. " " .. verb .. " " .. cell.name
+        -- the other half of the same rule: an Out cell carries one source,
+        -- so this cable may have pushed one off. it is a cell going dark
+        -- somewhere else on the panel, which is exactly the kind of thing
+        -- the event line exists to name.
+        if replaced then
+          msg = msg .. " (" .. topology.get(replaced).name .. " off)"
+        end
+        state.set_event(msg, 1.5)
       end
     elseif not anchor and held_dur < gridui.TAP_THRESHOLD then
       gridui.on_tap(id, cell, keystate)
@@ -186,10 +195,13 @@ function gridui.act(id, cell)
   end
 
   wl("dispatch").on_pulse(id, id, {id = -1, a = id, b = id, gain = 1.0}, 1.0)
-  -- GUST and SMP cells are deliberately not in this check: both route
-  -- themselves to the mix, so "no output cable" is their normal state rather
-  -- than the confusing one this warning exists for.
-  if (cell.type == "voice" or cell.type == "GVOICE") and not reaches_output(id) then
+  -- GUST is deliberately not in this check: it is the one family left that
+  -- routes itself to the mix, so "no output cable" is its normal state
+  -- rather than the confusing one this warning exists for. a sample cell
+  -- used to be the other one and is cabled like everything else now (§2.5),
+  -- which is exactly why it needs the warning.
+  if (cell.type == "voice" or cell.type == "GVOICE" or cell.type == "SMP")
+     and not reaches_output(id) then
     state.set_event(cell.name .. ": no output cable", 2.0)
   else
     state.set_event(cell.name .. ": fired", 1.2)
@@ -275,7 +287,16 @@ function gridui.brightness(id, cell)
     local base = (state.cell_edit == id) and 12 or (patch.degree(id) > 0 and 6 or 3)
     return state.flash_level(id, base)
   elseif cell.type == "O" then
-    return patch.degree(id) > 0 and 5 or 1
+    -- §7.4: the Output row is the one place on the panel where "is anything
+    -- happening here" is a question about audio rather than about events, so
+    -- it is the one row lit by a meter rather than by a flash. an empty seat
+    -- sits at 1 and a cabled one at 4, which is the floor -- the channel is
+    -- open whether or not it happens to be sounding this instant -- and the
+    -- meter takes it from there up to full. reading the same post-fader
+    -- level the mixer page draws, so a channel pulled down goes dim on the
+    -- grid too.
+    if patch.degree(id) == 0 then return 1 end
+    return util.clamp(4 + math.floor(mixer.meter(id) * 11 + 0.5), 4, 15)
   elseif cell.type == "D" then
     return rambler.level(id, 3)
   elseif cell.type == "R" then

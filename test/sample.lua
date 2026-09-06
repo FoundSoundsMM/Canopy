@@ -57,19 +57,41 @@ do
         and M.topology.get(THUNDER).name == "Thunder"
         and M.topology.get(SEA).name == "Sea")
 
-  -- pan is the cell's own and the player cannot move it, exactly like a
-  -- gust's -- so it has to be spread rather than all four in one place.
-  local pans = {}
-  for _, id in ipairs(ids) do table.insert(pans, M.topology.get(id).pan) end
-  check("panned apart, right to left",
-        pans[1] > pans[2] and pans[2] > pans[3] and pans[3] > pans[4],
-        table.concat({pans[1], pans[2], pans[3], pans[4]}, " "))
-  check("and every one of them is inside the field", (function()
-    for _, p in ipairs(pans) do
-      if p < -1 or p > 1 then return false end
+  -- these four used to carry a `pan` of their own, because they mixed
+  -- themselves; they are cabled sources now and the Out cell each lands on
+  -- is what places them, so a leftover pan field would be a number nothing
+  -- reads and everything would still work if it were wrong.
+  check("no pan of their own any more", (function()
+    for _, id in ipairs(ids) do
+      if M.topology.get(id).pan ~= nil then return false end
     end
     return true
   end)())
+end
+
+print("\n-- an SFX loop is routed like every other source --")
+do
+  local M = fresh(3)
+  M.sample.init("/tmp/audio/")
+  local before = #CALLS.patch_add
+
+  M.patch.add(RAIN, "o.4", 0.8)
+  M.dispatch.resync_matrix()
+  check("cabling one to an Out cell builds an audio patch",
+        #CALLS.patch_add == before + 1, tostring(#CALLS.patch_add - before))
+  local spec = CALLS.patch_add[#CALLS.patch_add]
+  check("audio-rate, off this cell's own tap", spec.kind == "aa"
+        and spec.src == M.bridge.bus("smp_out", M.topology.get(RAIN).index),
+        tostring(spec.kind) .. " " .. tostring(spec.src))
+  check("and into that Out cell's bus",
+        spec.dst == M.bridge.bus("out", M.topology.get("o.4").index),
+        tostring(spec.dst))
+
+  -- the whole point of routing them: an Out cell carries one source, so a
+  -- second one landing there evicts the first (lib/patch.lua).
+  M.patch.add("oak", "o.4", 0.8)
+  check("and an Out cell still only carries one of them",
+        M.patch.has(RAIN, "o.4") == nil and M.patch.has("oak", "o.4") ~= nil)
 end
 
 print("\n-- init loads one buffer per cell and pushes its page --")
@@ -87,8 +109,6 @@ do
     return true
   end)())
 
-  check("four pans, pushed once each", #CALLS.smp_pan == 4,
-        tostring(#CALLS.smp_pan))
   check("and every knob on the page reached the engine",
         #CALLS.smp_attack == 4 and #CALLS.smp_decay == 4
         and #CALLS.smp_speed == 4 and #CALLS.smp_level == 4,
@@ -200,13 +220,23 @@ do
         tostring(#CALLS.strike))
 end
 
-print("\n-- K1+tap fires one, and does not warn about a missing output --")
+print("\n-- K1+tap fires one, and now says so when it cannot be heard --")
 do
   local M = fresh(9)
   local gridui = wl("gridui")
   gridui.act(THUNDER, M.topology.get(THUNDER))
   check("it sounded", #CALLS.smp_note == 1, tostring(#CALLS.smp_note))
-  check("and said so without complaining about routing",
+  -- these four used to mix themselves and were exempt from this warning.
+  -- they are cabled sources now, so an uncabled one firing into silence is
+  -- exactly the confusing state the warning exists for.
+  check("and warned that nothing is routed",
+        M.state.last_event:find("no output") ~= nil, M.state.last_event)
+
+  M.patch.add(THUNDER, "o.9", 0.8)
+  -- past both the event hold (state.set_event) and the note refractory
+  T = T + 3
+  gridui.act(THUNDER, M.topology.get(THUNDER))
+  check("cabled to an Out cell, the warning goes",
         M.state.last_event:find("no output") == nil, M.state.last_event)
 end
 

@@ -26,18 +26,34 @@ And an interface pass on top of that, which is where the panel stands now:
 
 - **the heartwood is gone**, and the four seats it had are four **sample
   players** — Rain, Cicada, Thunder and Sea. A pulse plays one, under a slow
-  attack and a slow fall you set per cell. They mix themselves, so they need
-  no Output cable;
-- **the mixer is built from the patch**: the master, then one fader for every
-  Output cell something is actually cabled to, appearing and disappearing
-  with the cables, up to sixteen. The four soundscape loops it used to carry
-  are the sample cells above;
+  attack and a slow fall you set per cell;
+- **the mixer is built from the patch**: one channel for every Output cell
+  something is actually cabled to, appearing and disappearing with the
+  cables, up to sixteen. There is no master row — that is one number over the
+  whole instrument, and it is on `K1`+`E3` where it always was. Each channel
+  is named after the instrument on it and carries a live meter;
 - **an LFO picks what it moves.** Cable one to a cell and its page gains a
   **Target** and a **Param** row: pick any knob on that cell's own settings
   page and the LFO moves it, by **Depth**, around wherever you left it;
 - **the screen says what a cell is in words** — `Voice: Oak`, `Trigger: Hob`,
   `Exciter: Ember` — instead of the one-letter panel code (`M Oak`, `T Hob`)
   there was no legend to look up;
+- **the four sample players are routed**, like every other source: they used
+  to mix themselves, panned by their own seat, and take an Output cable now
+  — which is what puts them back on the mixer page as channels called Rain,
+  Cicada, Thunder and Sea;
+- **a clock cell can be a gate instead**: its new **Mode** row switches it
+  from a pulse on a division of the transport to a trigger that is simply
+  always high, holding whatever it is cabled to open — a modal voice rings
+  continuously, a sample plays on, a gust swells in and stays;
+- **an Output cell carries one source.** A second one landing there evicts
+  the first, the same way a source landing on a second Out cell moves itself.
+  That is what lets a channel be named after its instrument;
+- **Scale starts on P.Maj**, the major pentatonic, rather than on free, and
+  the four scales are abbreviated to fit the shape that draws them — free,
+  P.Maj, P.Min, E.Pn1, E.Pn2;
+- **Rain draws rainfall**, light at the bottom of the knob and heavy at the
+  top, and it is the one shape on the panel that moves on its own;
 - the gusts are **Gust 1–12** and the clocks **Clock 1–4**, twelve and four of
   one thing rather than twelve and four folk names;
 - a **clock cell divides down to 1/128** of a beat, not 1/8, with 1× on the
@@ -90,7 +106,9 @@ reach. The shape of what is left is what makes the panel readable.
   (tide, creep, season, ...) are cut outright, not relocated. The letter is
   reused for something unrelated: four small cells that flash on a
   multiple/division of the master clock, feeding the trigger block next to
-  them — the job Knocker's old `metric` gait used to do by default. Knocker
+  them — the job Knocker's old `metric` gait used to do by default. Each also
+  has a second mode, **High**, in which it stops clocking and simply holds
+  whatever it is cabled to open. Knocker
   itself is gone; **Skriker** takes its seat in the trigger block with a new
   gait, `swarm` — a short, unpredictable cluster of 2-4 hits.
 - **The percussion cells are renamed and moved.** The six small drum voices
@@ -102,10 +120,10 @@ reach. The shape of what is left is what makes the panel readable.
   another way to make a pulse — it already has T, C, R and TM — but something
   to *play*. A gust is a small drone synth, loosely a Ciat-Lonbarde Deerhorn:
   a folded triangle under a slow swell and a slow fall you set per cell.
-  Press one and it sounds; a pulse cabled in sounds it too. Like a sample
-  cell it is heard without an Output cable, panned by the column it sits in,
-  and all twelve share one delay line off the global page. Cable two together
-  and they FM each other, as deeply as **Cross** on each is turned up.
+  Press one and it sounds; a pulse cabled in sounds it too. It is the one
+  family heard without an Output cable, panned by the column it sits in, and
+  all twelve share one delay line off the global page. Cable two together and
+  they FM each other, as deeply as **Cross** on each is turned up.
 - **Four LFOs sit on the row above them.** Plain sines, one knob each until
   you cable one somewhere — see **Target** and **Param** above.
 - **The weave, grove and exciters are all trimmed**, not changed: 6 weave
@@ -158,7 +176,7 @@ panel has a gesture that only it responds to any more.
   dots say which page you are on. What used to be a modifier gesture is a
   widget on the page now: a T cell's **Gait** and **Clock** (rooted / wild),
   an R cell's **Rule**, an F cell's **Mode** and **Snap**, a C cell's
-  **Ratio**, an E cell's **Decay**.
+  **Ratio** and **Mode**, an E cell's **Decay**.
 - **With a page open, the panel dims to that cell.** The cell you are
   inspecting goes to full, what it is cabled to stays readable, and
   everything else drops to a floor — so the grid is showing the same one
@@ -168,9 +186,9 @@ panel has a gesture that only it responds to any more.
   out of its own door, and a gust or a sample cell plays. This is how you
   audition a voice without patching anything — and if nothing it makes can
   reach an Output cell, directly or down the chain, it says **no output
-  cable** rather than leaving you wondering. Gusts and sample cells are
-  exempt: they route themselves, so having no output cable is their normal
-  state rather than the confusing one that warning exists for.
+  cable** rather than leaving you wondering. Gusts are the one exemption:
+  they route themselves, so having no output cable is their normal state
+  rather than the confusing one that warning exists for.
 - Nothing held: `E1` picks one of ten global params — BPM, Swing, Rain,
   Scale, Plonks, Decay, Pitch, then the gusts' shared delay line (Space,
   Delay, Regen) on a second page — and `E2`/`E3` nudge it coarse/fine.
@@ -193,22 +211,29 @@ panel has a gesture that only it responds to any more.
   re-quantised — those pulses are derived from one that was already placed,
   and snapping a flam or a swung off-beat back onto the grid would undo the
   only thing it does.
-- **The mixer is the master and your live outputs.** It has no fixed
-  contents: a fader appears for an Output cell the moment something is cabled
-  to it, and goes again when the cable is pulled, up to sixteen. An unpatched
-  patch is one fader and a lot of space, which is the honest picture. A
-  channel starts at unity, so a fader that has just appeared is not also
-  silent. The fader and the cable's own gain are different things: the gain
-  says how much of *that source* arrives at that pan position, and the fader
-  is everything arriving there, together, after the fact.
+- **The mixer is your live outputs, by name, with meters.** It has no fixed
+  contents and no master row: a channel appears for an Output cell the moment
+  something is cabled to it, and goes again when the cable is pulled, up to
+  sixteen. It is called after the instrument on it — "Thunder", not "Out 12"
+  — because an Output cell carries exactly one source, and by the time six
+  channels are open the pan position is the least useful thing about any of
+  them. Every channel carries a live meter, read after its own fader, so
+  pulling a channel down pulls its meter down too; the same reading lights
+  that cell on the grid, which makes the Output row a sixteen-segment meter
+  of the whole patch. A channel starts at unity, so one that has just
+  appeared is not also silent. The fader and the cable's own gain are
+  different things: the gain says how much of *that source* arrives at that
+  pan position, and the fader is that instrument's level in the mix.
+  `K1`+`E3` is still the master, from this page as from every other.
 - **The four field recordings are cells now.** `audio/Rain.wav`,
   `Cicada.wav`, `Thunder.wav` and `Sea.wav` used to loop from init with a
   fader each. They are the four **S** cells on the right-hand diagonal
   instead: a pulse plays one from the top under an attack and a fall you set
-  per cell, up to twenty seconds in and forty out. Like a gust, one is heard
-  without being cabled to the Output row — it pans itself by where it sits
-  and mixes itself in. There is no path from one into a voice's resonator;
-  the six E cells are still the panel's excitation sources.
+  per cell, up to twenty seconds in and forty out. Each is cabled to an
+  Output cell like every other source — they used to mix themselves, and
+  don't any more, which is what puts them back on the mixer page under their
+  own names. There is no path from one into a voice's resonator; the six E
+  cells are still the panel's excitation sources.
 - **An LFO picks what it moves.** Cable one anywhere and its page gains
   **Target** (which of the cells it is cabled to) and **Param** (which row of
   *that cell's* own settings page). It then moves exactly that knob, by
@@ -248,7 +273,7 @@ lib/
                              page, the cell page, the edge view, the map
   glyph.lua                 the shape vocabulary: twenty-two drawn shapes,
                              one per parameter, no two alike
-  mixer.lua                 the master + one fader per live output (§4.1b)
+  mixer.lua                 one named, metered channel per live output (§4.1b)
   dispatch.lua              §6 type-interaction matrix: pulse events
                              (-> voice, GVOICE, GUST, SMP, E, F) and the
                              continuous patch matrix (E<->E, E->voice,
@@ -312,7 +337,10 @@ to actually render audio.
   reshapes without dropping, hocket round-robins its cables, delay is
   musical rather than millisecond, a chain of the multiplying rules with a
   voice loop in it stays bounded.
-- `clockcell.lua` — a Clock cell fires at the expected multiple/division of
+- `clockcell.lua` — Mode: High stops a cell clocking and holds every family
+  at the far end of its cables open instead, letting go when the mode, the
+  cable or the whole patch changes, with two High cells on one target
+  counting as one grip; and a Clock cell fires at the expected multiple/division of
   the master clock, Ratio changes take effect, it never reacts to an
   incoming pulse (a pure source, same as Climate always was), and it
   freezes under Still.
@@ -356,8 +384,9 @@ to actually render audio.
   the `.sc` file expects; the envelope centred on each cell's own default and
   reaching seconds at the middle of the knob; the global Decay macro reaching
   them; a pulse playing one and — unlike a drum or a gust — nothing coming
-  back out, so a cable loop through one cannot run away; and `K1`+tap firing
-  one without the "no output cable" warning, because it needs none.
+  back out, so a cable loop through one cannot run away; a cable to an Output
+  cell building an ordinary audio patch off that cell's own tap; and `K1`+tap
+  warning "no output cable" until one is drawn.
 - `grove.lua` — trimmed to the 4 surviving fields: a cabled field retunes
   the voice *before* the strike, Range bounds it, snap lands on scale
   tones, a pulse steps a field with nothing struck, F↔F converges at
@@ -383,13 +412,14 @@ to actually render audio.
   source turning BPM into a readout that follows the incoming tempo.
 - `mixer.lua` — the four recordings load once each at the engine indices the
   `.sc` file expects (they belong to the sample cells now, not to this page);
-  the page is built from the patch, growing a fader as an Output cell is
-  cabled to and losing it again when the cable is pulled, master always
-  first and never more than sixteen channels after it; each channel is an
-  independent 0..1 knob that forwards to its own output; `K3`/`K2` move
-  between the main screen, a cell page and the mixer in the documented order;
-  and an external Start/Stop freezes and unfreezes the patch without flooding
-  on resume.
+  the page is built from the patch, growing a channel as an Output cell is
+  cabled to and losing it again when the cable is pulled, empty when nothing
+  is cabled and never more than sixteen; each channel named after the
+  instrument on it, renamed when a second source evicts the first, and drawn
+  with a meter; each an independent 0..1 knob that forwards to its own
+  output; `K3`/`K2` move between the main screen, a cell page and the mixer
+  in the documented order; and an external Start/Stop freezes and unfreezes
+  the patch without flooding on resume.
 - `smoke.lua` — loads `Canopy.lua` itself and exercises every screen
   view, the sound page, and every control against the 78-cell panel.
 - `soak.lua` — the same, but against a *strict* norns stub: `screen`, `util`

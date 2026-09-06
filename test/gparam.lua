@@ -78,26 +78,37 @@ do
   end
 end
 
-print("\n-- Scale steps one entry per flick, and 0 is free --")
+print("\n-- Scale starts on P.Maj, steps one entry per flick, and 0 is free --")
 do
   local M = fresh(7)
   local scale_i = 4  -- Scale is BPM, Swing, Scatter, Scale
-  check("starts free", M.state.global.scale_i == 0)
+  check("starts on the major pentatonic, not free", M.state.global.scale_i == 1,
+        tostring(M.state.global.scale_i))
+  check("and that is what the row says", M.gparam.param(scale_i).text() == "P.Maj",
+        M.gparam.param(scale_i).text())
   -- SCALE_DETENTS is 3 in gparam.lua; two ticks of 3 should not move it yet
-  M.gparam.nudge(scale_i, 2, true)
-  check("under one detent's worth: still free", M.state.global.scale_i == 0,
+  M.gparam.nudge(scale_i, -2, true)
+  check("under one detent's worth: still P.Maj", M.state.global.scale_i == 1,
         tostring(M.state.global.scale_i))
-  M.gparam.nudge(scale_i, 1, true)
-  check("the third tick lands on the first scale", M.state.global.scale_i == 1,
+  M.gparam.nudge(scale_i, -1, true)
+  check("the third tick down lands on free", M.state.global.scale_i == 0,
         tostring(M.state.global.scale_i))
-  M.gparam.nudge(scale_i, -3, true)
-  check("and a flick the other way returns to free", M.state.global.scale_i == 0,
+  check("which the row spells out", M.gparam.param(scale_i).text() == "free",
+        M.gparam.param(scale_i).text())
+  M.gparam.nudge(scale_i, 3, true)
+  check("and a flick the other way returns to P.Maj", M.state.global.scale_i == 1,
         tostring(M.state.global.scale_i))
   M.gparam.nudge(scale_i, -300, true)
   check("clamped at 0, not negative", M.state.global.scale_i == 0)
   M.gparam.nudge(scale_i, 300, true)
   check("clamped at the last scale", M.state.global.scale_i == #M.grove.SCALES,
         tostring(M.state.global.scale_i))
+  check("every scale name fits the `word` box", (function()
+    for _, n in ipairs(M.grove.SCALE_NAMES) do
+      if #n > 5 then return false end
+    end
+    return true
+  end)())
 end
 
 print("\n-- Scale quantises grove.hz only when it isn't free --")
@@ -109,6 +120,7 @@ do
   -- v = 0.5 + 1.5/48 -- unambiguously closer to the major pentatonic's 2 than
   -- its 0, unlike a round 1 semitone which ties between them.
   M.state.set_vparam(OAK, "tune", 0.5 + (1.5 / 48))
+  M.state.global.scale_i = 0
   local free_hz = M.grove.hz(OAK)
   check("1.5 semitones up, unquantised",
         math.abs(free_hz - root * 2 ^ (1.5 / 12)) < 1e-6, string.format("%.3f", free_hz))

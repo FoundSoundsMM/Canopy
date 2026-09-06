@@ -213,6 +213,22 @@ end
 print("\n-- the mixer page --")
 do
   M.state.view = "mixer"
+  -- the page is built from the patch and has no fixed rows at all now that
+  -- the master is gone, so an unpatched one is a legitimate view of its own
+  -- and has to draw without running off the panel either.
+  M.patch.clear()
+  M.state.mparam_focus = 1
+  screenui.redraw()
+  draws_clean("mixer, nothing cabled")
+
+  -- then a full one: sixteen channels is the cap the Output row sets, and
+  -- the longest names on the panel are the ones most likely to collide.
+  local sources = {"oak", "hazel", "alder", "rowan",
+                   "gv.yaffle", "gv.knap", "gv.clapper",
+                   "gv.scree", "gv.chaff", "gv.rattle",
+                   "e.bracken", "e.gorse", "e.ember",
+                   "smp.rain", "smp.cicada", "smp.thunder"}
+  for x, src in ipairs(sources) do M.patch.add(src, "o." .. x, 0.5) end
   for i = 1, M.mixer.PARAM_COUNT do
     M.state.mparam_focus = i
     screenui.redraw()
@@ -224,6 +240,8 @@ do
   screenui.redraw()
   draws_clean("mixer, everything up")
   for _, p in ipairs(M.mixer.PARAMS) do p.set(0) end
+  M.patch.clear()
+  M.state.mparam_focus = 1
   M.state.view = "global"
 end
 
@@ -494,9 +512,14 @@ do
   check("the global page takes two",
         screenui.page_of(M.gparam.PARAM_COUNT) == 2,
         tostring(M.gparam.PARAM_COUNT))
-  check("and so does the mixer",
-        screenui.page_of(M.mixer.PARAM_COUNT) == 1,
+  -- the mixer is built from the patch, so its length is the player's rather
+  -- than ours: empty it is one page, and a full Output row is exactly two.
+  check("an empty mixer is one page",
+        math.max(1, math.ceil(M.mixer.PARAM_COUNT / screenui.PARAMS_PER_PAGE)) == 1,
         tostring(M.mixer.PARAM_COUNT))
+  check("and a full Output row is two",
+        math.ceil(M.mixer.MAX_CHANNELS / screenui.PARAMS_PER_PAGE) == 2,
+        tostring(M.mixer.MAX_CHANNELS))
 
   -- every cell type has a page at all -- "some cells have settings and some
   -- don't" was half of the inconsistency this replaced.
@@ -683,10 +706,31 @@ do
     end
   end
 
-  local interaction_text = upvalue(screenui.draw_edge, "interaction_text")
+  -- draw_edge asks interaction_text_for (which takes two cells, so a High
+  -- clock can answer differently -- §2.9b), and that asks interaction_text
+  -- (which takes two types) for everything else.
+  local for_cells = upvalue(screenui.draw_edge, "interaction_text_for")
+  local interaction_text = for_cells and upvalue(for_cells, "interaction_text")
   local descs = interaction_text and upvalue(interaction_text, "INTERACTION_DESC")
   check("the lexicon and its lookup are reachable",
         type(interaction_text) == "function" and type(descs) == "table", "")
+
+  local high = for_cells and upvalue(for_cells, "HIGH_DESC")
+  check("and so is the High clock's own half of it", type(high) == "table", "")
+  if high and for_cells then
+    local C, SM = "clk.toll", "smp.rain"
+    local clockcell = wl("clockcell")
+    local a, b = M.topology.get(C), M.topology.get(SM)
+    clockcell.set_high(C, false)
+    check("a Clock cell reads as a clock",
+          for_cells(a, b) == interaction_text("C", "SMP"), for_cells(a, b))
+    clockcell.set_high(C, true)
+    check("and set High it reads as a gate", for_cells(a, b) == high.SMP,
+          for_cells(a, b))
+    check("whichever way round the pair is held",
+          for_cells(b, a) == high.SMP, for_cells(b, a))
+    clockcell.set_high(C, false)
+  end
 
   if descs then
     local dead = {}

@@ -75,7 +75,7 @@ local function fresh_calls()
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
     smp_load = {}, smp_note = {}, smp_attack = {}, smp_decay = {},
-    smp_speed = {}, smp_level = {}, smp_pan = {},
+    smp_speed = {}, smp_level = {}, smp_hold = {},
     master_level = {}, out_level = {},
     g_strike = {}, g_pitch = {}, g_decay = {}, g_tone = {}, g_punch = {},
     g_drive = {}, g_amp = {},
@@ -83,6 +83,7 @@ local function fresh_calls()
     gust_timbre = {}, gust_cross = {}, gust_amp = {}, gust_pan = {},
     gust_space = {},
     lfo_rate = {},
+    voice_hold = {}, g_hold = {}, gust_hold = {},
   }
 end
 CALLS = fresh_calls()
@@ -169,8 +170,14 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.smp_speed, {t = T, index = a[1], v = a[2]})
     elseif k == "smp_level" then
       table.insert(CALLS.smp_level, {t = T, index = a[1], v = a[2]})
-    elseif k == "smp_pan" then
-      table.insert(CALLS.smp_pan, {t = T, index = a[1], v = a[2]})
+    elseif k == "smp_hold" then
+      table.insert(CALLS.smp_hold, {t = T, index = a[1], on = a[2]})
+    elseif k == "voice_hold" then
+      table.insert(CALLS.voice_hold, {t = T, voice = a[1], on = a[2]})
+    elseif k == "g_hold" then
+      table.insert(CALLS.g_hold, {t = T, index = a[1], on = a[2]})
+    elseif k == "gust_hold" then
+      table.insert(CALLS.gust_hold, {t = T, index = a[1], on = a[2]})
     elseif k == "master_level" then
       table.insert(CALLS.master_level, {t = T, v = a[1]})
     elseif k == "out_level" then

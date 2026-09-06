@@ -90,22 +90,36 @@ cells; 50 dark.
 
 By default **nothing is heard**. The top row is sixteen output cells; position
 along it sets pan, hard left at column 1 to hard right at column 16. Cabling a
-voice, a percussion (GVOICE) cell or an exciter to one of these is the only
-way its audio ever reaches the speakers — with two deliberate exceptions, the
-gusts (§2.11) and the sample players (§2.5), each of which pans itself by
-where its cell sits and mixes itself in. There is no other automatic mix left
+voice, a percussion (GVOICE) cell, an exciter or a sample player (§2.5) to
+one of these is the only way its audio ever reaches the speakers — with one
+deliberate exception, the gusts (§2.11), which pan themselves by where the
+cell sits and mix themselves in. There is no other automatic mix left
 anywhere in the engine (§7.3, §8).
 
-**The row is exclusive: one source, one slot.** Position along the row *is*
-pan, so a source cabled to two O cells is one source at two pan positions at
-once — which reads on the panel as a patching mistake and sounds like a
-widened, phase-smeared copy of itself nobody asked for. Cabling a source that
-is already on the row to a second O cell therefore **moves** it: the cable it
-had is pulled first, at the same gain, so the gesture reads as dragging the
-source along the row rather than as adding to it. (`lib/patch.lua`'s
-`displace_output`; `patch.toggle` returns `"moved"` rather than `"added"` so
-the panel can say so.) Everything else about a source's patch is untouched —
-it may still fan out to as many non-Output cells as it likes.
+**The row is exclusive, both ways round.**
+
+*One source, one slot.* Position along the row *is* pan, so a source cabled
+to two O cells is one source at two pan positions at once — which reads on
+the panel as a patching mistake and sounds like a widened, phase-smeared copy
+of itself nobody asked for. Cabling a source that is already on the row to a
+second O cell therefore **moves** it: the cable it had is pulled first, at
+the same gain, so the gesture reads as dragging the source along the row
+rather than as adding to it. (`lib/patch.lua`'s `displace_output`;
+`patch.toggle` returns `"moved"` rather than `"added"` so the panel can say
+so.)
+
+*One slot, one source.* An Output cell used to sum — several cables could
+land on one and be heard together at that pan position — and that made it an
+anonymous bus rather than a channel. It carries exactly one source now: a
+source landing on an occupied Out cell **evicts** whatever was there, the
+same way landing on a second Out moves the source itself
+(`displace_source`; the panel names the cell that went dark). This is what
+lets the mixer page call a channel by the name of the instrument on it rather
+than by the number of the seat (§4.1b), which is most of the reason for the
+rule.
+
+Everything else about a source's patch is untouched — it may still fan out
+to as many non-Output cells as it likes.
 
 An O cell is a pure destination: a pulse landing on one means nothing (§6),
 and it never speaks itself. Two O cells cabled together is not a cable at all
@@ -247,13 +261,33 @@ attack and a slow fall the player sets per cell.
 | Speed  | ±1.5 oct    | playback rate, as a ratio of the recording's own |
 | Level  | 0 – 1       | this cell's own level in the mix |
 
-Two things it shares with a gust (§2.11) rather than with a voice: it is
-**heard without an Output cable** — the engine pans it by where the cell sits
-and mixes it in — and it holds its own Level, because there is no Output
-cable whose gain would otherwise be deciding that. It emits no answering
-pulse: a swell measured in seconds is not an event anything downstream could
-be timed against, and a family with no pulse out cannot be half of a feedback
-loop.
+It is **routed like every other source**: cable it to an Output cell or it is
+not heard, and the Out cell it lands on is what pans it. This is a change —
+it used to be the second family (with the gusts, §2.11) that mixed itself,
+panned by where the cell sits, and needed no cable at all. Routing it costs
+one cable and buys three things: one rule about what is audible for every
+family that makes a sound, a fader on the mixer page under the recording's
+own name (§4.1b), and a K1+tap that warns when the cell cannot be heard
+instead of staying quiet about it.
+
+It keeps its own **Level** knob even so, the way a gust does: a field
+recording's loudness is a property of the recording rather than of the cable
+carrying it, and Thunder.wav and Sea.wav are nowhere near each other to
+start with.
+
+It emits no answering pulse: a swell measured in seconds is not an event
+anything downstream could be timed against, and a family with no pulse out
+cannot be half of a feedback loop.
+
+An **LFO** cabled to one reaches all four of its rows, Level included — pick
+which on the LFO's own Param row (§2.12). That is the ordinary
+Target/Param machinery rather than anything special to this family; what
+changed is only that these four now have knobs worth aiming it at.
+
+A **Clock cell set to High** (§2.9b) holds the envelope open instead of
+striking it, so the recording plays continuously for as long as the gate is
+up — `smp_hold(i, 0|1)`, which crossfades `\wl_smp` between its perc envelope
+and an asr off the same two knobs.
 
 **What was here before.** These four seats were the **heartwood**, a
 diffusion lattice: a pulse injected at one node spread outward with a per-hop
@@ -263,7 +297,9 @@ hardest family on the panel to hear the shape of and the hardest to aim, and
 it is cut outright — `lib/heartwood.lua`, `\wl_heartwood`, the `heart_in` /
 `heart_out` bus families and every H pair in the §6 matrix with it. The four
 recordings these cells play are the same four the mixer used to run as an
-always-on bed (§4.1b); they are played now rather than left running.
+always-on bed (§4.1b); they are played now rather than left running — and
+back on the mixer page, but as channels of the patch under their own names
+rather than as four fixed rows nothing could remove.
 
 ### 2.6 The grove — F (4)
 
@@ -392,6 +428,44 @@ cell to a T cell so the trigger locks to it) also points that T cell's
 output back at the Clock cell, and a fast gait resetting a clock-locked
 flasher thirty times a second was never worth having.
 
+#### 2.9b Mode: Clock or High
+
+A clock cell has a second thing it can be. **Mode** (the second row of its
+page) switches it between **Clock** — everything above, a pulse on a division
+of the transport — and **High**: not a clock at all, but a trigger that is
+simply always up.
+
+The reason it lives here rather than as a family of its own is that this is
+what a clock cell already is with the division taken away. Everything on the
+panel that makes a sound is *struck*: a pulse arrives, the sound swells and
+falls, and holding a drone means striking it over and over, which is a rhythm
+whether you wanted one or not. High is the missing half of that. Cable one
+to a modal voice and the mode bank rings continuously; to a percussion cell
+and it rings on; to a gust and the swell arrives under its own Attack and
+stays; to a sample cell and the recording plays continuously instead of
+swelling and going.
+
+| At the other end | What High does |
+|------------------|----------------|
+| voice            | `voice_hold` — a continuous excitation into the mode bank, through the same noise band `hardness` shapes for a strike |
+| percussion       | `g_hold` — the same click excitation, held low and never released |
+| gust             | `gust_hold` — an asr off the same Attack/Decay, in place of the perc |
+| sample cell      | `smp_hold` — the same, so the recording plays on |
+| exciter          | nothing, and nothing is needed: an exciter free-runs unless a *trigger* cell gates it (§2.4), so a clock cell has always left it sounding |
+| everything else  | nothing. A field takes a note and a register takes a trigger; neither has an envelope to hold |
+
+A High cell **does not fire**. It emits no pulses at all — a gate that also
+clocked would be two things, and the Ratio knob it would clock at is exactly
+what High is for turning off. Ratio stays on the page regardless: it is where
+the cell will be when it comes back, and blanking a knob you are about to
+want again is worse than leaving it showing a number nothing is reading.
+
+On the panel a Clock cell blinks and a High cell simply sits lit (§5.1) —
+that is the whole reading. Two High cells on one target is one held target,
+not two: letting go of one leaves the other's grip intact, and the gate is
+only released when the last one lets go, the mode goes back to Clock, or the
+cable is pulled.
+
 **What happened to Climate.** The eight slow modulators (tide, creep,
 season, gust, breath, wane, flourish, shiver — walking another cell's own
 knob around, bipolar, over tens of seconds to tens of minutes, without ever
@@ -427,12 +501,13 @@ struck cell.
 | Cross  | how deeply whatever is cabled in modulates this gust |
 | Level  | this cell's own level in the mix |
 
-Two things a gust does that nothing else except a sample cell (§2.5) does.
-**It is heard uncabled** — the engine pans it by the column it sits in and
-mixes it in, through one delay line shared by all twelve (Space / Delay /
-Regen on the global page). An Output cable is still allowed and still means
-what it means; it just places a second copy. And **its pitch is not its
-own**: the cell's seat plus its Pitch knob is pulled onto the global Scale
+Two things a gust does that nothing else on the panel does. **It is heard
+uncabled** — the engine pans it by the column it sits in and mixes it in,
+through one delay line shared by all twelve (Space / Delay / Regen on the
+global page). It is now the only family that does: the sample cells (§2.5)
+did too and are routed like everything else. An Output cable is still allowed
+and still means what it means; it just places a second copy. And **its pitch
+is not its own**: the cell's seat plus its Pitch knob is pulled onto the global Scale
 before it sounds, so twelve keys pressed at random are twelve notes of one
 scale.
 
@@ -532,6 +607,19 @@ mechanism rather than the sound. **Plonks** was Drops, for the same reason.
 The state keys are unchanged (`scatter`, `drops`) — five other files read
 them, and the rename is of the word on the panel, not of the mechanism.
 
+Rain also draws the one shape on the panel that **moves on its own**
+(§5.2c): rainfall, light at the bottom of the knob and heavy at the top —
+more streaks, longer, falling faster and more slanted.
+
+**Scale** starts on **P.Maj**, the major pentatonic, rather than on free.
+Every pitched family here — voices, gusts, the fields that tune them — is
+more listenable in tune than out of it, and free is the deliberate choice you
+make after hearing what the panel does in a scale rather than the state you
+have to find your way out of on first boot. The names are abbreviations
+(free, P.Maj, P.Min, E.Pn1, E.Pn2) because the Scale row draws with `word`,
+whose box is five characters wide — "Pent Maj" clipped to "Pent " there,
+which named the family and hid the only part that differed between the four.
+
 **K2 and K3 are one shallow stack**, not a different pair of jobs per page.
 K3 steps down from the main screen into the mixer, then the map (§4.1d),
 trading the two back and forth from there rather than adding a third level;
@@ -542,43 +630,59 @@ nothing above this". K3's old job — closing a cell page — is K2's now, along
 with everything else that means "up one", checked first so an open cell page
 closes before the mixer/map step does.
 
-**Regrow** always wires exactly one Output cable per voice it uses, or a
-freshly regrown patch would strike voices nobody can hear — the whole point
-of the gesture ("a patch that already plays") depends on it. Exactly one, not
-one-or-two: the row is exclusive (§2.1), so a second would only move the
-first.
+**Regrow** always wires exactly one Output cable per voice it uses — and, if
+it seeds a sample cell, one for that too — or a freshly regrown patch would
+strike voices nobody can hear, and the whole point of the gesture ("a patch
+that already plays") depends on it. Exactly one, not one-or-two: the row is
+exclusive (§2.1), so a second would only move the first.
 
 ### 4.1b The mixer page — K3
 
-The master, then **one fader for every Output cell the patch is actually
-using** (`lib/mixer.lua`). The page has no fixed contents: cable a source to
-Out 5 and Out 5 appears; pull that cable and it goes. An unpatched patch is
-one fader and a lot of space, which is the honest picture; a fully patched
+**One channel for every Output cell the patch is actually using**, named
+after the instrument on it, with a live meter (`lib/mixer.lua`). The page has
+no fixed contents at all: cable Thunder to Out 5 and a "Thunder" channel
+appears; pull that cable and it goes. An unpatched patch is an empty page,
+which is the honest picture of a patch that makes no sound; a fully patched
 one is sixteen, which is the cap because the Output row is sixteen cells
-long. `E1` picks a fader, `E2`/`E3` move it coarse/fine — the same page shape
-as §5.2 and §5.5.
-
-The master is first rather than last: it is the one channel that is always
-there, and a list whose contents change under you wants a fixed thing at the
-top for the cursor to come back to. It is the same number `K1`+`E3` has
-always moved, given a face. A channel appears at unity, not at zero — a fader
+long. `E1` picks a channel, `E2`/`E3` move it coarse/fine — the same page
+shape as §5.2 and §5.5. A channel appears at unity, not at zero — a fader
 that materialised silent would read as the cable not having worked.
 
+**There is no master row.** A master is not a channel: it is one number over
+the whole instrument, and a fader for it sitting first in a list made the
+list read as five things of the same kind when it is one thing and four of
+another. It is on `K1`+`E3` from every screen, this one included, which is
+where it always was.
+
+**The channel is named after the source, not the seat.** An Output cell
+carries exactly one source (§2.1), which is what makes that possible and is
+most of the reason for that rule: "Out 11" names a pan position, and by the
+time six channels are open the position is the least useful thing about any
+of them. "Thunder" is what the player reached for the fader to move.
+
+**Every channel carries a meter** (§7.4). It is read *post-fader* engine side
+— the level from `lvlBus` is applied exactly as `\woodland_fx` applies it —
+which is the only reading that makes sense beside a fader: pull a channel
+down and its meter falls with it. Without one, a fader at 0.8 on a silent
+channel and one on a roaring channel are the same picture. The same reading
+lights that cell on the grid (§5.1).
+
 **A channel fader and a cable's gain are different things.** A cable's gain
-says how much of *that source* arrives at *that* pan position; several
-sources can land on one Out cell. The fader is the channel: everything
-arriving there, together, after the fact. It is the knob you reach for when
-one side of the image is too loud, which is not a question about any one
-cable. Engine side it is one channel of a control bus read by
+says how much of that source arrives at that pan position, and it belongs to
+the cable — you set it by holding both ends. The fader is the channel: the
+level of that instrument in the mix, reachable in a list beside everything
+else that is sounding. Engine side it is one channel of a control bus read by
 `\woodland_fx` (`out_level(i, v)`), lagged and squared, so a fader can be
 set one channel at a time.
 
 **What used to be here.** Four always-on soundscape loops — Rain, Cicada,
 Thunder, Sea — with a fader each, plus the master, plus the gusts' shared
 delay line, which together came to exactly eight rows and one screen. The
-loops are the four sample cells now (§2.5), played rather than left running;
-the delay line went to the global page, where the rest of the patch-wide
-numbers already were. What is left is the one thing a mixer is actually for.
+loops are the four sample cells now (§2.5), played rather than left running,
+and they are back here as ordinary channels because they are cabled to the
+Output row like everything else; the delay line went to the global page,
+where the rest of the patch-wide numbers already were; the master went to
+`K1`+`E3` alone. What is left is the one thing a mixer is actually for.
 
 The four recordings still load once each at init, at the same engine indices
 — they belong to `sample.init` rather than to this page now. The old
@@ -587,14 +691,16 @@ resonator) has no successor at all: the six E cells (§2.4) are the panel's
 excitation sources, and `\woodland_voice` is excited only by its own strike
 burst and by whatever a cable puts on its mod path.
 
-Engine side: `smp_load(i, path)`, `smp_note(i, force)` and the four knob
-setters, with one `\wl_smp` synth per cell summing into a single shared
-stereo `smpBus` that `\woodland_fx` reads. Level and pan are applied inside
-each `\wl_smp` rather than at the reader, so four cells cost one bus. Every
-knob is held engine-side whether or not that cell's `Buffer.read` has
-completed, so pushing a whole page at init — which `sample.init` does —
-loses nothing; a missing file simply leaves that one cell silent and does not
-touch the other three.
+Engine side: `smp_load(i, path)`, `smp_note(i, force)`, `smp_hold(i, 0|1)`
+and the four knob setters, with one `\wl_smp` synth per cell writing a mono
+tap into its own `patchBus` slot (`smpOutBase`) — the shared stereo `smpBus`
+those four used to pan themselves into is gone with the self-mixing, and
+there is no `smp_pan` any more either. Level is applied inside each
+`\wl_smp`; the pan comes from the Out cell the cable lands on. Every knob is
+held engine-side whether or not that cell's `Buffer.read` has completed, so
+pushing a whole page at init — which `sample.init` does — loses nothing; a
+missing file simply leaves that one cell silent and does not touch the other
+three.
 
 **Cost.** Thunder and Cicada are minutes long; between them the four buffers
 hold roughly 130 MB of scsynth memory. If that ever becomes a problem, the
@@ -699,7 +805,7 @@ default is; the knob is symmetrical around it.
 
 | Cell | Idle | Live |
 |------|------|------|
-| O | 1 unpatched, 5 patched | — a pure destination, no flash of its own |
+| O | 1 unpatched, 4 patched | **its own live meter** (§7.4), post-fader, taking it from 4 up to 15 — the one row on the panel lit by audio rather than by events |
 | Voice | 3 unpatched, 6 patched | 12 while its sound page is open |
 | T | 3 | flash 15 on pulse, decay ~120 ms; base rises with coupling strength |
 | R | 2 | base rises with how much is cabled through it; flashes on the way *out* |
@@ -707,7 +813,7 @@ default is; the knob is symmetrical around it.
 | E | 3 unpatched, 5 patched | flash on a grain firing, decay ~120 ms |
 | H | 2 | local lattice energy |
 | F | 2 | where the field currently sits; flash on each step |
-| C | 2 | flash on each clock crossing — a pure flasher, no idle "value" reading |
+| C | 2 | flash on each clock crossing — a pure flasher, no idle "value" reading. **Set to High** (§2.9b) it sits lit at 12 and does not blink at all: a clock blinks, a gate is simply on |
 | TM | 2 unpatched, 4 patched | 10 while its sound page is open; flash on each step |
 | GUST | 2 unpatched, 5 patched | 10 while its sound page is open; flash on each note |
 | SMP | 2 unpatched, 5 patched | 10 while its page is open; flash on each trigger |
@@ -779,11 +885,29 @@ time — slower than the text rows it replaced, and with seven of the eight
 values now hidden in the header.
 
 So: **the drawing carries the meaning, and no two parameters may look
-alike.** `lib/glyph.lua` holds the vocabulary — twenty-two shapes, one named
+alike.** `lib/glyph.lua` holds the vocabulary — twenty-four shapes, one named
 by each row's own `glyph` field. A Decay draws a falling tail and the tail
 gets longer; a Prob draws a field of dots and the field gets denser; a Length
 draws a row of steps and more of them light; a Tap draws the eight bits of
 the register and points at the one it reads.
+
+Two of the twenty-four are worth naming for what they break:
+
+- **`rain`** (the global page's Rain row) is the only shape that **moves on
+  its own**. Every other shape is a function of its parameter alone, because
+  a widget that moves when the value has not is a widget that cannot be
+  read; rainfall is the one case where standing still is the misreading —
+  frozen streaks are hatching, not rain. Three quantities rise together with
+  the knob so light and heavy read as one weather at two strengths rather
+  than as two pictures: how many streaks (3 → 14), how long each is (2 → 7
+  px), and how fast and how slanted they fall. Columns and per-streak head
+  starts are hashed rather than random, so the shower has a fixed shape that
+  scrolls rather than reshuffling itself each frame, and turning the knob up
+  adds streaks *between* what is already falling.
+- **`channel`** (the mixer page, and nowhere else) is a fader with a live
+  meter down its right-hand side — the one place a knob on this panel has a
+  signal behind it. The fader is outlined and reads as a control; the meter
+  is solid and reads as a measurement. See §4.1b.
 
 Three things went, and each paid for the same thing:
 
@@ -822,7 +946,7 @@ wherever the pen was, which is the bug the old `draw_knob` carried two extra
 Shapes that draw many cells (a dot field, a row of steps, a register) issue
 their rects into one path and paint with a single `screen.fill()` — the rects
 accumulate, the fill is what costs. The measured cost of a full page is 145
-commands on the global page, 147 on a voice's, 124 on the mixer.
+commands on the global page, 147 on a voice's, 142 on the mixer.
 
 **What it costs.** There is now nowhere on the panel to read an exact number.
 You can set Tune by ear but not to `+3.00 st`, and you cannot match two cells
@@ -958,6 +1082,7 @@ exactly the way every other cell on the panel already worked.
 | **TM** cell | clocks the shift register one step; answers with a pulse of its own if the Tap bit reads high afterward — §2.8 |
 | **GUST** cell | plays its note; answers with a pulse of its own a tick later — §2.11 |
 | **SMP** cell | plays its recording from the top; answers with nothing — §2.5 |
+| **LFO** cell | nothing — it is a pure continuous source (§2.12) |
 
 **Streams** (live SC synths for as long as the cable exists):
 
@@ -969,10 +1094,24 @@ exactly the way every other cell on the panel already worked.
 | **LFO**    | on `Param = "signal"` only — otherwise it moves a named knob instead (§2.12) | as above | as above |
 
 **To an Output cell** — a source's own audio, panned at that O cell's fixed
-position (§2.1): a voice, a GVOICE cell, an E cell, a gust or an LFO can all
-reach one. Nothing else can, and an O cell never talks back. A gust already
-mixes itself, so a cable there is a second, deliberately-placed copy; a
-sample cell mixes itself and has no Output cable at all.
+position (§2.1): a voice, a GVOICE cell, an E cell, a sample cell, a gust or
+an LFO can all reach one. Nothing else can, and an O cell never talks back.
+A gust already mixes itself, so a cable there is a second,
+deliberately-placed copy; a sample cell has no other route to a speaker at
+all. An Out cell carries one of these at a time — a second evicts the first
+(§2.1).
+
+**Gates** (a Clock cell set to High, §2.9b — a level rather than an event, so
+it is neither a pulse nor a stream):
+
+| Target | Meaning |
+|--------|---------|
+| **Voice** | held open, ringing continuously, never struck |
+| **GVOICE** cell | the same |
+| **GUST** cell | the swell arrives under its own Attack and stays |
+| **SMP** cell | the recording plays continuously instead of swelling and going |
+| **E** cell | nothing needed — an exciter free-runs unless a *trigger* cell gates it (§2.4) |
+| everything else | nothing. No envelope to hold |
 
 **Neither** — the families that carry a number rather than a pulse or a
 stream:
@@ -1007,7 +1146,9 @@ Notes on the awkward pairs:
   stream, so its whole column is one-way.
 - **C is a source only** (§2.9) — the same "cables are undirected, so a
   reactive pulse-in would fire on the return leg of the ordinary use" reason
-  climate always had, kept even though climate itself is gone.
+  climate always had, kept even though climate itself is gone. Set to High
+  (§2.9b) it sends no pulses at all and holds instead, so every "the clock
+  pulse ..." row above is simply not the sentence for it.
 - **GVOICE behaves as its own pulse source**, the same as an R cell — a Clock
   cell cannot reach it with anything but a pulse (no single knob to walk, and
   there's no weather left to walk it with anyway), and a GVOICE cell is not a
@@ -1082,11 +1223,6 @@ modulation.
 ```
 groups:  gSrc -> gPatch -> gVoice -> gTap -> gFx
 
-ambBus          2  the four ambience loops' shared dry sum (§4.1b).
-                   each \wl_smp applies its own Level and pan before writing
-                   here, so four sample cells cost one bus. read only by
-                   \woodland_fx -- nothing feeds a voice from it.
-
 patchBus        6  exciter outputs        (excBase         0)
                 6  per-E colour-mod sums  (colourModBase   6)
                 4  per-voice mod path in  (modInBase      12)
@@ -1096,9 +1232,20 @@ patchBus        6  exciter outputs        (excBase         0)
                12  per-GUST audio tap     (gustOutBase    42)
                12  per-GUST cross-mod in  (gustModBase    54)
                 4  per-LFO sine tap       (lfoOutBase     66)
+                4  per-SMP audio tap      (smpOutBase     70)
                --
-               70  total
+               74  total
+
+control buses:
+outLevelBus    16  the mixer's channel faders, read by \woodland_fx
+excMeterBus     6  per-exciter envelope follower (§7.4)
+outMeterBus    16  per-Output-cell envelope follower, post-fader (§7.4)
 ```
+
+**`smpBus` is gone too.** The four sample cells used to `Pan2` themselves by
+their own seat into one shared stereo bus `\woodland_fx` read directly. They
+are ordinary cabled sources now (§2.5), so each writes a mono tap into
+`smpOutBase` and the Out cell it is cabled to is what pans it.
 
 **`voiceBus` and `gBus` are gone.** Before the overhaul, every voice and
 every percussion cell wrote to two places: its own patchBus tap (for cables)
@@ -1123,7 +1270,23 @@ reason as always. `\woodland_fx` itself reads `outBus` with a plain `In.ar`
 
 ### 7.4 Metering back-channel
 
-Unchanged: still unbuilt, still the shape described before the overhaul.
+Two families are metered, by the same mechanism: one control-rate
+`Amplitude` follower per cell, written to a control bus, exposed to Lua as
+one `addPoll` per channel. `getControlBusValue` reads the shared-memory
+interface directly, so there is no OSC round trip per reading.
+
+| Poll | Source | Read by | Drawn as |
+|------|--------|---------|----------|
+| `exc_lvl_<i>` | `\wl_exc_meter` over `excBase` | `exciter.start_meters` | folded into the same decaying flash a grain-fire uses, so an exciter's continuous level and a gated one's discrete hits both just light the cell |
+| `out_lvl_<i>` | `\wl_out_meter` over `outBase`, **post-fader** | `mixer.start_meters` | the meter beside each fader on the mixer page (§4.1b), and the brightness of that Out cell on the grid (§5.1) |
+
+The Output meters are read post-fader — the level from `outLevelBus` is
+applied exactly as `\woodland_fx` applies it — because that is the only
+reading that makes sense next to a fader: pull a channel down and its meter
+falls with it, so what the meter says and what you hear are one statement.
+Their release is slower than the exciters' (0.4 s against 0.2 s): these are
+whole channels rather than one texture, and a meter that falls as fast as the
+audio does flickers rather than reads. Both poll at 20 Hz.
 
 ### 7.5 Persistence
 

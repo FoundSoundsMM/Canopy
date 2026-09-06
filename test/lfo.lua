@@ -210,6 +210,42 @@ do
         tostring(last.v))
 end
 
+print("\n-- it reaches an SFX loop's Level, which is a cable, not a special case --")
+do
+  local M = fresh(31)
+  local L, SM = "lfo.flood", "smp.rain"
+  M.patch.add(L, SM, 1.0)
+  check("a sample cell is a legal target", M.lfo.target(L) == SM,
+        tostring(M.lfo.target(L)))
+  -- the four SFX loops were the one family with nothing an LFO could move:
+  -- they had no knob on a bus, so an LFO cable did nothing at all. every
+  -- row of every page is reachable now, Level included.
+  local keys = {}
+  for _, k in ipairs(M.lfo.param_keys(L)) do keys[k] = true end
+  check("and its Level is one of the knobs on offer", keys["level"] == true,
+        table.concat(M.lfo.param_keys(L), ","))
+
+  M.lfo.set_param_key(L, "level")
+  M.state.set_vparam(L, "depth", 0.25)
+  M.state.set_vparam(SM, "level", 0.5)
+  M.state.set_vparam(L, "rate", 0.5)
+  local hz = M.lfo.rate_hz(L)
+  local before = #CALLS.smp_level
+  local seen = {}
+  for _ = 1, 4 do
+    M.lfo.apply()
+    T = T + (0.25 / hz)
+    table.insert(seen, CALLS.smp_level[#CALLS.smp_level].v)
+  end
+  check("it pushed the sample's level once per pass",
+        #CALLS.smp_level - before == 4, tostring(#CALLS.smp_level - before))
+  check("and the pushed value actually moves",
+        seen[1] ~= seen[2] or seen[2] ~= seen[3],
+        table.concat({tostring(seen[1]), tostring(seen[2])}, " "))
+  check("while the stored Level never moved",
+        math.abs(M.sample.level(SM) - 0.5) < 1e-9, tostring(M.sample.level(SM)))
+end
+
 print("\n-- a modulating LFO is not also an audio cable --")
 do
   local M = fresh(19)

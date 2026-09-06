@@ -355,13 +355,16 @@ local function do_regrow()
 
   -- §2.5 a soundscape underneath, now and then: one of the four sample cells
   -- hung off a clock rather than off a trigger, because what these are for is
-  -- a swell that arrives once in a while rather than a part. no Output cable
-  -- is drawn and none is needed -- a sample cell mixes itself, same as a gust.
+  -- a swell that arrives once in a while rather than a part. it takes an
+  -- Output cable of its own now -- these four used to mix themselves, and a
+  -- regrown patch that seeded one without routing it would be seeding
+  -- silence.
   local ccells = shuffled(ids_of("C"))
   if math.random() < 0.5 then
     local sm = take(smcells)
     local c = take(ccells)
-    if sm and c then
+    local o = take(ocells)
+    if sm and c and o then
       -- a long attack and a long fall: these want to be weather, not a hit.
       state.set_vparam(sm, "attack", 0.55 + math.random() * 0.35)
       state.decay[sm] = 0.55 + math.random() * 0.35
@@ -371,6 +374,7 @@ local function do_regrow()
       -- "once in a while" rather than "every few seconds" (clockcell.lua).
       state.character[c] = 0.05 + math.random() * 0.2
       patch.add(c, sm, gain(0.5, 1.0), false)
+      patch.add(sm, o, gain(0.6, 1.0), false)
     end
   end
 
@@ -498,8 +502,10 @@ function enc(n, d)
   end
 
   -- K1+E3 is master level from every screen, unrelated to whatever list is
-  -- under the cursor. it is also the mixer's fifth fader -- the same number,
-  -- reachable both ways.
+  -- under the cursor -- and, since the mixer page dropped its master row,
+  -- the only place the number lives. it is deliberately not a channel: the
+  -- mixer is a list of the things that are sounding, and the master is the
+  -- one number over all of them.
   if n == 3 and keystate.k1 then
     state.global.level = util.clamp(state.global.level + d / 500, 0, 1)
     bridge.master_level(state.global.level)
@@ -514,14 +520,16 @@ function enc(n, d)
   if state.view == "map" then return end
 
   -- §4.1b the mixer page (K3): the same E1-select/E2-E3-nudge shape as the
-  -- global page, for the four soundscape loops and the master.
+  -- global page, over one channel per cabled Output cell. the page can be
+  -- genuinely empty now that the master row is gone, so both branches have
+  -- to survive there rather than assuming a row is always under the cursor.
   if state.view == "mixer" then
     if n == 1 then
       state.mparam_focus = util.clamp((state.mparam_focus or 1) + d,
-                                      1, mixer.PARAM_COUNT)
+                                      1, math.max(1, mixer.PARAM_COUNT))
     else
       local p = mixer.nudge(state.mparam_focus or 1, d, n == 2)
-      state.set_event(p.label .. " " .. p.text(), 0.5)
+      if p then state.set_event(p.label .. " " .. p.text(), 0.5) end
     end
     return
   end
@@ -616,8 +624,9 @@ function init()
   grove.init()
   gparam.init() -- adopts the clock's tempo, pushes the rest (§5.2)
   exciter.start_meters() -- §7.4: per-exciter activity polls
-  -- §4.1b the mixer: the master and one fader per active output, built from
-  -- the patch (lib/mixer.lua).
+  -- §4.1b the mixer: one named, metered channel per active output, built
+  -- from the patch (lib/mixer.lua). its init also starts the Output row's
+  -- meter polls, the same way exciter.start_meters does for the E cells.
   mixer.init()
   -- §2.5 the four sample cells. the engine reads each .wav async and holds
   -- every knob in the meantime, so pushing them straight afterwards loses

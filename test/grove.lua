@@ -121,6 +121,10 @@ do
   end
 
   local M = fresh(5)
+  -- the global Scale row now starts on P.Maj (state.lua), and it quantises
+  -- the SUM downstream of a field's own snap -- so leaving it on would be
+  -- testing that scale rather than this one. free, here, on purpose.
+  M.state.global.scale_i = 0
   M.patch.add(CUCKOO, "oak", 1.0)
   M.state.character[CUCKOO] = 1.0
   M.state.notify_character_change(CUCKOO)
@@ -253,6 +257,10 @@ end
 print("\n-- a voice with no field still never plays the same note twice --")
 do
   local M = fresh(17)
+  -- same reason as the snap test above: a global scale would quantise every
+  -- one of these sub-semitone draws onto the same tone, which is what the
+  -- Scale row is FOR and not what this test is about.
+  M.state.global.scale_i = 0
   knock_oak(M)
   run(M, 4)
   local p = pitches_for(0)

@@ -55,6 +55,14 @@ local function is_output(id)
   return (cell and cell.type == "O") and true or false
 end
 
+-- which end of a source<->Out pair is which, or nil,nil when the pair is not
+-- one of those (Out<->Out, and everything that touches no Out cell at all).
+local function source_and_output(a, b)
+  if is_output(b) and not is_output(a) then return a, b end
+  if is_output(a) and not is_output(b) then return b, a end
+  return nil, nil
+end
+
 -- §2.1: position along the Output row IS pan, so one source in two slots is
 -- one source at two pan positions at once -- which reads on the panel as a
 -- patching mistake and sounds like a widened, phase-smeared copy of itself
@@ -66,14 +74,8 @@ end
 -- on the row. only fires when exactly one end is an Out cell: an Out<->Out
 -- cable has no source to move and is left alone.
 local function displace_output(a, b)
-  local src, out
-  if is_output(b) and not is_output(a) then
-    src, out = a, b
-  elseif is_output(a) and not is_output(b) then
-    src, out = b, a
-  else
-    return nil
-  end
+  local src, out = source_and_output(a, b)
+  if not src then return nil end
 
   local set = patch.by_cell[src]
   if not set then return nil end
@@ -89,8 +91,37 @@ local function displace_output(a, b)
   return nil
 end
 
--- returns edge, err, moved_from -- `moved_from` being the Out cell this
--- source was pulled off to make the new cable (nil in every other case).
+-- the other half of the same rule, and the newer one: an Output cell carries
+-- exactly ONE source. it used to sum -- several cables could land on one Out
+-- and be heard together at that pan position -- and that made an Output cell
+-- an anonymous bus rather than a channel. one source per slot is what lets
+-- the mixer page (lib/mixer.lua) call a channel by the name of the instrument
+-- on it instead of by the number of the seat it is sitting in, which is the
+-- whole reason the exclusivity runs both ways now.
+--
+-- so a source landing on an occupied Out evicts whatever was there, the same
+-- way landing on a second Out moves the source itself. returns the source
+-- cell that was evicted, or nil.
+local function displace_source(a, b)
+  local src, out = source_and_output(a, b)
+  if not src then return nil end
+
+  local set = patch.by_cell[out]
+  if not set then return nil end
+  for edge_id in pairs(set) do
+    local edge = patch.edges[edge_id]
+    local other = patch.other(edge, out)
+    if other ~= src and not is_output(other) then
+      patch.remove_edge(edge_id)
+      return other
+    end
+  end
+  return nil
+end
+
+-- returns edge, err, moved_from, replaced -- `moved_from` being the Out cell
+-- this source was pulled off to make the new cable, and `replaced` the source
+-- evicted from the Out cell it landed on. both nil in every other case.
 function patch.add(a, b, gain, oneway)
   gain = gain or 0.6
   if a == b then return nil, "self" end
@@ -100,6 +131,7 @@ function patch.add(a, b, gain, oneway)
   -- cable slot, since it is about to free the one it is using.
   local moved_from, old_gain = displace_output(a, b)
   if moved_from then gain = old_gain end
+  local replaced = displace_source(a, b)
 
   if patch.count() >= patch.MAX_CABLES then return nil, "cap" end
 
@@ -114,7 +146,7 @@ function patch.add(a, b, gain, oneway)
   patch.by_cell[b][id] = true
 
   patch._notify()
-  return edge, nil, moved_from
+  return edge, nil, moved_from, replaced
 end
 
 function patch.remove_edge(edge_id)
@@ -135,17 +167,19 @@ function patch.remove(a, b)
 end
 
 -- hold A, tap B: toggle the cable between them.
--- returns "added"|"moved"|"removed"|"error", edge_or_err. "moved" is an
--- "added" that pulled the source off another Output cell on its way in
--- (see displace_output) -- the caller reports it differently, but the
--- resulting cable is an ordinary one.
+-- returns "added"|"moved"|"removed"|"error", edge_or_err, replaced.
+-- "moved" is an "added" that pulled the source off another Output cell on
+-- its way in (see displace_output) -- the caller reports it differently, but
+-- the resulting cable is an ordinary one. `replaced` is the source this one
+-- evicted from the Out cell it landed on (displace_source), which is a
+-- separate thing and can happen alongside either verb.
 function patch.toggle(a, b, oneway, default_gain)
   if patch.has(a, b) then
     patch.remove(a, b)
     return "removed"
   end
-  local edge, err, moved_from = patch.add(a, b, default_gain, oneway)
-  if edge then return moved_from and "moved" or "added", edge end
+  local edge, err, moved_from, replaced = patch.add(a, b, default_gain, oneway)
+  if edge then return moved_from and "moved" or "added", edge, replaced end
   return "error", err
 end
 

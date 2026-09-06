@@ -72,46 +72,80 @@ end
 
 -- 2: the page is built from the patch ----------------------------------------
 
-print("\n-- with nothing patched, the mixer is the master and nothing else --")
+print("\n-- with nothing patched, the mixer is empty --")
 do
   patch.clear()
-  check("one row", mixer.PARAM_COUNT == 1, tostring(mixer.PARAM_COUNT))
-  check("and it is the master", mixer.PARAMS[1].key == "master")
+  -- there is no master row any more: a master is one number over the whole
+  -- instrument rather than a channel, and it lives on K1+E3 alone. so a
+  -- patch that makes no sound has a mixer with nothing on it, which is the
+  -- honest picture rather than a lonely fader.
+  check("no rows at all", mixer.PARAM_COUNT == 0, tostring(mixer.PARAM_COUNT))
+  check("and no row anywhere calls itself the master", (function()
+    for _, p in ipairs(mixer.PARAMS) do
+      if p.key == "master" then return false end
+    end
+    return true
+  end)())
+  check("the cursor stays somewhere legal", state.mparam_focus == 1,
+        tostring(state.mparam_focus))
+  check("and asking for a row there is nil, not a crash",
+        mixer.param(1) == nil)
+  check("as is nudging one", mixer.nudge(1, 10, true) == nil)
 end
 
-print("\n-- a fader appears as its output is used, and goes when it is not --")
+print("\n-- a channel appears as its output is used, and goes when it is not --")
 do
   patch.clear()
   patch.add("oak", "o.5", 0.8)
-  check("two rows now", mixer.PARAM_COUNT == 2, tostring(mixer.PARAM_COUNT))
-  check("the new one is Out 5", mixer.PARAMS[2].label == "Out 5",
-        mixer.PARAMS[2].label)
-  check("and it comes up at unity, not silent",
+  check("one row now", mixer.PARAM_COUNT == 1, tostring(mixer.PARAM_COUNT))
+  -- the channel is named after the instrument on it, not after the seat: an
+  -- Out cell carries one source (patch.lua), and "Out 5" names a pan
+  -- position, which is the least useful thing about a channel by the time
+  -- there are six of them.
+  check("and it is called Oak, not Out 5", mixer.PARAMS[1].label == "Oak",
+        mixer.PARAMS[1].label)
+  check("it comes up at unity, not silent",
         mixer.get_level("o.5") == 1, tostring(mixer.get_level("o.5")))
 
   patch.add("hazel", "o.2", 0.8)
-  check("a second output, a third row", mixer.PARAM_COUNT == 3,
+  check("a second output, a second row", mixer.PARAM_COUNT == 2,
         tostring(mixer.PARAM_COUNT))
   -- row order is Output-row order, which is also left-to-right in the stereo
   -- field: the page reads the way the image sounds.
   check("in row order, not the order they were patched",
-        mixer.PARAMS[2].label == "Out 2" and mixer.PARAMS[3].label == "Out 5",
-        mixer.PARAMS[2].label .. " " .. mixer.PARAMS[3].label)
+        mixer.PARAMS[1].label == "Hazel" and mixer.PARAMS[2].label == "Oak",
+        mixer.PARAMS[1].label .. " " .. mixer.PARAMS[2].label)
 
-  -- two sources landing on one output is one channel, not two.
+  -- a second source landing on an occupied output evicts the first, so a
+  -- channel is renamed rather than doubled up.
   patch.add("alder", "o.2", 0.8)
-  check("two sources on one output is still one fader",
-        mixer.PARAM_COUNT == 3, tostring(mixer.PARAM_COUNT))
+  check("a second source on one output is still one channel",
+        mixer.PARAM_COUNT == 2, tostring(mixer.PARAM_COUNT))
+  check("under the new source's name", mixer.PARAMS[1].label == "Alder",
+        mixer.PARAMS[1].label)
+  check("and the one it evicted is off the row entirely",
+        patch.has("hazel", "o.2") == nil)
 
   patch.remove("oak", "o.5")
-  check("pulling the cable takes the fader with it", mixer.PARAM_COUNT == 2,
+  check("pulling the cable takes the channel with it", mixer.PARAM_COUNT == 1,
         tostring(mixer.PARAM_COUNT))
   check("but the level it was left at is remembered",
         mixer.get_level("o.5") == 1)
 
   patch.clear()
-  check("clearing every cable leaves the master alone",
+  check("clearing every cable empties the page",
+        mixer.PARAM_COUNT == 0, tostring(mixer.PARAM_COUNT))
+end
+
+print("\n-- the four SFX loops are channels like everything else --")
+do
+  patch.clear()
+  patch.add("smp.thunder", "o.12", 0.8)
+  check("a sample cell cabled to an output is a channel",
         mixer.PARAM_COUNT == 1, tostring(mixer.PARAM_COUNT))
+  check("named after the recording", mixer.PARAMS[1].label == "Thunder",
+        mixer.PARAMS[1].label)
+  patch.clear()
 end
 
 print("\n-- and never more than sixteen of them --")
@@ -121,7 +155,7 @@ do
   -- the Output row is exclusive (patch.lua's displace_output): one source
   -- sits at one pan position, so sixteen cables from one voice is one
   -- channel. cable a different source to each to fill the row.
-  check("one source can only ever be on one output", mixer.PARAM_COUNT == 2,
+  check("one source can only ever be on one output", mixer.PARAM_COUNT == 1,
         tostring(mixer.PARAM_COUNT))
 
   patch.clear()
@@ -131,10 +165,16 @@ do
                    "e.bracken", "e.gorse", "e.ember",
                    "e.windfall", "e.mistle", "e.wisp"}
   for x, src in ipairs(sources) do patch.add(src, "o." .. x, 0.5) end
-  check("a full row is sixteen faders and the master",
-        mixer.PARAM_COUNT == 17, tostring(mixer.PARAM_COUNT))
+  check("a full row is sixteen channels", mixer.PARAM_COUNT == 16,
+        tostring(mixer.PARAM_COUNT))
   check("which is the cap the Output row itself sets",
-        mixer.PARAM_COUNT - 1 == mixer.MAX_CHANNELS)
+        mixer.PARAM_COUNT == mixer.MAX_CHANNELS)
+  check("and every one of them is named after its instrument", (function()
+    for i, src in ipairs(sources) do
+      if mixer.PARAMS[i].label ~= M.topology.get(src).name then return false end
+    end
+    return true
+  end)())
   patch.clear()
 end
 
@@ -145,11 +185,10 @@ do
   patch.clear()
   patch.add("oak", "o.3", 0.8)
   patch.add("hazel", "o.9", 0.8)
-  -- rows: 1 master, 2 Out 3, 3 Out 9
-  local o3 = mixer.PARAMS[2]
-  check("row 2 is Out 3", o3.label == "Out 3", o3.label)
+  -- rows: 1 Oak (on Out 3), 2 Hazel (on Out 9)
+  check("row 1 is Oak", mixer.PARAMS[1].label == "Oak", mixer.PARAMS[1].label)
 
-  mixer.nudge(2, -10000, true)
+  mixer.nudge(1, -10000, true)
   check("a fader clamps at 0", mixer.get_level("o.3") == 0,
         tostring(mixer.get_level("o.3")))
   check("and reached the engine at that output's own index",
@@ -159,25 +198,31 @@ do
                  and last_for(CALLS.out_level, 2).v))
   check("without moving anybody else", mixer.get_level("o.9") == 1)
 
-  mixer.nudge(2, 10000, true)
+  mixer.nudge(1, 10000, true)
   check("and clamps at 1 on the way back", mixer.get_level("o.3") == 1)
 
   -- coarse and fine are the same two steps every other page uses
   mixer.set_level("o.9", 0)
-  mixer.nudge(3, 8, true)
+  mixer.nudge(2, 8, true)
   local coarse = mixer.get_level("o.9")
   check("coarse is 1/80 a detent", math.abs(coarse - 8 / 80) < 1e-9,
         tostring(coarse))
-  mixer.nudge(3, 8, false)
+  mixer.nudge(2, 8, false)
   check("fine is 1/500", math.abs(mixer.get_level("o.9")
                                   - (coarse + 8 / 500)) < 1e-9,
         tostring(mixer.get_level("o.9")))
 
-  -- the master is the same number K1+E3 has always moved
-  state.global.level = 0.8
-  mixer.nudge(1, 16, true)
-  check("the master fader is master level",
-        math.abs(state.global.level - 1.0) < 1e-9, tostring(state.global.level))
+  -- every channel carries a meter, which is the other half of what this page
+  -- is for: a fader at 0.8 on a silent channel and one on a roaring channel
+  -- look identical without it (lib/glyph.lua's `channel`).
+  check("every row draws the metered shape", (function()
+    for _, p in ipairs(mixer.PARAMS) do
+      if p.glyph ~= "channel" then return false end
+      local d = p.glyph_data and p.glyph_data()
+      if not d or type(d.meter) ~= "number" then return false end
+    end
+    return true
+  end)())
 
   -- and the gusts' delay line is not here any more: it is a room, not a
   -- channel, and it went to the global page (gparam.lua).
@@ -232,12 +277,13 @@ do
   check("and resumes", state.global.still == false)
 
   -- the encoders follow the screen. the page is built from the patch, so
-  -- give it something to show first -- with nothing cabled it is one row and
+  -- give it something to show first -- with nothing cabled it is empty and
   -- there is nothing for E1 to walk.
   patch.clear()
   patch.add("oak", "o.4", 0.8)
   patch.add("hazel", "o.8", 0.8)
   patch.add("alder", "o.12", 0.8)
+  patch.add("rowan", "o.16", 0.8)
   state.view = "mixer"
   state.mparam_focus = 1
   enc(1, 3)

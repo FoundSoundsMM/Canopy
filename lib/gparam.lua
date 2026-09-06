@@ -139,7 +139,7 @@ gparam.PARAMS = {
     -- rambler.lua and grove.lua used to read off Weather directly. the state
     -- key stays `scatter` -- it is read in five other files and the rename
     -- is a rename of the word on the panel, not of the mechanism.
-    key = "scatter", label = "Rain", glyph = "wander", coarse = 1 / 80, fine = 1 / 500,
+    key = "scatter", label = "Rain", glyph = "rain", coarse = 1 / 80, fine = 1 / 500,
     min = 0, max = 1,
     get = function() return state.global.scatter or 0 end,
     set = function(v) state.global.scatter = util.clamp(v, 0, 1) end,
