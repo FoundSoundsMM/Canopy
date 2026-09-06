@@ -7,9 +7,9 @@
 -- more. the four loops are the four Sample cells (§2.5, lib/sample.lua) --
 -- played rather than left running, and cabled to the Output row like every
 -- other source, so they are back on this page as ordinary channels rather
--- than as four rows nothing could remove. the delay line went to the global
--- page, where the rest of the patch-wide numbers live. and the master went
--- because a master is not a channel: it is one number over the whole
+-- than as four rows nothing could remove. the delay line went to the gusts'
+-- own page (lib/gust.lua's MACROS), with the rest of the numbers about that
+-- family. and the master went because a master is not a channel: it is one number over the whole
 -- instrument, it is on K1+E3 from every screen including this one, and a
 -- fader for it sitting first in a list of channels made the list read as
 -- five things of the same kind when it is one thing and four of another.

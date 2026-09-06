@@ -20,7 +20,7 @@
 --   * it is heard uncabled. every other source is silent until it reaches
 --     the Output row; a gust is routed to the main mix by the engine, panned
 --     by where it physically sits (topology's `pan`), through a delay line
---     shared by all twelve (gust.SPACE, driven from the global page). a cable
+--     shared by all twelve (gust.SPACE, driven from the gusts page). a cable
 --     into an Output cell is still allowed and still means what it means --
 --     it just places a second copy rather than being the only way to hear
 --     the first.
@@ -32,6 +32,13 @@
 -- the page is the same object voice.lua and gvoice.lua expose -- PARAMS with
 -- get/set/text/push, plus nudge/param/PARAM_COUNT -- so cellparam.lua hands
 -- it to screenui and gridui through the one code path they already have.
+--
+-- §2.11b this file carries a SECOND page as well: the family's own, reached
+-- with K3 from the main screen and sitting just before the mixer. five offsets
+-- that slide all twelve cells together (gust.MACRO, below) and the three rows
+-- for the delay line they share, which used to be the second page of the
+-- global list. it is `gust.MACROS`, in the same shape gparam.PARAMS and
+-- mixer.PARAMS are, so screenui and Canopy.lua drive all three identically.
 
 local topology = wl("topology")
 local state    = wl("state")
@@ -71,7 +78,88 @@ gust.DECAY_MIN, gust.DECAY_MAX = 0.05, 30.0
 -- that a cable looped back round into a gust cannot machine-gun it.
 gust.REFRACTORY = 0.012
 
-local last_note = {}   -- id -> util.time() of the last note that landed
+local last_note = {}   -- id -> util.time() of the last one that landed
+
+-- the family macros (§2.11b) --------------------------------------------------
+-- the gusts got a page of their own, before the mixer, and this is the half
+-- of it that is not the delay line: one Pitch, Timbre, Attack, Decay, Cross
+-- and Level over all twelve cells at once.
+--
+-- they are OFFSETS, not values. twelve cells you have spent a while setting
+-- individually are the whole point of having twelve, and a unified knob that
+-- wrote absolute values would erase that the first time you touched it --
+-- worse, it would erase it invisibly, since the per-cell pages would still
+-- be showing numbers nothing was reading any more. so each of these sits at
+-- a centre that means "leave them alone", and moving it slides all twelve
+-- together, keeping whatever spread the player put between them. turn it
+-- back to the middle and the twelve are exactly where they were.
+--
+-- Pitch is in semitones because that is the unit it is already in everywhere
+-- else on the panel; the other five are offsets on the 0..1 knobs they ride,
+-- so 0.5 is the neutral position and the sum is clamped per cell -- which is
+-- what makes the macro run out of travel gracefully at the ends rather than
+-- wrapping or shoving cells past each other.
+--
+-- there are five of them and not six: there is no family Decay here, because
+-- there already is one. the global page's Decay macro scales every gust's
+-- fall along with every voice's and every drum's (gust.decay_seconds folds
+-- voice.decay_mult_ratio in), and it is one K2 press away. a second knob
+-- doing the same job on the next page would be two controls fighting over
+-- one number and no way to tell from either which of them was responsible.
+-- Attack has no such macro anywhere and stays.
+gust.MACRO = {
+  pitch  = 0,     -- semitones, +-MACRO_PITCH_ST
+  timbre = 0.5,   -- offsets on the per-cell knob, 0.5 = no change
+  attack = 0.5,
+  cross  = 0.5,
+  level  = 0.5,
+}
+
+-- an octave either way. deliberately narrower than a single cell's own
+-- +-2 octaves: this moves twelve cells at once and the useful gesture is
+-- moving the family into another register, not folding half of it past the
+-- other half.
+gust.MACRO_PITCH_ST = 12
+
+-- which per-cell knob each offset rides, and what that knob's own default is.
+local MACRO_OVER = {
+  timbre = 0.35,
+  attack = 0.5,
+  cross  = 0.3,
+  level  = 0.7,
+}
+
+local function macro_defaults()
+  state.global.gust_macro = state.global.gust_macro or {}
+  local t = state.global.gust_macro
+  for k, v in pairs(gust.MACRO) do
+    if t[k] == nil then t[k] = v end
+  end
+  return t
+end
+
+function gust.macro(key)
+  return macro_defaults()[key]
+end
+
+function gust.set_macro(key, v)
+  local t = macro_defaults()
+  if key == "pitch" then
+    t[key] = util.clamp(v, -gust.MACRO_PITCH_ST, gust.MACRO_PITCH_ST)
+  else
+    t[key] = util.clamp(v, 0, 1)
+  end
+  return t[key]
+end
+
+-- what a cell actually runs on: its own knob, slid by the family offset and
+-- clamped back into range. every reader below goes through here rather than
+-- through state.get_vparam directly, so there is one place the two numbers
+-- are combined and no way for a push and a readout to disagree about it.
+function gust.effective(id, key)
+  local base = state.get_vparam(id, key, MACRO_OVER[key] or 0.5)
+  return util.clamp(base + (gust.macro(key) - 0.5), 0, 1)
+end
 
 -- pitch ---------------------------------------------------------------------
 
@@ -93,6 +181,7 @@ function gust.note_semitones(id)
   local v = state.get_vparam(id, "pitch", 0.5)
   local st = gust.root_semitones(id)
            + (v - 0.5) * 2 * gust.PITCH_RANGE_ST
+           + gust.macro("pitch")
            + (state.global.pitch_offset or 0)
   return wl("grove").quantise_semitones(st)
 end
@@ -106,7 +195,7 @@ end
 function gust.attack_seconds(id)
   local cell = topology.get(id)
   if not cell or cell.type ~= "GUST" then return nil end
-  local a = state.get_vparam(id, "attack", 0.5)
+  local a = gust.effective(id, "attack")
   return util.clamp(cell.attack * (2 ^ ((a - 0.5) * 2 * gust.ATTACK_OCTAVES)),
                     gust.ATTACK_MIN, gust.ATTACK_MAX)
 end
@@ -125,7 +214,15 @@ function gust.decay_seconds(id)
 end
 
 function gust.level(id)
-  return state.get_vparam(id, "level", 0.7)
+  return gust.effective(id, "level")
+end
+
+function gust.timbre(id)
+  return gust.effective(id, "timbre")
+end
+
+function gust.cross(id)
+  return gust.effective(id, "cross")
 end
 
 -- sounding --------------------------------------------------------------------
@@ -222,12 +319,17 @@ gust.PARAMS = {
     -- how hard the triangle is folded on its way out: 0 is close to a plain
     -- triangle, 1 is the reedy, buzzing end of the same oscillator. this is
     -- the knob that decides whether a gust is a flute or a horn.
+    -- what the row READS is the effective value -- the knob plus whatever the
+    -- family macro is adding to it (§2.11b) -- while what E2/E3 MOVE is the
+    -- cell's own stored knob. exactly the arrangement Pitch above already
+    -- had, where the reading has always been the note that will sound rather
+    -- than the offset that was dialled in.
     key = "timbre", label = "Timbre", glyph = "wave", default = 0.35,
     get = vp_get("timbre", 0.35), set = vp_set("timbre"),
-    text = function(id) return string.format("%.2f", state.get_vparam(id, "timbre", 0.35)) end,
+    text = function(id) return string.format("%.2f", gust.timbre(id)) end,
     push = function(id)
       local cell = topology.get(id)
-      bridge.gust_timbre(cell.index - 1, state.get_vparam(id, "timbre", 0.35))
+      bridge.gust_timbre(cell.index - 1, gust.timbre(id))
     end,
   },
   {
@@ -238,10 +340,10 @@ gust.PARAMS = {
     -- switch.
     key = "cross", label = "Cross", glyph = "link", default = 0.3,
     get = vp_get("cross", 0.3), set = vp_set("cross"),
-    text = function(id) return string.format("%.2f", state.get_vparam(id, "cross", 0.3)) end,
+    text = function(id) return string.format("%.2f", gust.cross(id)) end,
     push = function(id)
       local cell = topology.get(id)
-      bridge.gust_cross(cell.index - 1, state.get_vparam(id, "cross", 0.3))
+      bridge.gust_cross(cell.index - 1, gust.cross(id))
     end,
   },
   {
@@ -272,6 +374,19 @@ function gust.push_all(id)
   for _, p in ipairs(gust.PARAMS) do p.push(id) end
 end
 
+-- re-push one knob on every cell. what a family macro's own `push` does:
+-- moving Timbre on the gust page has to reach all twelve engine-side, and
+-- doing it by key rather than by re-pushing whole pages keeps that to twelve
+-- messages instead of seventy-two.
+function gust.push_key(key)
+  for _, p in ipairs(gust.PARAMS) do
+    if p.key == key then
+      for _, id in ipairs(gust.each()) do p.push(id) end
+      return
+    end
+  end
+end
+
 function gust.each()
   local ids = {}
   for id, cell in topology.each() do
@@ -280,10 +395,10 @@ function gust.each()
   return ids
 end
 
--- the shared delay line (§4.1, the global page's Space / Delay / Regen rows).
--- one line for all twelve cells rather than one each: what it is for is putting
--- the family in a room, and ten rooms is not a room. the numbers live on
--- state.global so a PSET picks them up with everything else.
+-- the shared delay line (§2.11b, the gusts page's Space / Delay / Regen
+-- rows). one line for all twelve cells rather than one each: what it is for is
+-- putting the family in a room, and twelve rooms is not a room. the numbers
+-- live on state.global so a PSET picks them up with everything else.
 gust.SPACE = {
   space = 0.35,   -- how much of the delayed signal is heard, 0..1
   delay = 0.38,   -- the line's own time in seconds
@@ -321,6 +436,124 @@ end
 function gust.push_space()
   bridge.gust_space(gust.get_space("space"), gust.get_space("delay"),
                     gust.get_space("regen"))
+end
+
+-- the gusts page (§2.11b) -----------------------------------------------------
+-- exactly one screen, sitting between the main page and the mixer: the five
+-- family offsets above, then the three rows for the delay line all twelve are
+-- heard through. eight widgets, no page dots, the whole family in one look --
+-- which is worth the small discipline of keeping it at eight.
+--
+-- those three used to be the second page of the global list, which was always
+-- a compromise -- they are patch-wide numbers, but they are patch-wide
+-- numbers about ONE family, and they sat next to BPM and Scale because there
+-- was nowhere better. there is now: the page that is about that family. what
+-- they do and how far they go is unchanged, and so is the state they live in.
+--
+-- the page object is the same shape gparam's and mixer's are -- PARAMS with
+-- get/set/text/frac/push, E1 to pick, E2/E3 coarse/fine -- so screenui and
+-- Canopy.lua drive it through the code path they already have.
+
+local COARSE, FINE = 1 / 80, 1 / 500
+
+-- each family offset keeps the glyph its per-cell row has, rather than six
+-- identical bipolar shapes: the drawing says WHAT the knob is (glyph.lua's
+-- one rule) and an offset sitting at its centre reads as half-travel, which
+-- is what an offset at its centre is.
+local function macro_row(key, label, gl)
+  return {
+    key = "gust_" .. key, label = label, glyph = gl,
+    coarse = COARSE, fine = FINE, min = 0, max = 1,
+    get = function() return gust.macro(key) end,
+    set = function(v) gust.set_macro(key, v) end,
+    text = function() return string.format("%+.2f", gust.macro(key) - 0.5) end,
+    frac = function() return gust.macro(key) end,
+    push = function() gust.push_key(key) end,
+  }
+end
+
+gust.MACROS = {
+  {
+    -- in semitones, like every other pitch on the panel, and shown as the
+    -- transpose rather than as a knob position: "+7 st" is a thing you can
+    -- act on and "0.79" is not.
+    key = "gust_pitch", label = "Pitch", glyph = "marker",
+    coarse = 1, fine = 0.1,
+    min = -gust.MACRO_PITCH_ST, max = gust.MACRO_PITCH_ST,
+    get = function() return gust.macro("pitch") end,
+    set = function(v) gust.set_macro("pitch", v) end,
+    text = function() return string.format("%+.1f st", gust.macro("pitch")) end,
+    frac = function()
+      return (gust.macro("pitch") + gust.MACRO_PITCH_ST)
+             / (2 * gust.MACRO_PITCH_ST)
+    end,
+    push = function() gust.repush_pitch() end,
+  },
+  macro_row("timbre", "Timbre", "wave"),
+  macro_row("attack", "Attack", "rampup"),
+  macro_row("cross",  "Cross",  "link"),
+  macro_row("level",  "Level",  "fader"),
+}
+
+-- the delay line's three, in the same shape. they were written as `space_row`
+-- on the global page and are written the same way here, for the same reason:
+-- lib/gust.lua owns their defaults and their ranges and these rows are only
+-- the face.
+local function space_row(key, label, gl, text_fn, frac_fn, coarse, fine)
+  return {
+    key = "gust_" .. key, label = label, glyph = gl,
+    coarse = coarse, fine = fine,
+    get = function() return gust.get_space(key) end,
+    set = function(v) gust.set_space(key, v) end,
+    text = text_fn, frac = frac_fn,
+    push = function() gust.push_space() end,
+  }
+end
+
+table.insert(gust.MACROS, space_row("space", "Space", "peak",
+  function() return string.format("%.2f", gust.get_space("space")) end,
+  function() return gust.get_space("space") end,
+  COARSE, FINE))
+
+-- in seconds on the wire and milliseconds on the screen, not a 0..1 knob: a
+-- delay time is a number you want to read, and often one you want to match to
+-- the tempo by eye.
+table.insert(gust.MACROS, space_row("delay", "Delay", "steps",
+  function() return string.format("%.0f ms", gust.get_space("delay") * 1000) end,
+  function()
+    return (gust.get_space("delay") - gust.DELAY_MIN)
+           / (gust.DELAY_MAX - gust.DELAY_MIN)
+  end,
+  0.01, 0.002))
+
+table.insert(gust.MACROS, space_row("regen", "Regen", "combs",
+  function() return string.format("%.2f", gust.get_space("regen")) end,
+  function() return gust.get_space("regen") / gust.REGEN_MAX end,
+  COARSE, FINE))
+
+gust.MACRO_COUNT = #gust.MACROS
+
+function gust.macro_param(i)
+  return gust.MACROS[util.clamp(i, 1, #gust.MACROS)]
+end
+
+-- the same nudge contract gparam.nudge and mixer.nudge have: `coarse`/`fine`
+-- are the step in the row's own units, and a row with a `min` clamps with it
+-- (Pitch clamps itself in `set`, so it declares one only for the encoder's
+-- benefit).
+function gust.macro_nudge(i, delta, is_coarse)
+  local p = gust.macro_param(i)
+  if not p then return nil end
+  local step = (is_coarse and p.coarse or p.fine) or p.coarse
+  local v = p.get() + delta * step
+  if p.min then v = util.clamp(v, p.min, p.max) end
+  p.set(v)
+  p.push()
+  return p
+end
+
+function gust.push_macros()
+  for _, p in ipairs(gust.MACROS) do p.push() end
 end
 
 -- init -------------------------------------------------------------------------

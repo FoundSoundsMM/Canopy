@@ -292,22 +292,28 @@ do
   M.gust.set_space("space", -3)
   check("mix cannot go negative", M.gust.get_space("space") == 0)
 
-  -- and the global page drives all three. they used to sit on the mixer,
-  -- back when that page had a fixed eight-row list to fill; the mixer is
-  -- built from the patch now (one fader per active output) and a room is not
-  -- a channel, so these three moved to where the rest of the patch-wide
-  -- numbers already were.
+  -- and the gusts page drives all three. they have moved twice: off the
+  -- mixer once that page became one fader per active output (a room is not a
+  -- channel), onto the global page for want of anywhere better, and now onto
+  -- the page that is actually about this family.
   local before = #CALLS.gust_space
   local rows = 0
-  for i = 1, M.gparam.PARAM_COUNT do
-    if M.gparam.param(i).key:match("^gust_") then
+  for i = 1, M.gust.MACRO_COUNT do
+    local key = M.gust.macro_param(i).key
+    if key == "gust_space" or key == "gust_delay" or key == "gust_regen" then
       rows = rows + 1
-      M.gparam.nudge(i, 1, true)
+      M.gust.macro_nudge(i, 1, true)
     end
   end
-  check("the global page carries all three rows", rows == 3, tostring(rows))
+  check("the gusts page carries all three rows", rows == 3, tostring(rows))
   check("and each pushes the line", #CALLS.gust_space - before == 3,
         tostring(#CALLS.gust_space - before))
+  check("and none of them is left on the global page", (function()
+    for i = 1, M.gparam.PARAM_COUNT do
+      if M.gparam.param(i).key:match("^gust_") then return false end
+    end
+    return true
+  end)(), "a gust_ row is still on the global page")
   check("and none of them is on the mixer", (function()
     for i = 1, M.mixer.PARAM_COUNT do
       if M.mixer.param(i).key:match("^gust_") then return false end
@@ -320,6 +326,148 @@ do
   local t = M.gust.get_space("delay")
   check("nudging Delay leaves it in range",
         t >= M.gust.DELAY_MIN and t <= M.gust.DELAY_MAX, tostring(t))
+end
+
+print("\n-- the family macros: offsets over all twelve, not values --")
+do
+  local M = fresh(30)
+  local A, B = "gu.squall", "gu.haar"
+
+  -- the whole reason these are offsets: two cells set differently have to
+  -- stay set differently after the macro moves. give them a spread first.
+  M.state.set_vparam(A, "timbre", 0.2)
+  M.state.set_vparam(B, "timbre", 0.7)
+
+  check("every macro starts neutral", (function()
+    for _, k in ipairs({"timbre", "attack", "cross", "level"}) do
+      if M.gust.macro(k) ~= 0.5 then return false end
+    end
+    return M.gust.macro("pitch") == 0
+  end)())
+  check("so a cell's effective value is its own knob",
+        math.abs(M.gust.timbre(A) - 0.2) < 1e-9
+        and math.abs(M.gust.timbre(B) - 0.7) < 1e-9,
+        M.gust.timbre(A) .. "/" .. M.gust.timbre(B))
+
+  M.gust.set_macro("timbre", 0.7)          -- +0.2
+  check("moving the macro slides both cells by the same amount",
+        math.abs(M.gust.timbre(A) - 0.4) < 1e-9
+        and math.abs(M.gust.timbre(B) - 0.9) < 1e-9,
+        M.gust.timbre(A) .. "/" .. M.gust.timbre(B))
+  check("and it did not touch what either cell stores",
+        M.state.get_vparam(A, "timbre") == 0.2
+        and M.state.get_vparam(B, "timbre") == 0.7)
+  check("the spread between them is preserved",
+        math.abs((M.gust.timbre(B) - M.gust.timbre(A)) - 0.5) < 1e-9)
+
+  M.gust.set_macro("timbre", 0.5)
+  check("back at the centre, both are exactly where they were",
+        math.abs(M.gust.timbre(A) - 0.2) < 1e-9
+        and math.abs(M.gust.timbre(B) - 0.7) < 1e-9)
+
+  -- and it runs out of travel by clamping per cell rather than by shoving
+  -- one cell past another or wrapping.
+  M.gust.set_macro("timbre", 1.0)
+  check("a cell already high clamps at 1 rather than wrapping",
+        M.gust.timbre(B) == 1.0, tostring(M.gust.timbre(B)))
+  check("while one lower down still has travel left",
+        M.gust.timbre(A) == 0.7, tostring(M.gust.timbre(A)))
+  M.gust.set_macro("timbre", 0.5)
+end
+
+print("\n-- the macros reach the envelope, the pitch and the engine --")
+do
+  local M = fresh(31)
+  local A = "gu.squall"
+
+  local base_a = M.gust.attack_seconds(A)
+  M.gust.set_macro("attack", 0.9)
+  check("the Attack macro lengthens every cell's swell",
+        M.gust.attack_seconds(A) > base_a * 2,
+        string.format("%.3f vs %.3f", M.gust.attack_seconds(A), base_a))
+  M.gust.set_macro("attack", 0.5)
+
+  -- and there is deliberately no Decay macro here: the global page's Decay
+  -- already scales every gust's fall, and two knobs over one number is two
+  -- knobs neither of which can be read.
+  check("no family Decay row", (function()
+    for i = 1, M.gust.MACRO_COUNT do
+      if M.gust.macro_param(i).label == "Decay" then return false end
+    end
+    return true
+  end)())
+  local base_d = M.gust.decay_seconds(A)
+  M.state.global.decay_mult = 1.0
+  check("the global Decay macro is what reaches them",
+        M.gust.decay_seconds(A) > base_d * 3,
+        string.format("%.3f vs %.3f", M.gust.decay_seconds(A), base_d))
+  M.state.global.decay_mult = 0.5
+
+  -- Pitch, in semitones, and quantised onto the Scale like every other pitch
+  -- a gust sounds -- so this checks the note MOVED rather than that it moved
+  -- by exactly twelve, which a scale is free to round.
+  M.state.global.scale_i = 0             -- free, so the arithmetic is exact
+  local before = M.gust.note_semitones(A)
+  M.gust.set_macro("pitch", 12)
+  check("the Pitch macro transposes the family",
+        math.abs(M.gust.note_semitones(A) - (before + 12)) < 1e-6,
+        tostring(M.gust.note_semitones(A)))
+  check("clamped to an octave either way", (function()
+    M.gust.set_macro("pitch", 99)
+    local hi = M.gust.macro("pitch")
+    M.gust.set_macro("pitch", -99)
+    local lo = M.gust.macro("pitch")
+    return hi == M.gust.MACRO_PITCH_ST and lo == -M.gust.MACRO_PITCH_ST
+  end)())
+  M.gust.set_macro("pitch", 0)
+
+  -- and every row on the page pushes to all twelve when it is nudged.
+  local PUSHED = {
+    Pitch = "gust_pitch", Timbre = "gust_timbre", Attack = "gust_attack",
+    Cross = "gust_cross", Level = "gust_amp",
+  }
+  for i = 1, M.gust.MACRO_COUNT do
+    local p = M.gust.macro_param(i)
+    local call = PUSHED[p.label]
+    if call then
+      CALLS[call] = {}
+      M.gust.macro_nudge(i, 1, true)
+      check(p.label .. " pushes all twelve cells", #CALLS[call] == 12,
+            "#" .. #CALLS[call])
+    end
+  end
+end
+
+print("\n-- what the cell page reads is what the cell sounds --")
+do
+  -- a macro that changed the sound without changing any reading would be
+  -- invisible: the twelve cell pages would go on showing numbers nothing was
+  -- using. so the per-cell rows report the EFFECTIVE value while E2/E3 go on
+  -- moving the cell's own knob -- the arrangement Pitch always had.
+  local M = fresh(32)
+  local A = "gu.squall"
+  local page = M.cellparam.page(A)
+  local timbre_row
+  for i = 1, page.PARAM_COUNT do
+    if page.param(i).key == "timbre" then timbre_row = page.param(i) end
+  end
+
+  M.state.set_vparam(A, "timbre", 0.4)
+  check("neutral: the row reads the knob", timbre_row.text(A) == "0.40",
+        timbre_row.text(A))
+  M.gust.set_macro("timbre", 0.7)
+  check("offset: the row reads what the cell is actually running on",
+        timbre_row.text(A) == "0.60", timbre_row.text(A))
+  check("but E2 still moves the cell's own knob, not the macro", (function()
+    page.nudge(A, (function()
+      for i = 1, page.PARAM_COUNT do
+        if page.param(i).key == "timbre" then return i end
+      end
+    end)(), 0.1)
+    return math.abs(M.state.get_vparam(A, "timbre") - 0.5) < 1e-9
+       and M.gust.macro("timbre") == 0.7
+  end)(), tostring(M.state.get_vparam(A, "timbre")))
+  M.gust.set_macro("timbre", 0.5)
 end
 
 print("\n-- the page is the same object every other cell type exposes --")

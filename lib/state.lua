@@ -15,14 +15,24 @@ local state = {}
 state.cell_edit = nil
 state.vparam_focus = 1
 
--- §5.2b which of the two full-screen pages the encoders and the screen are
--- on when no cell page is open: "global" (the ten patch-wide macros) or
--- "mixer" (the master and one fader per active output, lib/mixer.lua). K3
--- goes to the mixer from anywhere,
--- K2 comes back -- and K3 from an open cell page goes to the mixer *and*
--- drops the cell's focus, so there is never a page hiding behind the mixer.
+-- §5.2b which full-screen page the encoders and the screen are on when no
+-- cell page is open. there are five now, on one linear stack K3 walks
+-- forward and K2 walks back (Canopy.lua's VIEW_ORDER):
+--
+--   "global"  the patch-wide macros (lib/gparam.lua)
+--   "gusts"   one set of knobs over all twelve gust cells at once, plus the
+--             delay line they share (lib/gust.lua's macro page)
+--   "mixer"   one fader per active output (lib/mixer.lua)
+--   "colour"  the master colour chain -- tape, crush, alias, loss, chorus,
+--             transient and compressor (lib/colour.lua)
+--   "map"     every cell, lit if it is cabled
+--
+-- each page keeps its own E1 cursor, so stepping away from one and back
+-- lands on the row you left rather than on its first.
 state.view = "global"
 state.mparam_focus = 1
+state.guparam_focus = 1
+state.cparam_focus = 1
 
 -- §4.1/§5.2 the global param page (nothing held, no voice page open): E1
 -- walks gparam.PARAMS, E2/E3 nudge coarse/fine. replaced the network/wires
@@ -38,7 +48,12 @@ state.gparam_focus = 1
 -- read it and a rename of the word on the panel is not a rename of the
 -- mechanism.
 state.global = {
-  swing = 0.8,       -- quantise.lua's swing() -- preserves the old default feel
+  -- straight, not swung. an instrument whose gaits are mostly euclidean and
+  -- stochastic is not one where a hard shuffle is the neutral reading, and a
+  -- default of 0.8 meant every fresh patch arrived already interpreted --
+  -- you had to find this row and turn it down before you could hear what
+  -- the gaits themselves were doing. Swing is a thing you add now.
+  swing = 0,         -- quantise.lua's swing()
   scatter = 0,       -- quantise.lua's chaos(), plus rhythm/field wildness
   bpm = 120,         -- transport tempo, mirrored onto the norns clock param
   -- global pitch quantisation, an index into grove.SCALES; 0 = free. it
@@ -67,6 +82,23 @@ state.global = {
   -- arrangement: lib/gust.lua owns the defaults and the ranges, this only
   -- holds the numbers so a PSET picks them up with everything else.
   gust_space = nil,
+  -- §2.11b the gust family's unified knobs -- one Pitch/Timbre/Attack/Cross/
+  -- Level over all twelve at once, on their own page. offsets around a
+  -- centre rather than absolute values, so they ride over what each cell is
+  -- already set to instead of flattening the twelve into one. lib/gust.lua
+  -- owns the defaults and the ranges.
+  gust_macro = nil,
+  -- §4.1c does the global Plonks/Decay/Pitch reach the six drum cells as
+  -- well as the four voices? the eighth row on the global page
+  -- (lib/gparam.lua). off by default: a drum kit that transposes with the
+  -- tune is a choice, not the obvious reading, and Decay already reached
+  -- them before this row existed -- so `false` here has to mean "as it
+  -- always was", which lib/gvoice.lua's decay_seconds is careful about.
+  drum_macro = false,
+  -- §4.4 the master colour chain's eight knobs (lib/colour.lua). same
+  -- arrangement as gust_space: the module owns the defaults, this only holds
+  -- the numbers so a PSET picks them up with everything else.
+  colour = nil,
 }
 
 -- grid hold tracking

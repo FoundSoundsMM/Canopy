@@ -120,6 +120,10 @@ HANDLERS["GVOICE"] = function(source_id, target_id, edge, weight)
 
   local force = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
   local wForce = wobble(force, 0.04, 0, 1)
+  -- §4.1c Plonks, when the Drums row is on: retune the head a hair for this
+  -- one hit, the way grove.on_strike does for a voice. a no-op -- and no
+  -- message at all -- with the row off or Plonks at zero.
+  wl("gvoice").on_strike(target_id)
   bridge.g_strike(cell.index - 1, wForce)
   state.flash(target_id, wForce)
 

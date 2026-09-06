@@ -143,16 +143,21 @@ do
   end
   check("the global param page redraws with a live patch", ok, failures[1])
 
-  -- §4.1b the mixer, reached the way a player reaches it
-  ok = true
-  key(3, 1); key(3, 0)
-  for _ = 1, 20 do
-    tick(33)
-    ok = guard("redraw mixer page", redraw) and ok
+  -- and every other full-screen page, each reached the way a player reaches
+  -- it: one K3 per step down the stack, drawing at each stop.
+  for _, view in ipairs({"gusts", "mixer", "colour", "map"}) do
+    ok = true
+    key(3, 1); key(3, 0)
+    for _ = 1, 20 do
+      tick(33)
+      ok = guard("redraw " .. view .. " page", redraw) and ok
+    end
+    check("the " .. view .. " page redraws too", ok and M.state.view == view,
+          failures[1] or tostring(M.state.view))
   end
-  check("the mixer page redraws too", ok and M.state.view == "mixer",
-        failures[1] or tostring(M.state.view))
-  key(2, 1); key(2, 0)
+  for _ = 1, 4 do key(2, 1); key(2, 0) end
+  check("and K2 walks all the way back to the main screen",
+        M.state.view == "global", tostring(M.state.view))
 
   ok = true
   for _, id in ipairs(all_ids) do
@@ -326,6 +331,24 @@ do
   calls, paint = frame()
   check("the mixer page: under 170 commands", calls < 170, calls .. " calls")
   print("      mixer  " .. calls .. " commands, " .. paint .. " paint")
+
+  -- §2.11b/§4.4 the two pages added after this budget was set. the gusts page
+  -- borrows shapes the global page already draws, so it is nothing new; the
+  -- Colour page is the one to watch, because four of its eight widgets are
+  -- shapes written for it (crush, alias, loss, squash) and every one of them
+  -- draws a run of rects. they batch into one fill each (glyph.lua's
+  -- fill_all), which is exactly what keeps them here rather than at two
+  -- commands a rect.
+  M.state.view = "gusts"
+  calls, paint = frame()
+  check("the gusts page: under 200 commands", calls < 200, calls .. " calls")
+  print("      gusts  " .. calls .. " commands, " .. paint .. " paint")
+
+  M.state.view = "colour"
+  calls, paint = frame()
+  check("the Colour page: under 200 commands", calls < 200, calls .. " calls")
+  print("      colour " .. calls .. " commands, " .. paint .. " paint")
+
   M.state.view = "global"
 
   M.state.held = {"d.hob"}

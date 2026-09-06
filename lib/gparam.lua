@@ -4,12 +4,14 @@
 -- already gave the sound page (§5.5), just for macros that reach every voice
 -- at once instead of one.
 --
--- ten rows, on two pages. the first seven reach every voice at once; the
--- last three are the one delay line all twelve gusts are heard through
--- (§2.11). those three sat on the mixer page while the mixer had a fixed
--- eight-row list to fill; the mixer is built from the patch now
--- (lib/mixer.lua) and a room is not a channel, so they came here, which is
--- where the rest of the patch-wide numbers already were.
+-- eight rows, one page. seven knobs that reach every voice at once, and one
+-- switch (Drums) that decides how far three of them reach.
+--
+-- it was ten for a while, because the gusts' shared delay line had nowhere
+-- better to be: three rows about ONE family, sitting next to BPM and Scale
+-- and pushing this list onto a second page. the gusts have a page of their
+-- own now (lib/gust.lua's MACROS, K3 from here), the delay went with it, and
+-- what is left fits the screen exactly -- eight widgets, no page dots.
 --
 -- two of these rows are renamed and nothing else about them changed. Scatter
 -- is Rain: it is the knob that makes everything land a little off the grid
@@ -102,7 +104,7 @@ local function sounding_cells()
   return ids
 end
 
--- the ten, in E1 order -------------------------------------------------------
+-- the eight, in E1 order -----------------------------------------------------
 -- `frac` is the screen's bar position, 0..1, kept separate from `get` since
 -- bpm/scale/pitch don't store in 0..1 themselves.
 
@@ -187,7 +189,20 @@ gparam.PARAMS = {
     set = function(v) state.global.drops = util.clamp(v, 0, 1) end,
     text = function() return string.format("%.2f", state.global.drops or 0) end,
     frac = function() return state.global.drops or 0 end,
-    push = function() end, -- read live by grove.on_strike
+    push = function()
+      -- a voice needs nothing pushed here: grove.on_strike reads this live
+      -- and re-tunes on every strike whatever it is set to, because a voice's
+      -- detune has a floor (0.02 st) and so always has something to send.
+      --
+      -- a drum's does not. gvoice.strike_detune falls all the way to zero, so
+      -- turning Plonks back down would otherwise leave the six heads sitting
+      -- at whatever random pitch their last detuned strike put them on, with
+      -- nothing to move them off it until something else pushed. six messages
+      -- per detent, and only while the Drums row is on -- with it off there
+      -- is nothing stale to correct.
+      local gvoice = wl("gvoice")
+      if gvoice.follows_global() then gvoice.repush_pitch() end
+    end,
   },
   {
     key = "decay", label = "Decay", glyph = "ramp", coarse = 1 / 80, fine = 1 / 500,
@@ -220,51 +235,48 @@ gparam.PARAMS = {
       -- a gust holds its pitch between presses rather than being retuned on
       -- the next strike, so a transpose has to be pushed to all ten now.
       wl("gust").repush_pitch()
+      -- and, when the Drums row below is on, the six percussion cells hold
+      -- theirs the same way -- nothing re-pushes a drum's pitch except this.
+      wl("gvoice").repush_pitch()
+    end,
+  },
+  {
+    -- §4.1c the eighth row, and the one that is not a knob. three of the
+    -- macros above -- Plonks, Decay, Pitch -- were written for the four
+    -- corner voices, and Decay quietly grew to reach the drums, the gusts
+    -- and the sample cells because a decay multiplier means the same thing
+    -- to all of them. Plonks and Pitch never did, for a good reason: a kit
+    -- that transposes with the tune and detunes on every hit is a particular
+    -- musical choice rather than the obvious one, and making it the default
+    -- would have taken the drums away from anyone using them as drums.
+    --
+    -- so it is a switch, and this is its seat -- the slot the gusts' delay
+    -- line left when it went to its own page. on, the six G cells follow the
+    -- global Plonks, Decay and Pitch exactly as the four voices do: struck
+    -- notes land a little off, the whole kit transposes, and the Decay
+    -- multiplier rides on their envelopes. off, they are as they were, which
+    -- includes Decay -- gvoice.decay_seconds drops the multiplier with the
+    -- other two rather than keeping one of the three attached, since a row
+    -- that says "the globals reach the drums" and leaves one of them
+    -- permanently on is a row that lies about what it does.
+    key = "drums", label = "Drums", glyph = "flag",
+    coarse = 1, fine = 1, min = 0, max = 1,
+    get = function() return state.global.drum_macro and 1 or 0 end,
+    set = function(v) state.global.drum_macro = (v >= 0.5) end,
+    text = function() return state.global.drum_macro and "on" or "off" end,
+    frac = function() return state.global.drum_macro and 1 or 0 end,
+    push = function()
+      -- both of the two things this flag changes without a strike: every
+      -- drum's ring time (through the shared decay listener, same as the
+      -- Decay row) and every drum's pitch.
+      local gvoice = wl("gvoice")
+      for id, cell in topology.each() do
+        if cell.type == "GVOICE" then state.notify_decay_change(id) end
+      end
+      gvoice.repush_pitch()
     end,
   },
 }
-
--- §2.11 the gusts' one shared delay line -- "a globally defined delayline
--- that gives it space and ambience". one line for all twelve rather than one
--- each: what it is for is putting the family in a room, and twelve rooms is
--- not a room. the numbers themselves live in lib/gust.lua, which owns their
--- defaults and their ranges; these three rows are only the face.
---
--- they are the second page of this list, which is what pushed the global page
--- past one screen for the first time. that is the right trade: they belong
--- with the other patch-wide settings, and a page of ten with three of them
--- one E1 flick away beats a mixer that has to pretend a reverb is a channel.
-local function space_row(key, label, glyph, text_fn, frac_fn, coarse, fine)
-  return {
-    key = "gust_" .. key, label = label, glyph = glyph,
-    coarse = coarse, fine = fine,
-    get = function() return wl("gust").get_space(key) end,
-    set = function(v) wl("gust").set_space(key, v) end,
-    text = text_fn, frac = frac_fn,
-    push = function() wl("gust").push_space() end,
-  }
-end
-
-table.insert(gparam.PARAMS, space_row("space", "Space", "peak",
-  function() return string.format("%.2f", wl("gust").get_space("space")) end,
-  function() return wl("gust").get_space("space") end,
-  1 / 80, 1 / 500))
-
--- in seconds on the wire and milliseconds on the screen, not a 0..1 knob: a
--- delay time is a number you want to read, and often one you want to match to
--- the tempo by eye.
-table.insert(gparam.PARAMS, space_row("delay", "Delay", "steps",
-  function() return string.format("%.0f ms", wl("gust").get_space("delay") * 1000) end,
-  function()
-    local g = wl("gust")
-    return (g.get_space("delay") - g.DELAY_MIN) / (g.DELAY_MAX - g.DELAY_MIN)
-  end,
-  0.01, 0.002))
-
-table.insert(gparam.PARAMS, space_row("regen", "Regen", "combs",
-  function() return string.format("%.2f", wl("gust").get_space("regen")) end,
-  function() local g = wl("gust"); return g.get_space("regen") / g.REGEN_MAX end,
-  1 / 80, 1 / 500))
 
 gparam.PARAM_COUNT = #gparam.PARAMS
 

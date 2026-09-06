@@ -208,6 +208,56 @@ for i = 1, M.gparam.PARAM_COUNT do
   draws_clean("global, row " .. i)
 end
 
+-- 1a: the gusts page and the Colour page --------------------------------------
+-- both are fixed lists -- unlike the mixer, neither can be empty -- so this is
+-- the same walk the global page gets above: every row focused in turn, and
+-- then every knob at both ends of its travel, since a full shape draws the
+-- longest run and the widest reading.
+
+print("\n-- the gusts page --")
+do
+  M.state.view = "gusts"
+  for i = 1, M.gust.MACRO_COUNT do
+    M.state.guparam_focus = i
+    screenui.redraw()
+    draws_clean("gusts, row " .. i)
+  end
+  for _, extreme in ipairs({0, 1}) do
+    for _, p in ipairs(M.gust.MACROS) do
+      p.set(p.min and (extreme == 0 and p.min or p.max) or extreme)
+    end
+    for i = 1, M.gust.MACRO_COUNT do
+      M.state.guparam_focus = i
+      screenui.redraw()
+      draws_clean("gusts, row " .. i .. " at " .. extreme)
+    end
+  end
+  for _, p in ipairs(M.gust.MACROS) do p.set(0.5) end
+  M.state.guparam_focus = 1
+  M.state.view = "global"
+end
+
+print("\n-- the Colour page --")
+do
+  M.state.view = "colour"
+  for i = 1, M.colour.PARAM_COUNT do
+    M.state.cparam_focus = i
+    screenui.redraw()
+    draws_clean("colour, row " .. i)
+  end
+  for _, extreme in ipairs({0, 1}) do
+    for _, p in ipairs(M.colour.PARAMS) do p.set(extreme) end
+    for i = 1, M.colour.PARAM_COUNT do
+      M.state.cparam_focus = i
+      screenui.redraw()
+      draws_clean("colour, row " .. i .. " at " .. extreme)
+    end
+  end
+  for k, v in pairs(M.colour.DEFAULTS) do M.colour.set(k, v) end
+  M.state.cparam_focus = 1
+  M.state.view = "global"
+end
+
 -- 1b: the mixer page ---------------------------------------------------------
 
 print("\n-- the mixer page --")
@@ -505,13 +555,25 @@ do
   end
   check("and it is the only one that does", #extra == 0,
         table.concat(extra, ","))
-  -- the global page is the one list that grew past a screen: the gusts'
-  -- three delay-line rows came back to it from the mixer (gparam.lua), which
-  -- is a second page for three rows that belong with the other patch-wide
-  -- numbers rather than a mixer channel that is not a channel.
-  check("the global page takes two",
-        screenui.page_of(M.gparam.PARAM_COUNT) == 2,
+  -- the global page is back to exactly one screen: the gusts' three
+  -- delay-line rows went to the gusts' own page and the seat they left is the
+  -- Drums switch, so it is eight rows and eight widgets with no seam.
+  check("the global page is exactly one screen",
+        screenui.page_of(M.gparam.PARAM_COUNT) == 1
+        and M.gparam.PARAM_COUNT == screenui.PARAMS_PER_PAGE,
         tostring(M.gparam.PARAM_COUNT))
+  -- the Colour chain is the same: eight processors, one screen, no scrolling
+  -- to find the end of the chain you are balancing.
+  check("and so is the Colour page",
+        screenui.page_of(M.colour.PARAM_COUNT) == 1
+        and M.colour.PARAM_COUNT == screenui.PARAMS_PER_PAGE,
+        tostring(M.colour.PARAM_COUNT))
+  -- and so is the gusts page: five family offsets and the delay's three,
+  -- which is the discipline that keeps the whole family in one look.
+  check("and so is the gusts page",
+        screenui.page_of(M.gust.MACRO_COUNT) == 1
+        and M.gust.MACRO_COUNT == screenui.PARAMS_PER_PAGE,
+        tostring(M.gust.MACRO_COUNT))
   -- the mixer is built from the patch, so its length is the player's rather
   -- than ours: empty it is one page, and a full Output row is exactly two.
   check("an empty mixer is one page",

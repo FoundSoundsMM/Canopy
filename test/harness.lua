@@ -76,7 +76,7 @@ local function fresh_calls()
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
     smp_load = {}, smp_note = {}, smp_attack = {}, smp_decay = {},
     smp_speed = {}, smp_level = {}, smp_hold = {},
-    master_level = {}, out_level = {},
+    master_level = {}, out_level = {}, colour = {},
     g_strike = {}, g_pitch = {}, g_decay = {}, g_tone = {}, g_punch = {},
     g_drive = {}, g_amp = {},
     gust_note = {}, gust_pitch = {}, gust_attack = {}, gust_decay = {},
@@ -182,6 +182,8 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.master_level, {t = T, v = a[1]})
     elseif k == "out_level" then
       table.insert(CALLS.out_level, {t = T, index = a[1], v = a[2]})
+    elseif k == "colour" then
+      table.insert(CALLS.colour, {t = T, key = a[1], v = a[2]})
     end
   end
 end})
@@ -208,7 +210,8 @@ function fresh(seed)
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "sample", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
-                      "gparam", "mixer", "tm", "gust", "lfo", "cellparam"}) do
+                      "gparam", "mixer", "colour", "tm", "gust", "lfo",
+                      "cellparam"}) do
     M[n] = wl(n)
   end
   return M

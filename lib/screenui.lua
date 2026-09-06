@@ -1,6 +1,6 @@
 -- screenui.lua
--- the global param page, the mixer page, the per-cell settings page, and the
--- edge view.
+-- the global param page, the gusts page, the mixer page, the Colour page, the
+-- map, the per-cell settings page, and the edge view.
 --
 -- the lexicon pages are gone. they were a manual you had to leave the patch
 -- to read, and everything worth reading off them -- what a cell's one knob
@@ -64,6 +64,8 @@ local patch      = wl("patch")
 local state      = wl("state")
 local gparam     = wl("gparam")
 local mixer      = wl("mixer")
+local gust       = wl("gust")   -- §2.11b its family page, not its cell page
+local colour     = wl("colour") -- §4.4 the master colour chain
 local cellparam  = wl("cellparam")
 local lexicon    = wl("lexicon")
 local glyph      = wl("glyph")
@@ -372,6 +374,43 @@ function screenui.draw_global()
   local pages = math.ceil(gparam.PARAM_COUNT / PL_PER_PAGE)
   screenui.draw_header("", "Canopy", screenui.page_of(focus), pages)
   draw_param_grid(gparam.PARAMS, focus,
+                  function(q) return q.text() end,
+                  function(q) return q.frac() end,
+                  function(q) return q.glyph_data and q.glyph_data() or nil end)
+end
+
+-- §2.11b the gusts page (K3 from the main screen) ------------------------------
+-- the five family offsets and the three rows for the delay line all twelve
+-- share (lib/gust.lua's MACROS). exactly eight, so the whole family is one
+-- look with no page dots and no seam -- which is what a page about twelve
+-- cells acting as one ought to be.
+--
+-- unlike the mixer this page can never be empty -- the twelve cells are
+-- always there whether or not anything is cabled to them -- so there is no
+-- "nothing here" branch to draw.
+
+function screenui.draw_gusts()
+  local focus = util.clamp(state.guparam_focus or 1, 1, gust.MACRO_COUNT)
+  local pages = math.max(1, math.ceil(gust.MACRO_COUNT / PL_PER_PAGE))
+  screenui.draw_header("Gusts", "all twelve", screenui.page_of(focus), pages)
+  draw_param_grid(gust.MACROS, focus,
+                  function(q) return q.text() end,
+                  function(q) return q.frac() end,
+                  function(q) return q.glyph_data and q.glyph_data() or nil end)
+end
+
+-- §4.4 the Colour page (K3 from the mixer) -------------------------------------
+-- eight processors across the master output (lib/colour.lua), which is
+-- exactly one screen -- no page dots, no seam, the whole chain visible at
+-- once. that is worth more here than on any other page in the script: what
+-- you are doing on this one is balancing eight things against each other,
+-- and a chain you have to scroll to see the end of is one you set by memory.
+
+function screenui.draw_colour()
+  local focus = util.clamp(state.cparam_focus or 1, 1, colour.PARAM_COUNT)
+  local pages = math.max(1, math.ceil(colour.PARAM_COUNT / PL_PER_PAGE))
+  screenui.draw_header("Colour", "master", screenui.page_of(focus), pages)
+  draw_param_grid(colour.PARAMS, focus,
                   function(q) return q.text() end,
                   function(q) return q.frac() end,
                   function(q) return q.glyph_data and q.glyph_data() or nil end)
@@ -873,8 +912,12 @@ function screenui.redraw()
     screenui.draw_cell(state.held[1])
   elseif state.cell_edit then
     screenui.draw_cell(state.cell_edit)
+  elseif state.view == "gusts" then
+    screenui.draw_gusts()
   elseif state.view == "mixer" then
     screenui.draw_mixer()
+  elseif state.view == "colour" then
+    screenui.draw_colour()
   elseif state.view == "map" then
     screenui.draw_map()
   else

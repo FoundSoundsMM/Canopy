@@ -21,20 +21,16 @@ print("\n-- E1 walks the list, clamped at both ends --")
 do
   local M = fresh(1)
   local n = M.gparam.PARAM_COUNT
-  check("ten params", n == 10, "#" .. n)
+  -- eight, which is exactly one screen of widgets (screenui's 4x2 grid). the
+  -- gusts' three delay rows used to make it ten and push it onto a second
+  -- page; they are on the gusts' own page now (test/gust.lua checks that end)
+  -- and the seat they left is the Drums switch.
+  check("eight params, one screen", n == 8, "#" .. n)
   check("bpm is first", M.gparam.PARAMS[1].key == "bpm")
-  check("pitch closes the first page", M.gparam.PARAMS[7].key == "pitch")
-  -- the gusts' delay line lives here now. it sat on the mixer while that page
-  -- had a fixed eight-row list to fill; the mixer is one fader per active
-  -- output now (mixer.lua) and a room is not a channel, so it came back to
-  -- where the other patch-wide numbers are.
-  check("and the gusts' delay line closes the second",
-        M.gparam.PARAMS[8].key == "gust_space"
-        and M.gparam.PARAMS[9].key == "gust_delay"
-        and M.gparam.PARAMS[10].key == "gust_regen",
-        M.gparam.PARAMS[8].key .. " " .. M.gparam.PARAMS[9].key
-          .. " " .. M.gparam.PARAMS[10].key)
-  check("and no soundscape rows are left here",
+  check("pitch is seventh", M.gparam.PARAMS[7].key == "pitch")
+  check("and Drums closes the page", M.gparam.PARAMS[8].key == "drums",
+        M.gparam.PARAMS[8].key)
+  check("no soundscape rows are left here",
         (function()
           for _, p in ipairs(M.gparam.PARAMS) do
             if p.key:match("^rain") then return false end
@@ -238,6 +234,128 @@ do
   check("back on internal, the row moves again",
         (function() M.gparam.nudge(1, 5, true); return M.state.global.bpm end)() == 95,
         tostring(M.state.global.bpm))
+end
+
+-- §4.1c --------------------------------------------------------------------
+
+print("\n-- Drums: whether the global macros reach the six percussion cells --")
+do
+  local M = fresh(23)
+  local DRUMS = 8
+  local KNAP = (function()
+    for id, cell in M.topology.each() do
+      if cell.type == "GVOICE" then return id end
+    end
+  end)()
+
+  check("off by default", M.state.global.drum_macro == false,
+        tostring(M.state.global.drum_macro))
+  check("and the row says so", M.gparam.param(DRUMS).text() == "off",
+        M.gparam.param(DRUMS).text())
+
+  -- Pitch: with the row off a drum ignores the global transpose entirely.
+  local root = M.topology.get(KNAP).root
+  M.state.global.pitch_offset = 12
+  check("off: a drum ignores the global transpose",
+        math.abs(M.gvoice.pitch_hz(KNAP) - root) < 1e-6,
+        string.format("%.3f vs %.3f", M.gvoice.pitch_hz(KNAP), root))
+
+  -- Decay: same. decay_mult away from its x1 centre must not move a drum
+  -- while the row is off -- which is the half of this switch that is a
+  -- behaviour CHANGE rather than an addition, since Decay used to reach the
+  -- drums unconditionally.
+  local base_d = M.gvoice.decay_seconds(KNAP)
+  M.state.global.decay_mult = 1.0
+  check("off: a drum ignores the global Decay macro",
+        math.abs(M.gvoice.decay_seconds(KNAP) - base_d) < 1e-9,
+        string.format("%.4f vs %.4f", M.gvoice.decay_seconds(KNAP), base_d))
+
+  -- Plonks: no per-strike detune, and -- just as important -- no message.
+  M.state.global.drops = 1.0
+  check("off: no per-strike detune", M.gvoice.strike_detune() == 0)
+  CALLS.g_pitch = {}
+  M.gvoice.on_strike(KNAP)
+  check("off: and a strike sends no pitch at all", #CALLS.g_pitch == 0,
+        "#" .. #CALLS.g_pitch)
+
+  -- now turn it on, through the row rather than the flag, so the row's own
+  -- set/push are what is under test.
+  CALLS.g_pitch = {}
+  CALLS.g_decay = {}
+  M.gparam.nudge(DRUMS, 1, true)
+  check("a turn to the right switches it on", M.state.global.drum_macro == true)
+  check("and the row says so", M.gparam.param(DRUMS).text() == "on")
+  check("switching it on re-pushes every drum's pitch", #CALLS.g_pitch == 6,
+        "#" .. #CALLS.g_pitch)
+  check("and every drum's decay", #CALLS.g_decay == 6, "#" .. #CALLS.g_decay)
+
+  check("on: an octave up doubles a drum's Hz",
+        math.abs(M.gvoice.pitch_hz(KNAP) - root * 2) < 1e-6,
+        string.format("%.3f", M.gvoice.pitch_hz(KNAP)))
+  check("on: the global Decay macro is x4 at the top",
+        math.abs(M.gvoice.decay_seconds(KNAP) - base_d * 4) < 1e-6,
+        string.format("%.4f", M.gvoice.decay_seconds(KNAP)))
+
+  -- Plonks, on: a spread of strikes lands on a spread of pitches, and every
+  -- one of them is within the knob's own range of where the drum sits.
+  CALLS.g_pitch = {}
+  local lo, hi = math.huge, -math.huge
+  for _ = 1, 60 do M.gvoice.on_strike(KNAP) end
+  check("on: every strike retunes the head", #CALLS.g_pitch == 60,
+        "#" .. #CALLS.g_pitch)
+  for _, c in ipairs(CALLS.g_pitch) do
+    lo, hi = math.min(lo, c.hz), math.max(hi, c.hz)
+  end
+  check("on: and they are not all the same pitch", hi > lo)
+  local nominal = M.gvoice.pitch_hz(KNAP)
+  local max_st = M.gparam.DROPS_MAX_ST
+  check("on: within the Plonks range either side",
+        lo >= nominal * 2 ^ (-max_st / 12) - 1e-6
+        and hi <= nominal * 2 ^ (max_st / 12) + 1e-6,
+        string.format("%.2f..%.2f around %.2f", lo, hi, nominal))
+
+  -- Plonks turned back down: no per-strike message any more (there is
+  -- nothing to say), but the heads must not be left sitting on whatever
+  -- random pitch the last detuned strike put them on -- so the Plonks row
+  -- itself re-pushes all six on the way down.
+  CALLS.g_pitch = {}
+  M.gparam.nudge(5, -10000, true)        -- Plonks, all the way to 0
+  check("turning Plonks down re-pushes every drum", #CALLS.g_pitch == 6,
+        "#" .. #CALLS.g_pitch)
+  -- repush_pitch walks every G cell, so pick this one's out of the six by
+  -- its engine index rather than assuming it is last.
+  local knap_i = M.topology.get(KNAP).index - 1
+  local knap_push
+  for _, c in ipairs(CALLS.g_pitch) do
+    if c.index == knap_i then knap_push = c end
+  end
+  check("back at the nominal pitch, not the last random one",
+        knap_push ~= nil
+        and math.abs(knap_push.hz - M.gvoice.pitch_hz(KNAP)) < 1e-9,
+        knap_push and string.format("%.4f vs %.4f", knap_push.hz,
+                                    M.gvoice.pitch_hz(KNAP)) or "not pushed")
+  CALLS.g_pitch = {}
+  M.gvoice.on_strike(KNAP)
+  check("and a strike sends nothing while it is at 0", #CALLS.g_pitch == 0,
+        "#" .. #CALLS.g_pitch)
+
+  -- a turn to the left switches it back off, and the drums go back to
+  -- exactly where they were.
+  M.gparam.nudge(DRUMS, -1, true)
+  check("a turn to the left switches it off", M.state.global.drum_macro == false)
+  check("and the drum is back at its own pitch",
+        math.abs(M.gvoice.pitch_hz(KNAP) - root) < 1e-6)
+  check("and its own decay",
+        math.abs(M.gvoice.decay_seconds(KNAP) - base_d) < 1e-9)
+end
+
+print("\n-- Swing arrives at zero --")
+do
+  local M = fresh(25)
+  check("a fresh patch is straight", M.state.global.swing == 0,
+        tostring(M.state.global.swing))
+  check("which quantise reads as no swing", M.quantise.swing() == 0,
+        tostring(M.quantise.swing()))
 end
 
 report()

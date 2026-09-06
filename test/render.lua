@@ -185,49 +185,62 @@ local function cell_of(t)
   for id, c in M.topology.each() do if c.type == t then return id end end
 end
 
--- the global page, and the mixer
+-- the four full-screen parameter pages, in the order K3 walks them. three of
+-- them are exactly one screen each; only the mixer paginates, and only once
+-- the player has cabled more than eight outputs.
 M.state.gparam_focus = 3
 shot("01-global")
+M.state.view = "gusts"; M.state.guparam_focus = 2
+shot("02-gusts")
 M.state.view = "mixer"; M.state.mparam_focus = 5
-shot("02-mixer")
+shot("03-mixer")
+-- Colour with the chain part-way up rather than at its bypass defaults: a
+-- page of eight shapes all sitting at zero says nothing about whether the
+-- shapes work.
+M.state.view = "colour"; M.state.cparam_focus = 4
+M.colour.set("tape", 0.6); M.colour.set("crush", 0.45)
+M.colour.set("alias", 0.7); M.colour.set("loss", 0.55)
+M.colour.set("chorus", 0.4); M.colour.set("swirl", 0.6)
+M.colour.set("shape", 0.75); M.colour.set("comp", 0.5)
+shot("04-colour")
 M.state.view = "global"
 
 -- a voice, both pages
 M.state.cell_edit = cell_of("voice")
 M.state.vparam_focus = 3
-shot("03-voice-p1")
+shot("05-voice-p1")
 M.state.vparam_focus = 11
-shot("04-voice-p2")
+shot("06-voice-p2")
 
 -- the shift register
 M.state.cell_edit = cell_of("TM"); M.state.vparam_focus = 7
-shot("05-turing")
+shot("07-turing")
 
 -- the two scopes
 M.state.cell_edit = cell_of("D"); M.state.vparam_focus = 2
 T = 2.4
-shot("06-pulse-scope")
+shot("08-pulse-scope")
 M.state.cell_edit = cell_of("LFO"); M.state.vparam_focus = 1
 T = 3.1
-shot("07-lfo-scope")
+shot("09-lfo-scope")
 
 -- a page that still gets its sentence
 M.state.cell_edit = cell_of("H"); M.state.vparam_focus = 1
-shot("08-heartwood")
+shot("10-heartwood")
 M.state.cell_edit = cell_of("F"); M.state.vparam_focus = 2
-shot("09-field")
+shot("11-field")
 M.state.cell_edit = cell_of("GUST"); M.state.vparam_focus = 4
-shot("10-gust")
+shot("12-gust")
 
 -- the map, and a cable
 M.state.cell_edit = nil
 M.patch.add(cell_of("voice"), cell_of("O"), 0.5)
 M.patch.add(cell_of("D"), cell_of("voice"), 0.5)
 M.state.view = "map"
-shot("11-map")
+shot("13-map")
 M.state.view = "global"
 M.state.held = {cell_of("D"), cell_of("voice")}
-shot("12-edge")
+shot("14-edge")
 M.state.held = {}
 
 print("done")

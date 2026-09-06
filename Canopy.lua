@@ -15,23 +15,28 @@
 -- hold a cell, tap another: patch them together.
 -- hold a cell, tap a connected one: unpatch them.
 -- hold two cells together: read/set that edge's gain on E3.
--- E1/E2/E3 with nothing held: the global param page -- E1 picks one of ten
--- (BPM, Swing, Rain, Scale, Plonks, Decay, Pitch, then the gusts' shared
--- delay: Space, Delay, Regen), E2/E3 nudge it coarse/fine. K1+E3: master
--- level.
--- K3: forward, one page at a time -- main screen -> mixer (the master, plus a
--- fader for every Output cell something is cabled to -- the list grows and
--- shrinks with the patch) -> map (every cell, lit if it's cabled, dim if it
--- isn't) -- and no further: K3 on the map stays on the map,
--- it does not wrap back to the mixer. from an open cell page it goes to
--- whichever of those it was opened over, dropping that cell's focus on the
--- way. holding or tapping a cell open from the map still goes straight to
--- that cell's own settings page, same as everywhere else -- letting go or
--- closing it comes back to the map.
--- K2: back, one page at a time -- map -> mixer -> main screen -- and no
--- further: K2 on the main screen does not wrap round to the map, it freezes
--- the pulse gaits instead (Still). out of an open cell page, K2 drops that
--- cell's focus and lands back on whichever of those it was opened over.
+-- E1/E2/E3 with nothing held: the global param page -- E1 picks one of eight
+-- (BPM, Swing, Rain, Scale, Plonks, Decay, Pitch, Drums), E2/E3 nudge it
+-- coarse/fine. K1+E3: master level.
+-- K3: forward, one page at a time, down the signal --
+--   main screen -> gusts (one Pitch/Timbre/Attack/Cross/Level over all twelve
+--     gust cells at once, plus the Space/Delay/Regen of the delay line they
+--     share; the family's Decay is the global page's Decay, which already
+--     reaches them)
+--   -> mixer (a fader for every Output cell something is cabled to; the list
+--     grows and shrinks with the patch)
+--   -> colour (the master chain: Tape, Crush, Alias, Loss, Chorus, Swirl,
+--     Shape, Comp)
+--   -> map (every cell, lit if it's cabled, dim if it isn't)
+-- and no further: K3 on the map stays on the map, it does not wrap back
+-- round. from an open cell page it goes to whichever of those it was opened
+-- over, dropping that cell's focus on the way. holding or tapping a cell open
+-- from the map still goes straight to that cell's own settings page, same as
+-- everywhere else -- letting go or closing it comes back to the map.
+-- K2: back, one page at a time, the same list in reverse -- and no further:
+-- K2 on the main screen does not wrap round to the map, it freezes the pulse
+-- gaits instead (Still). out of an open cell page, K2 drops that cell's focus
+-- and lands back on whichever of those it was opened over.
 -- K1+K2 (hold): Regrow -- a seeded patch that already plays.
 -- K1+K3 (hold): Clearing -- cut every cable.
 --
@@ -67,7 +72,7 @@
 -- deliberately not a clone of one. press one and it sounds; a pulse cabled
 -- in sounds it too. they are the one family heard without a cable: each is
 -- panned by the column it sits in, and all twelve (two more were added later,
--- to fill the top row out to six) share one delay line off the global page.
+-- to fill the top row out to six) share one delay line off the gusts page.
 -- cable two together and they cross-modulate.
 -- the LFOs (§2.12): four plain sine sources on the row right above the
 -- gusts (lib/lfo.lua). cable one to a cell, then use its own page to pick
@@ -89,6 +94,18 @@
 -- actually using. the gusts are Gust 1-12 and the clocks Clock 1-4, the
 -- screen says "Voice: Oak" rather than "M Oak", a clock cell divides down to
 -- 1/128 of a beat, and Cross on a gust is deep enough to hear.
+-- the pages pass: three changes that are one change. the gusts get a page of
+-- their own between the main screen and the mixer (§2.11b) -- five offsets
+-- that slide all twelve cells together, plus the three delay rows that used
+-- to be the global page's awkward second half. that leaves the global page
+-- at exactly eight, and the freed eighth seat is Drums (§4.1c): a switch
+-- saying whether the global Plonks, Decay and Pitch reach the six percussion
+-- cells as well as the four voices. and one page past the mixer is Colour
+-- (§4.4, lib/colour.lua), eight processors across the master output -- tape
+-- saturation, bit reduction, sample-rate reduction, a low-bitrate-codec
+-- emulation, a two-knob chorus, a transient shaper and a compressor built for
+-- percussion. Swing now defaults to 0 rather than 0.8: a fresh patch arrives
+-- straight, and shuffle is something you add.
 
 engine.name = "Canopy"
 
@@ -123,6 +140,7 @@ local sample   = wl("sample") -- §2.5: the four sample cells on the right diago
 local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
 local gparam   = wl("gparam")
 local mixer    = wl("mixer")
+local colour   = wl("colour") -- §4.4 the master colour chain, one page past the mixer
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
 local grove     = wl("grove")
@@ -401,6 +419,61 @@ end
 -- press-context flags: was this key pressed alone, with the other two up?
 local k2_solo_press, k3_solo_press = false, false
 
+-- §5.2b the page stack, in the order K3 walks it. neither end wraps: K3 stops
+-- on the map and K2 stops on the main screen (where it means Still instead).
+--
+-- the order is the signal's own. the main screen is the patch as a whole; the
+-- gusts page is the one family that routes itself, so it comes before
+-- anything about routing; the mixer balances what the cables deliver; Colour
+-- is what the balanced mix is put through on its way out; and the map is the
+-- reference you check rather than a control surface. walking right is walking
+-- downstream.
+local VIEW_ORDER = {"global", "gusts", "mixer", "colour", "map"}
+
+-- each page's E1 cursor and its own list, so the encoder handler below drives
+-- all four the same way rather than growing a branch per page. the main
+-- screen is deliberately not in here: it is the fallthrough, and it is the
+-- one page whose list (gparam) has a nudge with a detented row in it.
+local VIEW_PAGES = {
+  gusts = {
+    focus = "guparam_focus",
+    count = function() return gust.MACRO_COUNT end,
+    nudge = function(i, d, coarse) return gust.macro_nudge(i, d, coarse) end,
+  },
+  mixer = {
+    focus = "mparam_focus",
+    count = function() return mixer.PARAM_COUNT end,
+    nudge = function(i, d, coarse) return mixer.nudge(i, d, coarse) end,
+  },
+  colour = {
+    focus = "cparam_focus",
+    count = function() return colour.PARAM_COUNT end,
+    nudge = function(i, d, coarse) return colour.nudge(i, d, coarse) end,
+  },
+}
+
+-- what each page calls itself when you land on it. the main screen says
+-- nothing on the way back to it -- "Canopy" is already the header.
+local VIEW_LABEL = {gusts = "gusts", mixer = "mixer", colour = "colour",
+                    map = "map"}
+
+local function view_index()
+  for i, v in ipairs(VIEW_ORDER) do
+    if state.view == v then return i end
+  end
+  return 1
+end
+
+-- one step along the stack, clamped at both ends. returns the page landed on,
+-- or nil if there was nowhere to go -- which is what tells K2 on the main
+-- screen that it means Still instead.
+local function step_view(delta)
+  local i = view_index() + delta
+  if i < 1 or i > #VIEW_ORDER then return nil end
+  state.view = VIEW_ORDER[i]
+  return state.view
+end
+
 -- K2 is "back" and K3 is "forward" on one linear stack of three pages --
 -- main screen, mixer, map -- and neither wraps: K3 stops on the map, K2 stops
 -- on the main screen (where it freezes the patch instead, Still).
@@ -436,15 +509,14 @@ function key(n, z)
         local cell = topology.get(state.cell_edit)
         state.cell_edit = nil
         state.set_event((cell and cell.name or "cell") .. ": closed", 1.2)
-      elseif state.view == "map" then
-        state.view = "mixer"
-        state.set_event("mixer", 1.2)
-      elseif state.view == "mixer" then
-        state.view = "global"
-        state.set_event("mixer: closed", 1.2)
       else
-        state.global.still = not state.global.still
-        state.set_event(state.global.still and "Still" or "resumed", 1.5)
+        local landed = step_view(-1)
+        if landed then
+          state.set_event(VIEW_LABEL[landed] or "canopy", 1.2)
+        else
+          state.global.still = not state.global.still
+          state.set_event(state.global.still and "Still" or "resumed", 1.5)
+        end
       end
     end
   elseif n == 3 then
@@ -459,14 +531,8 @@ function key(n, z)
       -- screen steps to the mixer, the mixer steps to the map, and the map
       -- stays put -- there is nothing past it to step on to.
       state.cell_edit = nil
-      if state.view == "global" then
-        state.view = "mixer"
-        state.mparam_focus = state.mparam_focus or 1
-        state.set_event("mixer", 1.2)
-      elseif state.view == "mixer" then
-        state.view = "map"
-        state.set_event("map", 1.2)
-      end
+      local landed = step_view(1)
+      if landed then state.set_event(VIEW_LABEL[landed] or "canopy", 1.2) end
     end
   end
 
@@ -519,16 +585,20 @@ function enc(n, d)
   -- there is genuinely nothing under the cursor.
   if state.view == "map" then return end
 
-  -- §4.1b the mixer page (K3): the same E1-select/E2-E3-nudge shape as the
-  -- global page, over one channel per cabled Output cell. the page can be
-  -- genuinely empty now that the master row is gone, so both branches have
-  -- to survive there rather than assuming a row is always under the cursor.
-  if state.view == "mixer" then
+  -- the gusts page (§2.11b), the mixer (§4.1b) and Colour (§4.4): the same
+  -- E1-select/E2-E3-nudge shape as the global page, over whichever list that
+  -- page owns. one branch for all three, because they differ only in which
+  -- list and which cursor -- see VIEW_PAGES above. the mixer's list can be
+  -- genuinely empty (no cables), so nothing here may assume a row is under
+  -- the cursor.
+  local page = VIEW_PAGES[state.view]
+  if page then
+    local count = page.count()
     if n == 1 then
-      state.mparam_focus = util.clamp((state.mparam_focus or 1) + d,
-                                      1, math.max(1, mixer.PARAM_COUNT))
+      state[page.focus] = util.clamp((state[page.focus] or 1) + d,
+                                     1, math.max(1, count))
     else
-      local p = mixer.nudge(state.mparam_focus or 1, d, n == 2)
+      local p = page.nudge(state[page.focus] or 1, d, n == 2)
       if p then state.set_event(p.label .. " " .. p.text(), 0.5) end
     end
     return
@@ -628,6 +698,10 @@ function init()
   -- from the patch (lib/mixer.lua). its init also starts the Output row's
   -- meter polls, the same way exciter.start_meters does for the E cells.
   mixer.init()
+  -- §4.4 the master colour chain. every knob is at a bypass position on a
+  -- fresh load, but the engine still has to be holding those numbers rather
+  -- than \wl_colour's own defaults -- one set of defaults, in lib/colour.lua.
+  colour.init()
   -- §2.5 the four sample cells. the engine reads each .wav async and holds
   -- every knob in the meantime, so pushing them straight afterwards loses
   -- nothing.

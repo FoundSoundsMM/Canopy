@@ -120,6 +120,14 @@ Engine_Canopy : CroneEngine {
 		nGust = 12,
 		nLfo = 4;
 
+	// §4.4 the eight knobs on \woodland_fx's colour chain. the `colour`
+	// command below will only set an argument named in here -- keep it
+	// identical to lib/colour.lua's own PARAMS keys, which is the other end
+	// of the same list.
+	classvar colourKeys = #[
+		\tape, \crush, \alias, \loss, \chorus, \swirl, \shape, \comp
+	];
+
 	// offsets into the single `patchBus` block (§7.3's separate bus families
 	// collapsed into one allocation so the Lua side only needs to add an
 	// offset, not track many bus objects). spec calls the modulation buses
@@ -598,8 +606,38 @@ Engine_Canopy : CroneEngine {
 		// several O cells sums it at each position it reaches, each at that
 		// cable's own gain (patch.lua's ordinary bipolar gain), the same way
 		// several cables landing on one mod-path bus already sum.
+		// §4.4 the Colour chain, spliced in between the sum and the master
+		// fader. eight processors across the whole instrument, driven from
+		// lib/colour.lua's page -- one K3 past the mixer, which is also
+		// where it sits in the signal: the faders decide the balance and
+		// this decides the surface.
+		//
+		// the chain order is fixed here and is NOT the order the page reads
+		// in. it runs transient -> compressor -> tape -> chorus -> crush ->
+		// alias -> loss: shape the hits, level them, warm them, widen them,
+		// and only then take the resolution away. degradation last is what
+		// makes it sound like a bad copy of this instrument rather than like
+		// this instrument playing a bad copy of itself -- a chorus after a
+		// bit crusher smooths the quantisation noise back out, and the whole
+		// point of Crush is that noise.
+		//
+		// every knob is a no-op at its default (0, or 0.5 for the bipolar
+		// `shape`), and every stage that can be is a genuine bypass at that
+		// value rather than a wet/dry mix at zero -- Compander at slope 1 is
+		// transparent, an XFade2 at -1 passes the dry signal untouched, and
+		// the delay lines are only summed in scaled by their own knob. so a
+		// patch that never opens this page sounds exactly as it did before
+		// the page existed, and costs the same handful of UGens it always
+		// would; there is no bypass switch because there is nothing to
+		// switch off.
+		//
+		// all eight are Lag.kr'd. these are master-bus knobs on a live
+		// instrument -- an encoder step that steps the whole mix is a click
+		// on every one of them.
 		SynthDef(\woodland_fx, {
-			arg outBus=0, out=0, level=0.8, lvlBus=0, gustIn=0;
+			arg outBus=0, out=0, level=0.8, lvlBus=0, gustIn=0,
+				tape=0, crush=0, alias=0, loss=0,
+				chorus=0, swirl=0.3, shape=0.5, comp=0;
 			var chans = In.ar(outBus, nOut);
 			var lvls = Lag.kr(In.kr(lvlBus, nOut).clip(0, 1).squared, 0.08);
 			var panPos = Array.fill(nOut, { |i| -1 + (2 * i / (nOut - 1)) });
@@ -612,8 +650,115 @@ Engine_Canopy : CroneEngine {
 			// factor as everything else so a gust at Level 1 sits alongside
 			// a voice at Level 1 rather than over it.
 			var gustDry = In.ar(gustIn, 2) * 0.35;
-			var sig = (dry + gustDry) * level;
-			Out.ar(out, sig);
+			var sig = dry + gustDry;
+			var kTape = Lag.kr(tape.clip(0, 1), 0.08);
+			var kCrush = Lag.kr(crush.clip(0, 1), 0.08);
+			var kAlias = Lag.kr(alias.clip(0, 1), 0.08);
+			var kLoss = Lag.kr(loss.clip(0, 1), 0.08);
+			var kChorus = Lag.kr(chorus.clip(0, 1), 0.08);
+			var kSwirl = Lag.kr(swirl.clip(0, 1), 0.08);
+			var kShape = Lag.kr(shape.clip(0, 1), 0.08);
+			var kComp = Lag.kr(comp.clip(0, 1), 0.08);
+			var fast, slow, tilt, shaped;
+			var cThresh, cSlope;
+			var driven, saturated, wow;
+			var chRate, chDepth, chA, chB;
+			var q, crushed;
+			var srFreq, aliased;
+			var band, b1, b2, holes, smear;
+
+			// -- Shape: the transient designer, bipolar around 0.5 --------
+			// two amplitude followers on the same signal, one fast enough to
+			// see an attack and one slow enough to see only the body. their
+			// ratio is above 1 during a transient and below it after, so
+			// raising that ratio to a positive power boosts attacks and pulls
+			// tails back, and to a negative one does the reverse. one number,
+			// both directions, no threshold to set -- which is what makes it
+			// a knob rather than a page.
+			fast = Amplitude.ar(sig, 0.001, 0.010);
+			slow = Amplitude.ar(sig, 0.001, 0.140);
+			tilt = ((kShape - 0.5) * 2) * 1.6;
+			// no bypass branch and none needed: at the centre `tilt` is 0, x
+			// to the power 0 is exactly 1, and the clip of 1 is 1 -- so the
+			// neutral position multiplies the signal by unity rather than by
+			// something near it.
+			shaped = sig * ((fast + 1e-4) / (slow + 1e-4)).pow(tilt).clip(0.2, 5);
+			sig = shaped;
+
+			// -- Comp: one knob doing threshold, ratio and makeup ----------
+			// percussion-focused, which here means three specific choices:
+			// a 4 ms attack (slow enough that the click of a drum gets out
+			// before the gain comes down, which is what keeps a compressed
+			// kit sounding hit rather than sounding pushed), a 110 ms
+			// release (long enough not to pump on sixteenths, short enough
+			// to breathe between phrases), and a threshold that comes down
+			// as the ratio goes up so one knob is always doing both. at 0
+			// the slope is 1, which is Compander doing nothing at all.
+			cThresh = 0.5 - (kComp * 0.42);
+			cSlope = 1 / (1 + (kComp * 5));
+			sig = Compander.ar(sig, sig, cThresh, 1, cSlope, 0.004, 0.11)
+				* (1 + (kComp * 1.7));
+
+			// -- Tape ------------------------------------------------------
+			// three things at once, because one of them alone is not tape.
+			// a tanh curve, which is the saturation; the top end coming off
+			// as it is driven, which is what a machine's head and bias do;
+			// and a slow wow on the wet path, +-0.6 ms at about 0.7 Hz,
+			// which is the thing that makes it sound like a transport rather
+			// than a distortion box. the output is scaled back by the drive
+			// so turning it up is a change of character and not just a
+			// change of level.
+			driven = sig * (1 + (kTape * 6));
+			wow = DelayC.ar(driven, 0.05,
+				(0.008 + (SinOsc.kr(0.7, [0, 1.1]) * 0.0006 * kTape)).clip(0.001, 0.04));
+			saturated = LPF.ar(wow.tanh, 18000 - (kTape * 9500))
+				/ (1 + (kTape * 2.4));
+			sig = XFade2.ar(sig, saturated, ((kTape * 2) - 1).clip(-1, 1));
+
+			// -- Chorus: depth and rate, summed in rather than crossfaded --
+			// two delay taps at different times, modulated at different
+			// rates and opposite phases per channel, so it widens as well as
+			// thickens. summed rather than mixed because a master-bus chorus
+			// that removes the dry signal as it comes up is one nobody can
+			// use; at Chorus 0 nothing is added and the taps cost their two
+			// delay lines and no more.
+			chRate = 0.05 + (kSwirl * 3.45);
+			chDepth = 0.0008 + (kChorus * 0.006);
+			chA = DelayC.ar(sig, 0.06,
+				(0.012 + (SinOsc.kr(chRate, [0, 1.6]) * chDepth)).clip(0.001, 0.05));
+			chB = DelayC.ar(sig, 0.06,
+				(0.019 + (SinOsc.kr(chRate * 1.31, [0.8, 2.4]) * chDepth)).clip(0.001, 0.05));
+			sig = sig + ((chA + chB) * kChorus * 0.42);
+
+			// -- Crush: word length, sixteen bits down to about three ------
+			q = 2 ** ((16 - (kCrush * 13)) - 1);
+			crushed = (sig * q).round(1.0) / q;
+			sig = XFade2.ar(sig, crushed, ((kCrush * 2) - 1).clip(-1, 1));
+
+			// -- Alias: sample rate, held down from 20k to about 400 Hz ----
+			// a log sweep, because the audible half of a sample-rate knob is
+			// all at the bottom -- linear, nine tenths of the travel would be
+			// spent between "inaudible" and "slightly grainy".
+			srFreq = 20000 * (0.02 ** kAlias);
+			aliased = Latch.ar(sig, Impulse.ar(srFreq));
+			sig = XFade2.ar(sig, aliased, ((kAlias * 2) - 1).clip(-1, 1));
+
+			// -- Loss: a codec, not a filter ------------------------------
+			// three artefacts, which between them are what a low-bitrate mp3
+			// audibly does. the band closes from the top (the encoder drops
+			// what it cannot afford); two mid bands are amplitude-modulated
+			// by slow noise, so surviving partials warble in and out rather
+			// than sitting still (the "swirlies"); and a short smeared copy
+			// runs ahead of the signal, which is the pre-echo a transient
+			// gets when its block is quantised too coarsely.
+			band = LPF.ar(sig, 18000 * (0.12 ** kLoss));
+			b1 = BPF.ar(band, 3200, 0.3) * LFNoise1.kr(11).range(0.2, 1);
+			b2 = BPF.ar(band, 6400, 0.3) * LFNoise1.kr(7).range(0.2, 1);
+			holes = band - ((b1 + b2) * kLoss * 0.85);
+			smear = DelayC.ar(holes, 0.05, 0.013) * kLoss * 0.4;
+			sig = XFade2.ar(sig, holes + smear, ((kLoss * 2) - 1).clip(-1, 1));
+
+			Out.ar(out, sig * level);
 		}).add;
 
 		// shared gate envelope for every exciter (§2.4: "an S cell is
@@ -1184,7 +1329,7 @@ Engine_Canopy : CroneEngine {
 		});
 
 		// gust_space(mix, time, feedback) -- the one delay line all twelve are
-		// heard through, driven from the global page.
+		// heard through, driven from the gusts page.
 		this.addCommand("gust_space", "fff", { |msg|
 			gustSpaceSynth.set(\mix, msg[1], \time, msg[2], \fb, msg[3]);
 		});
@@ -1296,6 +1441,20 @@ Engine_Canopy : CroneEngine {
 		// master level (§4.1) and needs somewhere to land.
 		this.addCommand("master_level", "f", { |msg|
 			fxSynth.set(\level, msg[1]);
+		});
+
+		// colour(key, v) -- §4.4 one knob on the master colour chain
+		// (lib/colour.lua). one command for the whole page rather than eight
+		// named ones: these are eight positions on ONE chain inside ONE
+		// synth, so the key IS the argument name and eight near-identical
+		// commands would only be restating that. the key is checked against
+		// the list below first, so a typo on the Lua side is a dropped
+		// message rather than a stray argument silently set on the synth.
+		this.addCommand("colour", "sf", { |msg|
+			var key = msg[1].asSymbol;
+			if (colourKeys.includes(key)) {
+				fxSynth.set(key, msg[2].clip(0, 1));
+			};
 		});
 
 		// out_level(index, v) -- §4.1b one Output-row channel's fader

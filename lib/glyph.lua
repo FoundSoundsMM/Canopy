@@ -444,7 +444,7 @@ end
 -- dropped.
 --
 -- animated, unlike everything else in this file, and deliberately so: the
--- other twenty-two shapes are functions of their parameter alone, because a
+-- other twenty-seven shapes are functions of their parameter alone, because a
 -- widget that moves when the value has not is a widget that cannot be read.
 -- rainfall is the exception where standing still is the misreading -- frozen
 -- streaks are hatching, not rain -- and the motion is unconditional, so it
@@ -644,6 +644,108 @@ function DRAW.swing(x, y, w, h, v, on)
   end
   screen.level(md(on)); fill_all(even)
   screen.level(hi(on)); fill_all(odd)
+end
+
+-- §4.4 the Colour page's four own shapes. the other four rows there borrow
+-- shapes that already exist and already say the right thing (`knee` for tape
+-- saturation, `span` for a chorus's detune spread, `fader` for its rate,
+-- `spike` for a transient shaper); these four had no neighbour close enough
+-- to borrow from, and two of them -- Crush and Alias -- are near enough to
+-- each other that drawing them alike would have been the exact failure this
+-- file exists to avoid. so one quantises vertically and one quantises
+-- horizontally, which is the actual difference between them.
+
+-- crush: word length, drawn as a staircase across the transfer line. the
+-- steps get taller and fewer as the knob rises, which is what losing bits
+-- is; the dim diagonal behind is the signal they are approximating.
+function DRAW.crush(x, y, w, h, v, on)
+  local base = y + h - 1
+  screen.level(lo(on)); seg(x, base, x + w - 1, y)
+  local n = math.max(2, math.floor(8 - v * 6 + 0.5))
+  local sw = (w - 1) / n
+  local rs = {}
+  for j = 0, n - 1 do
+    local top = base - math.floor((j / (n - 1)) * (h - 2) + 0.5)
+    rs[#rs + 1] = {x + math.floor(j * sw + 0.5), top,
+                   math.max(1, math.floor(sw)), base - top + 1}
+  end
+  screen.level(hi(on)); fill_all(rs)
+end
+
+-- alias: sample rate, drawn as a sample-and-hold over the wave it is
+-- sampling. the held segments get wider and fewer as the knob rises and the
+-- dim curve underneath stays where it was, so what the shape says is "this
+-- many samples of that".
+function DRAW.alias(x, y, w, h, v, on)
+  local my = y + (h - 1) / 2
+  local amp = h / 2 - 2
+  screen.level(lo(on))
+  screen.move(x, my)
+  curve(x + w * 0.14, my - amp * 1.3, x + w * 0.36, my - amp * 1.3,
+        x + w * 0.5, my)
+  curve(x + w * 0.64, my + amp * 1.3, x + w * 0.86, my + amp * 1.3,
+        x + w - 1, my)
+  screen.stroke()
+  local n = math.max(3, math.floor(13 - v * 10 + 0.5))
+  local sw = (w - 1) / n
+  local rs = {}
+  for j = 0, n - 1 do
+    local t = (j + 0.5) / n
+    local sy = my - math.sin(t * 2 * math.pi) * amp
+    rs[#rs + 1] = {x + math.floor(j * sw + 0.5), math.floor(sy + 0.5),
+                   math.max(1, math.floor(sw)), 1}
+  end
+  screen.level(hi(on)); fill_all(rs)
+end
+
+-- loss: a codec eating a spectrum. a row of partials falling away to the
+-- right; as the knob rises the top of the band goes first and then holes
+-- open in what is left, which is the two things a low-bitrate encoder
+-- audibly does. the stumps of the dropped ones stay drawn, dim, so the shape
+-- is "what was taken" rather than "a shorter row of bars".
+function DRAW.loss(x, y, w, h, v, on)
+  local base = y + h - 1
+  local n, bw, gap = 8, 2, 1
+  local x0 = x + math.floor((w - (n * (bw + gap) - gap)) / 2 + 0.5)
+  screen.level(lo(on)); seg(x, base, x + w - 1, base)
+  local keep, gone = {}, {}
+  for j = 0, n - 1 do
+    local t = j / (n - 1)
+    local full = math.max(2, math.floor((h - 3) * (1 - t * 0.55) + 0.5))
+    local bx = x0 + j * (bw + gap)
+    if t > (1 - v * 0.62) or hash(j, 5) < v * 0.32 then
+      gone[#gone + 1] = {bx, base - 2, bw, 2}
+    else
+      keep[#keep + 1] = {bx, base - full, bw, full}
+    end
+  end
+  screen.level(md(on)); fill_all(gone)
+  screen.level(hi(on)); fill_all(keep)
+end
+
+-- squash: dynamics, being flattened. a run of peaks at their own heights
+-- behind, and the same run pulled toward one height in front -- loud ones
+-- down, quiet ones up. at zero the two coincide and it reads as a plain
+-- waveform, which is what no compression is.
+local SQUASH_PEAKS = {1.0, 0.32, 0.78, 0.22, 0.95, 0.4, 0.68}
+
+function DRAW.squash(x, y, w, h, v, on)
+  local my = y + math.floor(h / 2 + 0.5)
+  local n = #SQUASH_PEAKS
+  local step = (w - 2) / (n - 1)
+  local top = h / 2 - 1
+  local dim, lit = {}, {}
+  for j = 1, n do
+    local px = x + math.floor((j - 1) * step + 0.5)
+    local a = SQUASH_PEAKS[j]
+    local c = a + (0.8 - a) * v
+    local ah = math.max(1, math.floor(a * top + 0.5))
+    local ch = math.max(1, math.floor(c * top + 0.5))
+    dim[#dim + 1] = {px, my - ah, 2, ah * 2}
+    lit[#lit + 1] = {px, my - ch, 2, ch * 2}
+  end
+  screen.level(lo(on)); fill_all(dim)
+  screen.level(hi(on)); fill_all(lit)
 end
 
 glyph.DRAW = DRAW

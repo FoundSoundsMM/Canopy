@@ -496,7 +496,7 @@ struck cell.
 |--------|--------------|
 | Pitch  | ±2 octaves from the cell's own seat, then quantised to the Scale |
 | Attack | 0.01 – 12 s, log-mapped around the cell's own default |
-| Decay  | 0.05 – 30 s; rides `state.decay`, so the global Decay macro reaches it |
+| Decay  | 0.05 – 30 s; rides `state.decay`, so the global Decay macro reaches it — and there is deliberately no family Decay on §2.11b for that reason |
 | Timbre | how hard the triangle is folded: flute at 0, horn at 1 |
 | Cross  | how deeply whatever is cabled in modulates this gust |
 | Level  | this cell's own level in the mix |
@@ -504,7 +504,7 @@ struck cell.
 Two things a gust does that nothing else on the panel does. **It is heard
 uncabled** — the engine pans it by the column it sits in and mixes it in,
 through one delay line shared by all twelve (Space / Delay / Regen on the
-global page). It is now the only family that does: the sample cells (§2.5)
+gusts page, §2.11b). It is now the only family that does: the sample cells (§2.5)
 did too and are routed like everything else. An Output cable is still allowed
 and still means what it means; it just places a second copy. And **its pitch
 is not its own**: the cell's seat plus its Pitch knob is pulled onto the global Scale
@@ -520,6 +520,59 @@ mod input is scaled back up to near unity before its soft-limit, because a
 gust's output tap is scaled for a mix (`env * amp * 0.3`) and feeding that
 straight in bent the receiving gust by about a fifth of a semitone — which is
 a waver, not modulation.
+
+#### 2.11b The gusts page — K3, once
+
+Twelve cells is enough of a family to want to move as one, and the twelve
+cell pages are the wrong place to do it: setting the same knob twelve times
+is not a gesture, and the delay line all twelve share is not a cell's
+property at all. So the family gets a page, sitting between the main screen
+and the mixer (`gust.MACROS` in `lib/gust.lua`).
+
+| Row | What it does |
+|--------|--------------|
+| Pitch  | transposes all twelve, ±12 st, before the Scale quantises them |
+| Timbre | offsets every cell's fold |
+| Attack | offsets every cell's swell time |
+| Cross  | offsets every cell's cross-modulation depth |
+| Level  | offsets every cell's level |
+| Space  | the shared delay line's mix |
+| Delay  | its time, 20 ms – 2 s |
+| Regen  | its feedback, up to 0.92 |
+
+**The five family knobs are offsets, not values.** Twelve cells you have
+spent a while setting individually are the whole point of having twelve, and
+a unified knob that wrote absolute values would erase that the first time you
+touched it — worse, invisibly, since the twelve cell pages would go on
+showing numbers nothing was reading. Each of these sits at a centre meaning
+"leave them alone"; moving it slides all twelve together and keeps whatever
+spread is between them, and turning it back to the middle puts them exactly
+where they were. The sum is clamped **per cell**, so a macro runs out of
+travel gracefully at the ends rather than wrapping or shoving cells past each
+other. Pitch is in semitones because that is the unit every other pitch on
+the panel is in; the other four ride the 0..1 knobs they offset.
+
+**What a cell page reads is what that cell sounds.** The per-cell rows
+(§2.11) report the *effective* value — knob plus macro — while `E2`/`E3` go on
+moving the cell's own stored knob. That is the arrangement Pitch always had
+there, where the reading has always been the note that will sound rather than
+the offset that was dialled in, and it is what keeps a macro from being
+invisible.
+
+**There is no family Decay**, and that is a decision rather than an omission:
+the global page's Decay macro already scales every gust's fall along with
+every voice's and every drum's, and it is one `K2` away. Two knobs over one
+number is two knobs neither of which can be read. Attack has no such macro
+anywhere, so Attack stays. Dropping it also lands the page on exactly eight
+rows, which is one screen of the widget grid — the whole family in one look,
+no page dots, no seam.
+
+**The delay's three rows have moved twice.** They were on the mixer while it
+had a fixed eight-row list to fill; they went to the global page when the
+mixer became one fader per active output (a room is not a channel); and they
+are here now, on the page that is actually about the family that is heard
+through them. What they do, how far they go and where their numbers live
+(`state.global.gust_space`) is unchanged by any of it.
 
 ### 2.12 The LFOs — L (4, internally type `LFO`)
 
@@ -586,19 +639,27 @@ the original design carried (§1) is gone with the socket cluster.
 
 | Control | Function |
 |---------|----------|
-| E1 | pick one of seven global params (§5.2) |
+| E1 | pick one of eight global params (§5.2) |
 | E2 / E3 | nudge the picked param, coarse / fine |
 | K1 + E3 | Master level |
-| K3 | **the mixer** (§4.1b) — from anywhere, including an open cell page, whose focus it drops on the way; a second K3 goes on to **the map** (§4.1d), and a third back to the mixer |
-| K2 | **back** — off the mixer or the map, or out of an open cell page, to the main screen; on the main screen, **Still** |
+| K3 | **forward one page** down the stack: main screen → gusts (§2.11b) → mixer (§4.1b) → colour (§4.4) → map (§4.1d). Works from an open cell page too, whose focus it drops on the way. It does not wrap: K3 on the map stays on the map |
+| K2 | **back one page** up the same stack, or out of an open cell page; on the main screen, with nothing above it, **Still** |
 | K1 + K2 | **Regrow** — a seeded patch that already plays (hold to confirm) |
 | K1 + K3 | **Clearing** — cut every cable (hold to confirm) |
 
-**The ten global params** (`lib/gparam.lua`), in E1 order: BPM, Swing, Rain,
-Scale, Plonks, Decay, Pitch — then the gusts' shared delay line, Space,
-Delay and Regen, on a second page. It was nine, then seven when Rain and
-Excite left for the mixer, and ten again when the delay line came back from
-it (§4.1b).
+**The eight global params** (`lib/gparam.lua`), in E1 order: BPM, Swing,
+Rain, Scale, Plonks, Decay, Pitch, Drums. It was nine, then seven when Rain
+and Excite left for the mixer, then ten when the gusts' delay line came back
+from it — and eight now that the delay has gone on to the gusts' own page
+(§2.11b) and the seat it left is Drums (§4.1e). Eight is exactly one screen
+of the widget grid (§5.2b), so this page has no page dots and no seam.
+
+**Swing defaults to 0**, not to 0.8. This is an instrument whose gaits are
+mostly euclidean, stochastic and drifting, and a hard shuffle is not the
+neutral reading of any of them: a default of 0.8 meant every fresh patch
+arrived already interpreted, and you had to find this row and turn it down
+before you could hear what the gaits themselves were doing. Swing is a thing
+you add.
 
 Two of these are renamed and nothing else about them changed. **Rain** was
 Scatter: it is the knob that makes everything land a little off the grid and
@@ -620,15 +681,28 @@ have to find your way out of on first boot. The names are abbreviations
 whose box is five characters wide — "Pent Maj" clipped to "Pent " there,
 which named the family and hid the only part that differed between the four.
 
-**K2 and K3 are one shallow stack**, not a different pair of jobs per page.
-K3 steps down from the main screen into the mixer, then the map (§4.1d),
-trading the two back and forth from there rather than adding a third level;
-K2 always comes back up to the main screen in one press, off either one.
-Still keeps K2 because the main screen is the one place with nothing to
-come back from, and freezing the patch is a fair reading of "there is
-nothing above this". K3's old job — closing a cell page — is K2's now, along
-with everything else that means "up one", checked first so an open cell page
-closes before the mixer/map step does.
+**K2 and K3 are one linear stack**, not a different pair of jobs per page:
+
+    main screen  →  gusts  →  mixer  →  colour  →  map
+
+K3 walks it forward one page per press and K2 walks it back one page per
+press. Neither end wraps: K3 on the map stays on the map, and K2 on the main
+screen is Still, because the main screen is the one place with nothing to
+come back from and freezing the patch is a fair reading of "there is nothing
+above this". K3's old job — closing a cell page — is K2's too, along with
+everything else that means "one step"; an open cell page is checked first, so
+it closes before the page step happens.
+
+**The order is the signal's own**, which is why it is worth remembering
+rather than looking up. The gusts are the one family that routes itself, so
+they come before anything about routing. The mixer balances what the cables
+deliver. Colour is what the balanced mix is put through on its way out. The
+map is the reference you check rather than a surface you play, so it is at
+the far end. Walking right is walking downstream.
+
+**Each page keeps its own E1 cursor** (`state.gparam_focus`,
+`guparam_focus`, `mparam_focus`, `cparam_focus`), so stepping away from a
+page and back lands on the row you left rather than on its first.
 
 **Regrow** always wires exactly one Output cable per voice it uses — and, if
 it seeds a sample cell, one for that too — or a freshly regrown patch would
@@ -735,9 +809,45 @@ those drains while Still, so a stop leaves entries sitting there with
 timestamps already in the past, and without clearing them the first tick
 after a Start would fire the lot in one block.
 
-### 4.1d The map page — K3, again
+### 4.1e Drums — the global macros and the percussion cells
 
-`K3` a second time (from the mixer) goes on to the map: every registered
+The eighth row on the global page, and the one that is not a knob.
+
+Three of the macros above — **Plonks**, **Decay** and **Pitch** — were
+written for the four corner voices. Decay quietly grew to reach the drums,
+the gusts and the sample cells, because a decay multiplier means the same
+thing to all of them. Plonks and Pitch never did, for a good reason: a kit
+that transposes with the tune and detunes on every hit is a particular
+musical choice rather than the obvious one, and making it the default would
+have taken the drums away from anyone using them as drums.
+
+So it is a switch, on the seat the gusts' delay line left (§2.11b):
+
+| Drums | The six `GVOICE` cells |
+|-------|------------------------|
+| off (default) | ignore Plonks, Pitch **and** Decay entirely. No per-strike traffic is sent at all |
+| on | struck notes land a little off (Plonks), the whole kit transposes (Pitch), and the Decay multiplier rides on their envelopes |
+
+**One switch over all three, not three switches.** "Make the kit part of the
+instrument" is one idea, and picking it apart into three rows would have made
+the common case three gestures instead of one.
+
+**Decay is included, which is a behaviour change**, not just an addition: the
+global Decay macro used to reach the drums unconditionally. At the default it
+makes no audible difference — `decay_mult` sits at 0.5, which is ×1 — but at
+any other setting, Drums off now genuinely detaches them. That is the honest
+reading of a switch labelled "Drums: off"; leaving one of the three
+permanently attached would be a row that does not do what it says.
+
+**Plonks on a drum has no floor.** `grove.on_strike` gives a voice 0.02 st of
+detune whatever Plonks is set to — that floor is the "breathing" an unpatched
+voice has always had. A drum head that was dead still before this row existed
+has to stay dead still with the row off, so `gvoice.strike_detune` falls all
+the way to zero, and sends no `g_pitch` at all when there is nothing to say.
+
+### 4.1d The map page — the end of the stack
+
+`K3` from the Colour page goes on to the map, the last stop: every registered
 cell in topology's own 16 x 8 layout (§2), drawn small under the header —
 lit if something is cabled to it, dim if it isn't, gone entirely if the
 coordinate was never a cell (the "." squares in §2's own sketch). No wires:
@@ -750,9 +860,11 @@ not a filtered version of the map. Letting go, or closing the page, comes
 back to the map. Two cells held is unchanged either way — that's still the
 edge view (§3's "hold A, hold B") and its gain.
 
-A third `K3` goes back to the mixer: once off the main screen, `K3` alone
-walks back and forth between the two rather than stacking a third level, and
-`K2` still comes all the way back up to the main screen from either one.
+`K3` here does nothing: the walk stops. There is nothing downstream of the
+map to step on to, and wrapping back round to the main screen would make the
+one key that means "forward" also mean "start again", which is the kind of
+thing you have to learn rather than read. `K2` walks back the way it came,
+one page per press.
 
 ### 4.2 Holding a grid cell
 
@@ -796,6 +908,69 @@ default is; the knob is symmetrical around it.
 | GUST | the fall half of its envelope | 0.05 .. 30 s |
 | SMP | the fall half of its envelope | 0.1 .. 40 s |
 | T / R / F / C / TM / LFO / O | nothing — no sound of their own | — |
+
+### 4.4 The Colour page — one K3 past the mixer
+
+Eight processors across the master output (`lib/colour.lua`, the chain inside
+`\woodland_fx`). Everything else on this panel is a thing you patch: a source,
+a transform, a seat in the stereo field. These eight are none of those — they
+are what the whole instrument sounds like coming out of it, and a cable that
+had to be drawn to reach them would be a cable every patch drew identically.
+So they live on a page, after the mixer, which is also where they are in the
+signal: the faders decide the balance, this decides the surface.
+
+| Row | What it does |
+|--------|--------------|
+| Tape   | saturation: a tanh curve, the top end coming off as it is driven, and a slow wow (±0.6 ms at ~0.7 Hz) on the wet path |
+| Crush  | word length, sixteen bits down to about three |
+| Alias  | sample rate, held down from 20 kHz to about 400 Hz, log-swept |
+| Loss   | a low-bitrate codec: the band closing from the top, surviving partials warbling under slow noise, and a short smear ahead of every transient |
+| Chorus | two modulated delay taps, summed in rather than crossfaded — depth |
+| Swirl  | the same pair's rate, 0.05 – 3.5 Hz |
+| Shape  | a bipolar transient designer: softer attacks below the middle, snappier above |
+| Comp   | one knob doing threshold, ratio and makeup together |
+
+**The chain order is fixed and is not the page order.** It runs
+
+    transient → compressor → tape → chorus → crush → alias → loss
+
+— shape the hits, level them, warm them, widen them, and only then take the
+resolution away. The page reads in the order you reach for the knobs: the
+four degradations first, because they are what this page is *for*, then the
+two chorus rows, then the two dynamics rows. Degradation last in the chain is
+what makes it sound like a bad copy of this instrument rather than like this
+instrument playing a bad copy of itself — a chorus after a bit crusher smooths
+the quantisation noise back out, and that noise is the whole point of Crush.
+
+**Every row is a genuine bypass at its default**, not a wet/dry mix at zero:
+Compander at slope 1 is transparent, an `XFade2` at −1 passes the dry signal
+untouched, the chorus taps are summed in scaled by their own knob, and the
+transient shaper's exponent is 0 at the centre so its gain is exactly unity.
+A patch that never opens this page therefore sounds exactly as it did before
+the page existed, and costs the same handful of UGens it always would. There
+is no bypass switch because there is nothing to switch off.
+
+Defaults are all 0 except **Shape** (0.5, bipolar and neutral in the middle)
+and **Swirl** (0.3 — a rate, inaudible until Chorus is up, and starting it at
+zero would make the first thing anyone hears on turning Chorus up a static
+comb filter rather than a chorus).
+
+**Comp is percussion-focused**, which means three specific choices: a 4 ms
+attack, slow enough that the click of a drum gets out before the gain comes
+down — which is what keeps a compressed kit sounding *hit* rather than
+sounding pushed; a 110 ms release, long enough not to pump on sixteenths and
+short enough to breathe between phrases; and a threshold that comes down as
+the ratio goes up, so one knob is always doing both.
+
+All eight are lagged engine-side (80 ms). These are master-bus knobs on a
+live instrument: an encoder step that steps the whole mix is a click on every
+one of them.
+
+The Lua side sends one command, `colour(key, value)`, rather than eight named
+ones — these are eight positions on one chain inside one synth, so the key
+*is* the argument name. The engine checks it against `colourKeys` first, so a
+typo on the Lua side is a dropped message rather than a stray argument
+silently set on the synth.
 
 ---
 
@@ -850,14 +1025,15 @@ urgent question.
 
 ### 5.2 Screen — Global param page (nothing held)
 
-`lib/gparam.lua`'s seven global macros, drawn as §5.2c's widget grid. `E1`
-walks the list, `E2` moves the picked param coarsely and `E3` finely. Seven
-fits on one page.
+`lib/gparam.lua`'s eight global rows, drawn as §5.2c's widget grid. `E1`
+walks the list, `E2` moves the picked param coarsely and `E3` finely. Eight
+is exactly one page.
 
 ### 5.2b Screen — the widget grid
 
-Every full-screen page in the script — global (§5.2), mixer (§4.1b), and
-every cell page (§5.3, §5.5) — is drawn by one routine in `lib/screenui.lua`,
+Every full-screen page in the script — global (§5.2), gusts (§2.11b), mixer
+(§4.1b), colour (§4.4), and every cell page (§5.3, §5.5) — is drawn by one
+routine in `lib/screenui.lua`,
 and it is not a list any more. The map page (§4.1d) shares the same header
 but not the widget grid below it — there is no list to walk, just the
 16 x 8 layout redrawn small.
@@ -885,13 +1061,13 @@ time — slower than the text rows it replaced, and with seven of the eight
 values now hidden in the header.
 
 So: **the drawing carries the meaning, and no two parameters may look
-alike.** `lib/glyph.lua` holds the vocabulary — twenty-four shapes, one named
+alike.** `lib/glyph.lua` holds the vocabulary — twenty-eight shapes, one named
 by each row's own `glyph` field. A Decay draws a falling tail and the tail
 gets longer; a Prob draws a field of dots and the field gets denser; a Length
 draws a row of steps and more of them light; a Tap draws the eight bits of
 the register and points at the one it reads.
 
-Two of the twenty-four are worth naming for what they break:
+Two of the twenty-eight are worth naming for what they break:
 
 - **`rain`** (the global page's Rain row) is the only shape that **moves on
   its own**. Every other shape is a function of its parameter alone, because
@@ -908,6 +1084,24 @@ Two of the twenty-four are worth naming for what they break:
   meter down its right-hand side — the one place a knob on this panel has a
   signal behind it. The fader is outlined and reads as a control; the meter
   is solid and reads as a measurement. See §4.1b.
+
+The Colour page (§4.4) is where this rule cost the most, and four of the
+twenty-eight exist only because of it. Half that page is degradation, and
+**Crush** and **Alias** in particular are close enough neighbours that
+drawing them alike would have been exactly the failure this vocabulary is
+here to prevent — so one quantises *vertically* (`crush`: a staircase across
+the transfer line, its steps taller and fewer as bits are lost) and one
+quantises *horizontally* (`alias`: sample-and-hold segments over the curve
+they are sampling, wider and fewer as the rate comes down), which is the
+actual difference between them. **`loss`** is a row of partials with the top
+of the band cut and holes punched in what is left, the stumps of the dropped
+ones still drawn, dim — "what was taken", not "a shorter row of bars".
+**`squash`** is a run of peaks at their own heights behind and the same run
+pulled toward one height in front; at zero the two coincide, which is what no
+compression is. The page's other four rows borrow shapes that already said
+the right thing: `knee` for tape saturation (the parameter is the shape of
+the bend, not an amount), `span` for the chorus's detune spread, `fader` for
+its rate, and `spike` for the transient shaper.
 
 Three things went, and each paid for the same thing:
 
@@ -1187,8 +1381,9 @@ Canopy/
     grove.lua                -- pitch fields: modes, coupling, voice retuning
     voice.lua                -- the eleven-parameter voice sound page (§5.5)
     gvoice.lua               -- the six GVOICE-cell drums + their sound page
-    gparam.lua                -- the ten-parameter global page (§4.1, §5.2)
+    gparam.lua                -- the eight-parameter global page (§4.1, §5.2)
     mixer.lua                 -- master + one fader per live output (§4.1b)
+    colour.lua                -- the master colour chain's page (§4.4)
     gridui.lua                -- grid render + hold/tap state machine
     screenui.lua              -- the widget grid (§5.2c): global / mixer /
                                  cell / edge views, plus the map (§4.1d)
@@ -1388,6 +1583,7 @@ smp_attack(i, s)                smp_decay(i, s)
 smp_speed(i, v)                 smp_level(i, v)
 smp_pan(i, v)
 master_level(v)                 out_level(i, v)
+colour(key, v)
 ```
 
 `voice_choke` and `voice_tap` are gone — the socket collapse (§2.2) removed
@@ -1397,11 +1593,17 @@ both discrete choke and the separate per-voice output-level knob.
 recordings belong to the sample cells now (`smp_load`, `smp_note`,
 `smp_attack`, `smp_decay`, `smp_speed`, `smp_level`, `smp_pan`), and
 `rain_excite` has no successor at all. `heart_conductance` is gone with the
-heartwood; `out_level` is new (§4.1b).
+heartwood; `out_level` is new (§4.1b), and `colour` is new (§4.4) — one
+command for the master chain's eight knobs rather than eight named ones,
+since they are eight arguments on one synth and the key *is* the argument
+name.
 
 **CPU budget.** 4 voices x 6 modes = 24 resonators, plus 6 always-on GVOICE
 cells and up to 6 exciters (lazily allocated), ~50 patch synths worst case,
-12 gusts and their shared delay line, 4 sines, and 4 sample players. Smaller
+12 gusts and their shared delay line, 4 sines, 4 sample players, and the
+master colour chain (§4.4) — two amplitude followers, a Compander, four
+short delay lines, two LPFs, two BPFs and a Latch, all stereo, all always
+running whether or not any of the eight knobs is up. Smaller
 across the board than
 before the overhaul — the trims (§2) bought back headroom the same way the
 original design's four-voices-not-six trade did.
@@ -1527,6 +1729,34 @@ instrument as it stood before the grid overhaul; what follows is additive.
       level read by `\woodland_fx`, distinct from a cable's own gain. The
       gusts' Space/Delay/Regen rows moved to the global page, which is two
       pages now.
+
+13. **The pages pass.** Three changes that are really one change: giving each
+    family the page it needs, and letting `K3`/`K2` walk a single stack
+    through them (§4.1). In order:
+    - **The gusts page** (§2.11b). Five family knobs — Pitch, Timbre, Attack,
+      Cross, Level — that move all twelve cells *together*, plus the
+      Space/Delay/Regen of the delay line they share, which came off the
+      global page's awkward second half. The five are offsets, not values, so
+      they preserve whatever spread the player has put between the twelve;
+      the per-cell rows report the effective value while `E2` goes on moving
+      the cell's own knob. No family Decay, because the global page's Decay
+      already reaches every gust — which is what lands the page on exactly
+      eight rows, one screen, no seam.
+    - **Drums** (§4.1e). The seat the delay rows left free on the global page,
+      which is back to eight rows and one screen. A switch saying whether the
+      global Plonks, Decay and Pitch reach the six `GVOICE` cells as well as
+      the four voices. Off by default, and off now genuinely detaches Decay
+      too, which is a behaviour change from when it reached them
+      unconditionally.
+    - **The Colour page** (§4.4, §8). Eight processors across the master
+      output, spliced into `\woodland_fx` between the summed mix and the
+      master fader: Tape, Crush, Alias, Loss, Chorus, Swirl, Shape and Comp.
+      Every one a genuine bypass at its default, so a patch that never opens
+      the page sounds as it did before it existed. One `colour(key, v)`
+      command rather than eight named ones. Four new shapes in
+      `lib/glyph.lua` (§5.2c) to keep the "no two alike" rule on a page that
+      is half degradation.
+    - **Swing defaults to 0** (§4.1). A fresh patch arrives straight.
 
 ---
 

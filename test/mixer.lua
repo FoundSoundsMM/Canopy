@@ -225,7 +225,7 @@ do
   end)())
 
   -- and the gusts' delay line is not here any more: it is a room, not a
-  -- channel, and it went to the global page (gparam.lua).
+  -- channel, and it went to the gusts' own page (gust.lua's MACROS).
   local room_row = false
   for _, p in ipairs(mixer.PARAMS) do
     if p.key:match("^gust") then room_row = true end
@@ -235,22 +235,37 @@ do
 end
 
 -- 3: K3 there, K2 back -------------------------------------------------------
+-- the stack is five deep now -- global, gusts, mixer, colour, map -- so the
+-- mixer is two K3s in rather than one, and what this section is really
+-- checking is that the walk is a walk: strictly one page per press, in one
+-- fixed order, stopping dead at both ends.
 
-print("\n-- K3 to the mixer, K2 back --")
+local VIEWS = {"global", "gusts", "mixer", "colour", "map"}
+
+print("\n-- K3 forward, K2 back, one page at a time --")
 do
   state.view = "global"
   state.cell_edit = nil
   state.held = {}
 
+  for i = 2, #VIEWS do
+    press(3)
+    check("K3 steps to " .. VIEWS[i], state.view == VIEWS[i], state.view)
+  end
   press(3)
-  check("K3 opens the mixer", state.view == "mixer", state.view)
-  press(2)
-  check("K2 closes it again", state.view == "global", state.view)
+  check("and stops on the map rather than wrapping", state.view == "map",
+        state.view)
 
-  -- from an open cell page: K3 goes to the mixer AND drops the focus
+  for i = #VIEWS - 1, 1, -1 do
+    press(2)
+    check("K2 steps back to " .. VIEWS[i], state.view == VIEWS[i], state.view)
+  end
+
+  -- from an open cell page: K3 steps the page underneath AND drops the focus
+  state.view = "global"
   state.cell_edit = "oak"
   press(3)
-  check("K3 from a cell page reaches the mixer", state.view == "mixer",
+  check("K3 from a cell page steps the page under it", state.view == "gusts",
         state.view)
   check("and disconnects that cell's focus", state.cell_edit == nil,
         tostring(state.cell_edit))
@@ -264,10 +279,10 @@ do
         tostring(state.cell_edit))
   check("and does not freeze the patch on the way", state.global.still == false)
 
-  -- K2 off the mixer likewise leaves Still alone
+  -- K2 off any page above the main screen likewise leaves Still alone
   press(3)
   press(2)
-  check("K2 off the mixer does not freeze it either",
+  check("K2 off the gusts page does not freeze it either",
         state.global.still == false and state.view == "global")
 
   -- only with nothing to come back from is K2 Still

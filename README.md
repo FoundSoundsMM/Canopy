@@ -60,8 +60,39 @@ And an interface pass on top of that, which is where the panel stands now:
   middle detent;
 - **Cross on a gust is deep enough to hear**: two gusts cabled together now
   genuinely FM each other, over two octaves at full Cross;
-- **Scatter is Rain** and **Drops is Plonks** on the global page, which also
-  took the gusts' Space / Delay / Regen rows back from the mixer.
+- **Scatter is Rain** and **Drops is Plonks** on the global page.
+
+And a pages pass on top of *that*, which is where it stands today — three
+changes that are really one change, about giving each family the page it
+needs (spec §2.11b, §4.1c, §4.4):
+
+- **the gusts have a page of their own**, between the main screen and the
+  mixer. Five knobs — **Pitch**, **Timbre**, **Attack**, **Cross**, **Level**
+  — that move all twelve cells *together*, and the **Space / Delay / Regen**
+  of the delay line they share, which used to be the global page's awkward
+  second half. The five are **offsets, not values**: each sits at a centre
+  meaning "leave them alone", so sliding one keeps whatever spread you have
+  put between the twelve, and turning it back to the middle puts them exactly
+  where they were. There is no family Decay because there already is one —
+  the global page's Decay reaches every gust, one `K2` away;
+- **Drums** — the seat the delay rows left free on the global page. A switch
+  saying whether the global **Plonks**, **Decay** and **Pitch** reach the six
+  percussion cells as well as the four voices. Off, they are drums; on, the
+  kit transposes with the patch, breathes on every hit and rings for as long
+  as everything else does;
+- **a Colour page**, one `K3` past the mixer: eight processors across the
+  master output. **Tape** (saturation, top end coming off as it is driven,
+  and a slow wow), **Crush** (sixteen bits down to about three), **Alias**
+  (sample rate held down to a few hundred hertz), **Loss** (a low-bitrate
+  codec — the band closing from the top, surviving partials warbling, pre-echo
+  ahead of every transient), **Chorus** and **Swirl** (its depth and its
+  rate), **Shape** (a bipolar transient designer — softer attacks below the
+  middle, snappier above) and **Comp** (one knob doing threshold, ratio and
+  makeup, with a 4 ms attack so a drum's click gets out before the gain comes
+  down). Every one of them is a genuine bypass at its default, so a patch
+  that never opens the page sounds exactly as it did before the page existed;
+- **Swing defaults to 0.** A fresh patch arrives straight, and shuffle is
+  something you add rather than something you have to find and turn down.
 
 ```
      1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
@@ -122,7 +153,7 @@ reach. The shape of what is left is what makes the panel readable.
   a folded triangle under a slow swell and a slow fall you set per cell.
   Press one and it sounds; a pulse cabled in sounds it too. It is the one
   family heard without an Output cable, panned by the column it sits in, and
-  all twelve share one delay line off the global page. Cable two together and
+  all twelve share one delay line off the gusts page. Cable two together and
   they FM each other, as deeply as **Cross** on each is turned up.
 - **Four LFOs sit on the row above them.** Plain sines, one knob each until
   you cable one somewhere — see **Target** and **Param** above.
@@ -189,15 +220,19 @@ panel has a gesture that only it responds to any more.
   cable** rather than leaving you wondering. Gusts are the one exemption:
   they route themselves, so having no output cable is their normal state
   rather than the confusing one that warning exists for.
-- Nothing held: `E1` picks one of ten global params — BPM, Swing, Rain,
-  Scale, Plonks, Decay, Pitch, then the gusts' shared delay line (Space,
-  Delay, Regen) on a second page — and `E2`/`E3` nudge it coarse/fine.
+- Nothing held: `E1` picks one of eight global params — BPM, Swing, Rain,
+  Scale, Plonks, Decay, Pitch, Drums — and `E2`/`E3` nudge it coarse/fine.
   `K1`+`E3` is the master level.
-- **`K3` is the mixer, `K2` is back.** `K3` opens the mixer from anywhere,
-  including from an open cell page — which it closes on the way, dropping
-  that cell's focus. `K2` is the way back up: off the mixer, or out of a cell
-  page, to the main screen. On the main screen, with nothing to come back
-  from, `K2` is Still as it always was.
+- **`K3` is forward, `K2` is back**, one page at a time down one stack:
+  **main screen → gusts → mixer → colour → map**. Neither end wraps — `K3` on
+  the map stays on the map, and `K2` on the main screen, with nothing to come
+  back from, is Still as it always was. `K3` works from an open cell page too,
+  which it closes on the way, dropping that cell's focus. The order is the
+  signal's own: the gusts are the one family that routes itself, the mixer
+  balances what the cables deliver, Colour is what the balanced mix goes
+  through on its way out, and the map is the reference you check rather than
+  a surface you play. Each page keeps its own `E1` cursor, so stepping away
+  and back lands on the row you left.
 - **Swing and Rain are the groove knobs.** At Swing 0 / Rain 0 every
   pulse — however freely its cell runs — snaps onto a grid line, and
   unrelated gaits cohere into one groove: each cell quantises to the coarsest
@@ -269,9 +304,10 @@ lib/
   gridui.lua                grid render + the one gesture vocabulary
   cellparam.lua             a settings page for every cell type that did
                              not already have one (T, R, F, E, C, Out)
-  screenui.lua              the widget grid: the global page, the mixer
-                             page, the cell page, the edge view, the map
-  glyph.lua                 the shape vocabulary: twenty-two drawn shapes,
+  screenui.lua              the widget grid: the global page, the gusts
+                             page, the mixer, the Colour page, the cell
+                             page, the edge view, the map
+  glyph.lua                 the shape vocabulary: twenty-eight drawn shapes,
                              one per parameter, no two alike
   mixer.lua                 one named, metered channel per live output (§4.1b)
   dispatch.lua              §6 type-interaction matrix: pulse events
@@ -283,10 +319,12 @@ lib/
   weave.lua                 the six R-cell pulse transforms
   clockcell.lua             the four C-cell clock flashers (§2.9)
   voice.lua                 the eleven-parameter voice sound page (§5.5)
-  gparam.lua                the ten-parameter global page (§4.1, §5.2)
+  gparam.lua                the eight-parameter global page (§4.1, §5.2)
+  colour.lua                the master colour chain's page (§4.4)
   exciter.lua               E-cell control layer: lazy alloc, gating, Colour
   sample.lua                the four S-cell sample players (§2.5)
-  gust.lua                  the twelve G-cell drone synths (§2.11)
+  gust.lua                  the twelve G-cell drone synths (§2.11), and the
+                             gusts page that moves all twelve at once (§2.11b)
   lfo.lua                   the four L-cell sines, and what each one moves
   grove.lua                 the pitch fields: modes, coupling, voice retuning
   gvoice.lua                the six GVOICE-cell drums + their sound page
@@ -346,9 +384,11 @@ to actually render audio.
   freezes under Still.
 - `screen.lua` — nothing on the 128x64 panel may overlap anything else. A
   recording screen stub gives every draw a bounding box, and every view the
-  script can be in — the global page, the mixer, every widget of every cell's
-  page held and open, a heavily cabled cell, every type pair on the edge
-  view, and a header carrying a long message next to an `ext` tempo — is
+  script can be in — the global page, the gusts page, the mixer, the Colour
+  page (both at every row and with every knob at both ends of its travel),
+  every widget of every cell's page held and open, a heavily cabled cell,
+  every type pair on the edge view, and a header carrying a long message next
+  to an `ext` tempo — is
   checked for collisions and for running off the panel. Two words may never
   share pixels; a word may sit inside a box but never inside a shape, and
   never half-clipped by anything. This is the test the two original overlap
@@ -401,15 +441,35 @@ to actually render audio.
 - `gvoice.lua` — the six percussion cells under their new `GVOICE` type and
   `gv.*` ids, same six-parameter page and strike/answer mechanic as before
   the rename.
+- `gust.lua` — the twelve drone cells: where they sit and how their columns
+  pan them, a press sounding a note, the note locking onto the global Scale
+  and following a transpose, the envelope knobs and the global Decay macro
+  reaching the engine in seconds, a pulse sounding one and getting a pulse
+  back, two cabled together cross-modulating, a loop staying bounded — and
+  the family page: the five macros as *offsets* that slide all twelve
+  together while preserving the spread between them and leaving each cell's
+  own stored knob untouched, clamping per cell at the ends, pushing all twelve
+  when nudged, and the per-cell pages reading the effective value while `E2`
+  still moves the cell's own knob.
 - `tm.lua` — the four Turing Machine cells at their new coordinates,
   register stepping, Tap-gated answering pulse, and pitch feeding a voice
   directly (no more P socket to route through).
-- `gparam.lua` — the global param page: E1 clamped at both ends, BPM's
-  coarse/fine steps and clock/floor/ceiling clamping, Scale's one-entry-per-
-  flick detent, Plonks widening the per-strike spread, global Decay and
-  Pitch reaching the engine for every voice at once, the gusts' delay line
-  closing the list on a second page, and an external clock
-  source turning BPM into a readout that follows the incoming tempo.
+- `gparam.lua` — the global param page: eight rows on exactly one screen, E1
+  clamped at both ends, BPM's coarse/fine steps and clock/floor/ceiling
+  clamping, Scale's one-entry-per-flick detent, Plonks widening the per-strike
+  spread, global Decay and Pitch reaching the engine for every voice at once,
+  an external clock source turning BPM into a readout that follows the
+  incoming tempo, Swing arriving at 0, and the **Drums** switch — off, the six
+  percussion cells ignore Plonks, Decay and Pitch entirely and send no
+  per-strike traffic; on, the kit transposes, breathes on every hit and takes
+  the Decay multiplier, and the switch itself re-pushes all six on the way.
+- `colour.lua` — the master colour chain: eight rows on one screen, every key
+  one the engine will actually accept (checked against a hardcoded copy of
+  `\colourKeys`, so the test cannot agree with itself), no two rows drawing
+  the same shape, every row arriving at a genuine bypass, `init` pushing all
+  eight exactly once at this module's own defaults, each knob clamping and
+  forwarding its own key, and `K3`/`K2` reaching and leaving the page with
+  `K1`+`E3` still the master from it.
 - `mixer.lua` — the four recordings load once each at the engine indices the
   `.sc` file expects (they belong to the sample cells now, not to this page);
   the page is built from the patch, growing a channel as an Output cell is
@@ -417,17 +477,19 @@ to actually render audio.
   is cabled and never more than sixteen; each channel named after the
   instrument on it, renamed when a second source evicts the first, and drawn
   with a meter; each an independent 0..1 knob that forwards to its own
-  output; `K3`/`K2` move between the main screen, a cell page and the mixer
-  in the documented order; and an external Start/Stop freezes and unfreezes
-  the patch without flooding on resume.
+  output; `K3`/`K2` walk the whole five-page stack in the documented order,
+  one page per press, stopping dead at both ends; and an external Start/Stop
+  freezes and unfreezes the patch without flooding on resume.
 - `smoke.lua` — loads `Canopy.lua` itself and exercises every screen
   view, the sound page, and every control against the 78-cell panel.
 - `soak.lua` — the same, but against a *strict* norns stub: `screen`, `util`
   and `clock` expose only the functions norns actually has, so calling one it
   doesn't is an error rather than a silent no-op. Redraws from every state
-  (every cell held one at a time, every type pair held in twos, the
+  (every cell held one at a time, every type pair held in twos, all five
+  full-screen pages walked with `K3` the way a player reaches them, the
   global page with a live patch), thousands of random gestures with the
-  scheduler running, and the per-frame screen command and paint budgets.
+  scheduler running, and the per-frame screen command and paint budgets --
+  which the gusts page and the Colour page are both held to as well.
   This is the test that catches "the screen died but the grid still works".
 - `perf.lua` — what the 2 ms tick costs, including the Clock cells and the
   LFOs' control-rate work (driven there at the tick rather than at

@@ -38,10 +38,12 @@ do
   -- screenui requires lexicon directly again -- cellparam still fetches it
   -- lazily too, but require() memoises, so this is one module either way.
   -- §5.2c added glyph.lua, which screenui requires directly (it is the whole
-  -- widget vocabulary) and nothing else touches.
+  -- widget vocabulary) and nothing else touches. §4.4 added colour.lua, the
+  -- master chain's page -- required by Canopy.lua (for the page stack and
+  -- its init push) and by screenui (to draw it).
   local WANT = {
-    "bridge", "cellparam", "clockcell", "dispatch", "exciter", "glyph",
-    "gparam", "gridui", "grove", "gust", "gvoice", "lexicon",
+    "bridge", "cellparam", "clockcell", "colour", "dispatch", "exciter",
+    "glyph", "gparam", "gridui", "grove", "gust", "gvoice", "lexicon",
     "lfo", "mixer", "patch", "quantise", "rambler", "sample", "screenui",
     "state", "tm", "topology", "voice", "weave",
   }
@@ -156,11 +158,11 @@ end
 -- §4.1/§5.2: the global param page has the encoders with nothing held.
 -- BPM is gparam.PARAMS[1], so it's already focused from a fresh load.
 do
-  -- the blind key sweep above pressed K3, which is the mixer now (§4.1b), so
-  -- this is on the mixer page rather than the global one. that is the new
-  -- behaviour working, not an accident -- assert it, then come back the way
-  -- a player would.
-  check("the key sweep left us on the mixer", M.state.view == "mixer",
+  -- the blind key sweep above pressed K3, which steps one page forward down
+  -- the stack (global -> gusts -> mixer -> colour -> map). that is the new
+  -- behaviour working, not an accident -- assert where it left us, then walk
+  -- back the way a player would.
+  check("the key sweep left us one page along", M.state.view == "gusts",
         tostring(M.state.view))
   key(2, 1); key(2, 0)
   check("and K2 came back", M.state.view == "global", tostring(M.state.view))

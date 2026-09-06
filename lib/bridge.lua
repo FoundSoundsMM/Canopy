@@ -223,8 +223,8 @@ function bridge.gust_pan(index, v)
   engine.gust_pan(index, v)
 end
 
--- the one delay line all twelve gusts are heard through (§4.1's Space / Delay /
--- Regen rows on the global page). global, not per cell.
+-- the one delay line all twelve gusts are heard through (§2.11b's Space /
+-- Delay / Regen rows on the gusts page). global, not per cell.
 function bridge.gust_space(mix, time, feedback)
   engine.gust_space(mix, time, feedback)
 end
@@ -285,6 +285,17 @@ end
 
 function bridge.master_level(v)
   engine.master_level(v)
+end
+
+-- §4.4 the master colour chain (lib/colour.lua). one command for eight knobs
+-- rather than eight named ones: unlike every other family on this panel these
+-- are not eight different things done to eight different objects -- they are
+-- eight positions on one chain, on one synth, and eight identical
+-- `engine.colour_x(v)` wrappers would say nothing the key does not. the key
+-- is the row's own `key` field and the engine validates it against its own
+-- list, so a typo is a dropped message rather than a silently mis-set knob.
+function bridge.colour(key, v)
+  engine.colour(key, v)
 end
 
 -- §4.1b one level per Output-row cell (lib/mixer.lua's channel faders).
