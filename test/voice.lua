@@ -113,29 +113,39 @@ do
         M.voice.structure(OAK) > M.topology.get(OAK).struct)
 end
 
-print("\n-- the sound page's Depth knob scales what the fields do --")
+print("\n-- the sound page's Depth knob scales what a register does --")
 do
   -- the old P socket's own knob moved onto the sound page (voice.lua's
   -- `depth` row, index 11) when the socket it lived on collapsed into the
   -- voice's single point -- same 0..2 range, same "0 flattens the melody to
   -- nothing, 2 doubles it" shape, just reached through state.vparam now
-  -- instead of a per-socket state.character entry.
+  -- instead of a per-socket state.character entry. it used to scale the pitch
+  -- fields; they are gone (§2.6) and a register is what tunes a voice now.
   local M = fresh(11)
-  local CUCKOO = "f.cuckoo"
-  M.patch.add(CUCKOO, OAK, 1.0)
-  M.state.character[CUCKOO] = 1.0
-  M.state.notify_character_change(CUCKOO)
-  for _ = 1, 20 do M.grove.step(CUCKOO, 1) end
-  local full = math.abs(M.grove.offset(OAK))
-  check("at depth 1 (the 0.5 default) the field moves the voice", full > 0,
+  M.state.global.scale_i = 0
+  local TM = "tm.padfoot"
+  M.patch.add(TM, OAK, 1.0)
+
+  -- step it until the register is actually holding the voice off its root,
+  -- so what follows is scaling something rather than scaling zero.
+  local base
+  for _ = 1, 24 do
+    M.tm.pulse_in(TM, 1, nil, 0)
+    base = M.tm.offset(OAK) * M.voice.depth(OAK)
+    if math.abs(base) > 0.01 then break end
+  end
+  local full = math.abs(base)
+  check("at depth 1 (the 0.5 default) the register moves the voice", full > 0,
         string.format("%.2f st", full))
 
   M.state.set_vparam(OAK, "depth", 0)
-  check("at depth 0 it does not", M.grove.offset(OAK) == 0)
+  check("at depth 0 it does not",
+        M.tm.offset(OAK) * M.voice.depth(OAK) == 0)
   M.state.set_vparam(OAK, "depth", 1.0)
   check("and at depth 2 it moves twice as far",
-        math.abs(math.abs(M.grove.offset(OAK)) - full * 2) < 1e-6,
-        string.format("%.2f vs %.2f", math.abs(M.grove.offset(OAK)), full * 2))
+        math.abs(math.abs(M.tm.offset(OAK) * M.voice.depth(OAK)) - full * 2) < 1e-6,
+        string.format("%.2f vs %.2f",
+                      math.abs(M.tm.offset(OAK) * M.voice.depth(OAK)), full * 2))
 end
 
 print("\n-- the voice answers with a pulse every time it is struck --")

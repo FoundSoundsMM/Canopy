@@ -212,4 +212,31 @@ do
         M.state.global.level > lvl, tostring(M.state.global.level))
 end
 
+print("\n-- the chorus comes up at a drift, not a wobble --")
+do
+  local M = fresh(60)
+  -- Swirl is the chorus's rate and the one default on this page that is not
+  -- zero-as-bypass: at zero the first thing you would hear on turning Chorus
+  -- up is a static comb filter rather than a chorus. it used to come up at
+  -- 0.3 of a knob, which is about 1.1 Hz -- audible as a wobble the moment
+  -- Chorus is touched, which is the one thing a master-bus chorus should
+  -- never be.
+  check("the default rate is 0.44 Hz",
+        math.abs(M.colour.swirl_hz() - M.colour.SWIRL_DEFAULT_HZ) < 1e-6,
+        string.format("%.4f Hz", M.colour.swirl_hz()))
+  check("and 0.44 is the number that was chosen",
+        math.abs(M.colour.SWIRL_DEFAULT_HZ - 0.44) < 1e-12,
+        tostring(M.colour.SWIRL_DEFAULT_HZ))
+  -- the knob position follows from the rate rather than the other way round.
+  check("the knob position is derived from it",
+        math.abs(M.colour.DEFAULTS.swirl
+                 - M.colour.swirl_knob(M.colour.SWIRL_DEFAULT_HZ)) < 1e-12,
+        tostring(M.colour.DEFAULTS.swirl))
+  check("which is inside the row's own travel",
+        M.colour.DEFAULTS.swirl > 0 and M.colour.DEFAULTS.swirl < 1,
+        tostring(M.colour.DEFAULTS.swirl))
+  -- and the rest of the page is still a page of bypasses.
+  check("Chorus itself is still off", M.colour.get("chorus") == 0)
+end
+
 report()

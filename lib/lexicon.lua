@@ -74,11 +74,18 @@ local DESC = {
   ["e.mistle"]   = "Pitched chirps, shaped like a bird call.",
   ["e.wisp"]     = "A slow random wander. Too slow to hear, use it to modulate.",
 
-  -- sample players / S, internally SMP (§2.5)
-  ["smp.rain"]    = "Plays the rain recording. Attack and Decay set the swell.",
-  ["smp.cicada"]  = "Plays the cicada recording. Attack and Decay set the swell.",
-  ["smp.thunder"] = "Plays the thunder recording. Attack and Decay set the swell.",
-  ["smp.sea"]     = "Plays the sea recording. Attack and Decay set the swell.",
+  -- sample players / S, internally SMP (§2.5). eight seats, two mirrored
+  -- diagonals of four, and none of them owns a recording any more -- the File
+  -- row picks one out of the script's audio/ folder -- so what these say is
+  -- what the SEAT is: how it swells, and where it lands in the image.
+  ["smp.fen"]     = "Plays a sample. File picks it; Attack and Decay swell it.",
+  ["smp.mire"]    = "Plays a sample, slower to arrive. Hard left of centre.",
+  ["smp.carr"]    = "Plays a sample. The quickest swell of the eight.",
+  ["smp.holt"]    = "Plays a sample. The slowest to arrive, left of centre.",
+  ["smp.rain"]    = "Plays a sample. File picks it; Attack and Decay swell it.",
+  ["smp.cicada"]  = "Plays a sample, slower to arrive. Right of centre.",
+  ["smp.thunder"] = "Plays a sample. The quickest swell of the eight.",
+  ["smp.sea"]     = "Plays a sample. The slowest to arrive, right of centre.",
 
   -- the gusts / G (§2.11). twelve of one instrument, so twelve of one line:
   -- what differs between them is the seat, and the panel already shows that.
@@ -106,12 +113,6 @@ local DESC = {
   ["fm.2"] = "Two operator FM, an octave up. Ratio and Index make the tone.",
   ["va.1"] = "Sine to saw, plus noise, folded and filtered. Strike it.",
   ["va.2"] = "Sine to saw, plus noise, folded and filtered. An octave up.",
-
-  -- the grove / F (§2.6)
-  ["f.cuckoo"]   = "Picks notes. Two notes back and forth, never quite the same.",
-  ["f.nightjar"] = "Picks notes. Sits on the root and only drifts a few cents.",
-  ["f.curlew"]   = "Picks notes. Runs downward, then leaps back to the top.",
-  ["f.bittern"]  = "Picks notes. Octave jumps only. It ignores the scale.",
 }
 
 function lexicon.describe(id)
@@ -129,7 +130,6 @@ local CHARACTER = {
   D = {label = "Rate",  lo = 0, hi = 1, note = "how often it fires"},
   R = {label = "Amount", lo = 0, hi = 1, note = "how strongly the rule applies"},
   E = {label = "Colour", lo = 0, hi = 1, note = "the source's filter and character"},
-  F = {label = "Range", lo = 0, hi = 1, note = "how far the field roams"},
   C = {label = "Ratio", lo = 0, hi = 1, note = "multiple or division of the clock"},
 }
 

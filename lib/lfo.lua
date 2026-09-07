@@ -33,9 +33,10 @@
 -- the cycle begins on the beat and is still beginning on the beat an hour
 -- later. a square on the beat is a gate, a ramp over a bar is a sweep that
 -- ends where the bar does, and a sample-and-hold at 1/2 is a sequence in
--- time with the drums. free is still there and still the default: a
--- modulator whose job is to be at odds with the beat wants nothing to do
--- with this.
+-- time with the drums. synced at 1x is the DEFAULT now (lfo.SYNC_DEFAULT):
+-- everything else on this panel is already in time, and a modulator that is
+-- not is the exception. free is one detent away for the case that wants it --
+-- a modulator whose whole job is to be at odds with the beat.
 --
 -- EIGHT SHAPES, not one sine. a sine is a good default and a poor bank: a
 -- square is a switch, a ramp is a sweep, a sample-and-hold is a stepped
@@ -116,8 +117,18 @@ end
 -- stored as its own vparam rather than sharing the Speed knob's: switching to
 -- clock and back leaves the free Speed exactly where the player left it,
 -- which is the same reason a Clock cell keeps `high` apart from `character`.
+--
+-- CLOCK is the default, and free is the deliberate choice. this was the other
+-- way round when Sync was new, on the reasoning that a free modulator is what
+-- an LFO has always been -- but the four cells sit on the panel next to the
+-- Clock family and the triggers, everything else on it is already in time,
+-- and a modulator that is not is the exception rather than the norm. so the
+-- four come up locked to the transport at 1x and a player who wants one at
+-- odds with the beat says so.
+lfo.SYNC_DEFAULT = 1
+
 function lfo.synced(id)
-  return state.get_vparam(id, "sync", 0) >= 0.5
+  return state.get_vparam(id, "sync", lfo.SYNC_DEFAULT) >= 0.5
 end
 
 function lfo.set_synced(id, on)
@@ -627,7 +638,7 @@ lfo.PARAMS = {
     -- what the Speed knob above is measured against. a switch and not a
     -- value, so it draws as a flag and takes two detents to flip -- the same
     -- shape and the same feel as a Clock cell's own Mode row.
-    key = "sync", label = "Sync", glyph = "flag", default = 0,
+    key = "sync", label = "Sync", glyph = "flag", default = lfo.SYNC_DEFAULT,
     stepped = true, steps_fn = function() return 2 end,
     get = function(id) return lfo.synced(id) and 1 or 0 end,
     set = function(id, v) lfo.set_synced(id, v >= 0.5) end,

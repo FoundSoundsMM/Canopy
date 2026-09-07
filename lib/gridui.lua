@@ -28,7 +28,6 @@ local patch      = wl("patch")
 local state      = wl("state")
 local rambler    = wl("rambler")
 local sample     = wl("sample")
-local grove      = wl("grove")
 local clockcell  = wl("clockcell")
 local gust       = wl("gust")
 local weave      = wl("weave")
@@ -201,14 +200,13 @@ function gridui.act(id, cell)
   end
 
   wl("dispatch").on_pulse(id, id, {id = -1, a = id, b = id, gain = 1.0}, 1.0)
-  -- GUST is deliberately not in this check: it is the one family left that
-  -- routes itself to the mix, so "no output cable" is its normal state
-  -- rather than the confusing one this warning exists for. a sample cell
-  -- used to be the other one and is cabled like everything else now (§2.5),
-  -- which is exactly why it needs the warning.
+  -- GUST and SMP are deliberately not in this check: they are the two
+  -- families that route themselves to the mix (§2.11, §2.5), so "no output
+  -- cable" is their normal state rather than the confusing one this warning
+  -- exists for.
   -- §2.13 the two new synth families need this warning for the same reason a
   -- voice does: they are heard through an Output cable or not at all.
-  if (cell.type == "voice" or cell.type == "GVOICE" or cell.type == "SMP"
+  if (cell.type == "voice" or cell.type == "GVOICE"
       or cell.type == "FM" or cell.type == "VA")
      and not reaches_output(id) then
     state.set_event(cell.name .. ": no output cable", 2.0)
@@ -345,8 +343,6 @@ function gridui.brightness(id, cell)
     return state.flash_level(id, base)
   elseif cell.type == "SMP" then
     return sample.level_at(id, 2)
-  elseif cell.type == "F" then
-    return grove.level(id, 2)
   elseif cell.type == "C" then
     return clockcell.level(id, 2)
   elseif cell.type == "GUST" then

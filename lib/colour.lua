@@ -37,18 +37,27 @@ local colour = {}
 
 local COARSE, FINE = 1 / 80, 1 / 500
 
+-- the chorus's rate, in Hz, that the Swirl knob comes up on. it was 0.3 of a
+-- knob, which is about 1.1 Hz -- audible as a wobble the moment Chorus is
+-- touched, which is the one thing a master-bus chorus should never be. 0.44
+-- Hz is a slow drift: it thickens without announcing itself, and anyone who
+-- wants a warble has the rest of the knob.
+colour.SWIRL_DEFAULT_HZ = 0.44
+
 -- the defaults, which are also the bypass positions. `swirl` is the one
 -- number here that is not zero: it is the chorus's rate, it does nothing
 -- while Chorus is at zero, and starting it at zero would mean the first
 -- thing anyone hears on turning Chorus up is a static comb filter rather
--- than a chorus.
+-- than a chorus. it is filled in from SWIRL_DEFAULT_HZ just below, once the
+-- knob's own range is declared, so the number that is chosen is the rate and
+-- the knob position follows from it.
 colour.DEFAULTS = {
   tape   = 0,
   crush  = 0,
   alias  = 0,
   loss   = 0,
   chorus = 0,
-  swirl  = 0.3,
+  swirl  = 0,      -- set below, from SWIRL_DEFAULT_HZ
   shape  = 0.5,
   comp   = 0,
 }
@@ -98,6 +107,15 @@ function colour.swirl_hz()
   return colour.SWIRL_MIN
        + colour.get("swirl") * (colour.SWIRL_MAX - colour.SWIRL_MIN)
 end
+
+-- the inverse, and the reason the two are written this way round: the number
+-- worth choosing is the rate, and where on the knob it falls is arithmetic.
+function colour.swirl_knob(hz)
+  return util.clamp((hz - colour.SWIRL_MIN)
+                    / (colour.SWIRL_MAX - colour.SWIRL_MIN), 0, 1)
+end
+
+colour.DEFAULTS.swirl = colour.swirl_knob(colour.SWIRL_DEFAULT_HZ)
 
 colour.PARAMS = {
   -- Tape: soft saturation and the top end coming off as it is driven, and

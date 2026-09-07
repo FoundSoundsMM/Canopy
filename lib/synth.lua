@@ -92,24 +92,54 @@ function synth.depth()
 end
 
 -- envelope -------------------------------------------------------------------
--- the same log mapping and the same shape as a gust's, so Attack and Decay
--- mean the same thing everywhere on the panel: 0.5 is the cell's own default
--- and the knob sweeps this many octaves of ratio either side of it.
-synth.ATTACK_OCTAVES = 3
-synth.DECAY_OCTAVES = 2
+-- the same log mapping and the same shape as a gust's -- 0.5 is the cell's
+-- own default and the knob sweeps octaves of ratio either side of it -- with
+-- one difference: the two halves of the knob are not the same width.
+--
+-- they used to be, three octaves of Attack each way off a 10 ms centre, and
+-- that put the top of the row at 80 milliseconds. eighty milliseconds is a
+-- soft strike, not a swell: these two are the only oscillator voices on the
+-- panel and there was no way to make either of them arrive slowly, which is
+-- half of what an oscillator with an envelope is for. the same held below on
+-- Decay -- two octaves off a cell's own default is under four seconds.
+--
+-- so the range is opened UPWARD and only upward. an attack of a
+-- ten-thousandth of a second is not a different sound from a thousandth, and
+-- a knob that spends its bottom third clamped against a floor is a knob whose
+-- bottom third does nothing -- which is exactly what a symmetric widening
+-- would have bought. down is what it always was, so a struck FM cell at the
+-- bottom of the row is bit-identical to the one that was there before; up
+-- reaches a slow swell.
+synth.ATTACK_OCTAVES_DOWN = 3
+synth.ATTACK_OCTAVES_UP = 9.6     -- 0.01 s * 2^9.6 ~= the 8 s ceiling below
+synth.DECAY_OCTAVES_DOWN = 2
+synth.DECAY_OCTAVES_UP = 4.5      -- a 1.1 s cell reaches ~25 s
 
 synth.ATTACK_MIN, synth.ATTACK_MAX = 0.001, 8.0
-synth.DECAY_MIN, synth.DECAY_MAX = 0.02, 20.0
+synth.DECAY_MIN, synth.DECAY_MAX = 0.02, 30.0
 
 -- the centre of the Attack knob, in seconds. short, because these two are
 -- struck: the default has to be a note that speaks on the hit, and the knob
--- reaches three octaves up from here for anyone who wants a pad.
+-- reaches most of ten octaves up from here for anyone who wants a pad.
 synth.ATTACK_BASE = 0.01
+
+-- 0..1 -> a ratio, `down` octaves below the centre and `up` above it. one
+-- place, because Attack and Decay both do it and getting the two halves out
+-- of step between them is the kind of bug that reads as "the knob feels
+-- wrong" rather than as a fault.
+local function octave_ratio(v, down, up)
+  local x = (util.clamp(v, 0, 1) - 0.5) * 2
+  return 2 ^ (x * ((x < 0) and down or up))
+end
+
+synth.octave_ratio = octave_ratio
 
 function synth.attack_seconds(id)
   local a = state.get_vparam(id, "attack", 0.5)
-  return util.clamp(synth.ATTACK_BASE * (2 ^ ((a - 0.5) * 2 * synth.ATTACK_OCTAVES)),
-                    synth.ATTACK_MIN, synth.ATTACK_MAX)
+  return util.clamp(
+    synth.ATTACK_BASE
+      * octave_ratio(a, synth.ATTACK_OCTAVES_DOWN, synth.ATTACK_OCTAVES_UP),
+    synth.ATTACK_MIN, synth.ATTACK_MAX)
 end
 
 -- Decay rides on state.decay rather than on a vparam of its own, exactly the
@@ -119,9 +149,11 @@ function synth.decay_seconds(id)
   local cell = synth.is(id)
   if not cell then return nil end
   local d = state.get_decay(id)
-  return util.clamp(cell.decay * (2 ^ ((d - 0.5) * 2 * synth.DECAY_OCTAVES))
-                      * voice.decay_mult_ratio(),
-                    synth.DECAY_MIN, synth.DECAY_MAX)
+  return util.clamp(
+    cell.decay
+      * octave_ratio(d, synth.DECAY_OCTAVES_DOWN, synth.DECAY_OCTAVES_UP)
+      * voice.decay_mult_ratio(),
+    synth.DECAY_MIN, synth.DECAY_MAX)
 end
 
 -- sounding -------------------------------------------------------------------
@@ -153,7 +185,16 @@ function synth.play(id, force)
   -- the pitch this cell is actually on, fields and registers and the global
   -- Scale included. grove owns that sum; asking it here means a strike lands
   -- on the note whatever moved it last.
-  local hz = wl("grove").hz(id) or cell.root
+  --
+  -- §4.1c with this strike's own Plonks detune summed in before the quantise,
+  -- the same way a modal voice gets one (grove.on_strike). these two were the
+  -- one struck family the macro did not reach, and not for a reason -- the
+  -- detune grove pushes on a strike lands on `freq`, and then the note
+  -- command below writes `freq` again with the undetuned number, so the offset
+  -- was being sent and then overwritten a moment later. asking for it here is
+  -- what makes the note that sounds the detuned one.
+  local grove = wl("grove")
+  local hz = grove.hz(id, grove.strike_detune()) or cell.root
   synth.KINDS[cell.type].note(cell.index - 1, hz, f)
   state.flash(id, f)
   return true
@@ -192,17 +233,16 @@ end
 -- families: they are the part of a struck synth voice that is not about what
 -- makes the tone.
 
--- the note this cell will actually sound, in Hz, rather than the knob's own
--- offset: with a Scale selected and a field cabled in, the number worth
--- reading is where the cell has landed. the same rule the gust page's Pitch
--- row and the drum page's follow.
+-- the note this cell will actually sound, rather than the knob's own offset:
+-- with a Scale selected and a register cabled in, what is worth reading is
+-- where the cell has landed. as a NOTE and not in hertz (§5.2e,
+-- grove.note_name) -- the same rule the gust page's Pitch row follows.
 local function pitch_row()
   return {
     key = "pitch", label = "Pitch", glyph = "marker", default = 0.5,
     get = vp_get("pitch", 0.5), set = vp_set("pitch"),
     text = function(id)
-      local hz = wl("grove").hz(id)
-      return hz and string.format("%.1f Hz", hz) or "-"
+      return wl("grove").note_name(wl("grove").hz(id)) or "-"
     end,
     -- grove owns the sum -- this offset plus every field and register cabled
     -- in plus the global transpose, quantised to the Scale -- so it is grove

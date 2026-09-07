@@ -19,19 +19,24 @@
 --  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
 --  2    M   M   M   M   .   F   F   F   N   N   N   .   X   X   V   V
 --  3    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
---  4    F   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   S
---  5    .   F   .   .   .   C   T   T   T   T   C   .   .   .   S   .
---  6    E   .   F   .   .   .   L   L   L   L   .   .   .   S   .   R
---  7    E   E   .   F   .   G   G   G   G   G   G   .   S   .   R   R
+--  4    S   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   S
+--  5    .   S   .   .   .   C   T   T   T   T   C   .   .   .   S   .
+--  6    E   .   S   .   .   .   L   L   L   L   .   .   .   S   .   R
+--  7    E   E   .   S   .   G   G   G   G   G   G   .   S   .   R   R
 --  8    E   E   E   .   .   G   G   G   G   G   G   .   .   R   R   R
 --
---   O  output (16)     M  modal voice (4)  F  grove field / percussion-ping
+--   O  output (16)     M  modal voice (4)  F  percussion-ping (3)
 --   N  percussion-noise TM Turing Machine  C  clock (4)
---   T  trigger source (8, was D)           S  sample player (4)
+--   T  trigger source (8, was D)           S  sample player (8)
 --   E  exciter (6, was S)                  R  weave (6)
 --   G  gust (12, drone synths)             L  LFO (4, sine modulators)
 --   X  2-op FM synth (2)                   V  wavefolding VA synth (2)
 --   .  unregistered, dark and inert
+--
+-- the grove's four pitch fields used to sit on the left-hand diagonal. that
+-- family is gone (§2.6): a second diagonal of sample players is there now,
+-- mirroring the first, and every one of the eight can be pointed at any
+-- recording in the script's audio/ folder.
 --
 -- row 2 is the instrument row and reads left to right as one sentence: the
 -- four modal voices, a gap, the six drums, a gap, the four new synths. it
@@ -189,74 +194,78 @@ for i, c in ipairs(CLOCK_CELLS) do
   reg("C", id, "Clock " .. i, {{c.x, c.y}}, {counterpart = "clk." .. c.counterpart})
 end
 
--- 2.5 sample players -- S (4, internally type "SMP") ------------------------
--- what used to be the heartwood diffusion lattice. that family was four cells
--- of one shared mechanic nobody could hear the shape of -- a pulse went in,
--- something came out somewhere else later, and the only knob was a single
--- "conductance" number standing in for two quantities at once. it is gone.
+-- 2.5 sample players -- S (8, internally type "SMP") ------------------------
+-- what used to be the heartwood diffusion lattice, and -- since the fields
+-- came off the panel -- what used to be the grove as well. two mirrored
+-- diagonals of four, one running in from each edge.
 --
--- in its place, four sample players, one per field recording under audio/.
--- a pulse (or K1+tap) plays that sample under an envelope with a slow attack
--- and a slow fall the player sets per cell, so the same four soundscapes that
--- used to sit under the patch as always-on loops are now something the patch
--- can actually play. it is cabled to an Output cell like every other source
--- -- these four used to be the exception, panned by their own seat and mixed
--- in automatically, and are not any more. see lib/sample.lua.
+-- a pulse (or K1+tap) plays that cell's recording under an envelope with a
+-- slow attack and a slow fall the player sets per cell, so the same
+-- soundscapes that used to sit under the patch as always-on loops are
+-- something the patch can actually play. see lib/sample.lua.
 --
--- `file` is a name under audio/ and `index` is the engine's own sample slot
--- (0-based), which is also the buffer amb_load fills.
+-- what a cell no longer carries is which recording it is. `file` was a field
+-- here, one .wav per seat, fixed at load -- which made the family exactly as
+-- big as the folder shipped with the script. the recording is a KNOB now
+-- (sample.lua's File row, one detent per .wav in audio/), so a cell is a
+-- player rather than a sound, anything dropped in that folder is on the
+-- panel, and eight seats are eight things that can be playing at once
+-- instead of four things that can only ever be those four. what is left here
+-- is the seat: where it sits, how it swells, and where it lands in the image.
 --
--- §8.6 `trim`, as on the voices above, and here it is not the synthesis that
--- differs but the recordings: Rain peaks at -1.4 dBFS and Cicada at about
--- -30, so at one shared constant they were thirteen decibels apart before
--- anything on the panel had been touched. the engine's own constant is set by
--- Cicada -- the quietest of the four -- and these bring the other three back
--- down to it.
+-- `trim` went with `file`, and to the same place. it was a per-cell
+-- correction for how loud that cell's recording happened to be -- Rain peaks
+-- at -1.4 dBFS and Cicada at about -30 -- which is a property of the
+-- RECORDING and not of the seat, and stopped meaning anything the moment a
+-- seat could play any of them. sample.lua's FILE_TRIM keys it by filename.
+--
+-- and, like a gust and unlike everything else that makes a sound here, a
+-- sample cell is heard without being cabled: it is routed to the main mix by
+-- the engine, panned by the column it sits in (`pan` below). it spent one
+-- build cabled to an Output cell like a voice, on the principle that one rule
+-- about what is audible beats two -- but a field recording is a bed, the
+-- thing you reach for it to do is fill the room underneath a patch, and
+-- spending an Output seat and a cable on each of eight of them to get there
+-- was a tax on the one family that never wanted the placement. a cable to an
+-- Output cell is still allowed and still means what it means; it just places
+-- a second copy rather than being the only way to hear the first.
+--
+-- named by number rather than by their recordings, for the reason the clocks
+-- and the gusts are: "Rain" named a .wav that seat no longer permanently
+-- owns, and the File row on the page says which one it is holding now. the
+-- ids keep the old spellings so saved patches still load.
+--
+-- pan comes from the column and nothing else, spread across the whole panel
+-- rather than the family's own span (which is both edges and would put all
+-- eight hard left or hard right). SMP_PAN_MAX keeps the outermost pair short
+-- of the edge so the image still has somewhere to go.
+local SMP_PAN_MAX = 0.8
+
 local SMP_CELLS = {
-  {id = "rain",    name = "Rain",    file = "Rain.wav",    x = 16, y = 4, attack = 1.2, decay = 6.0,  trim = 0.21},
-  {id = "cicada",  name = "Cicada",  file = "Cicada.wav",  x = 15, y = 5, attack = 2.0, decay = 8.0,  trim = 1.00},
-  {id = "thunder", name = "Thunder", file = "Thunder.wav", x = 14, y = 6, attack = 0.8, decay = 10.0, trim = 0.25},
-  {id = "sea",     name = "Sea",     file = "Sea.wav",     x = 13, y = 7, attack = 2.5, decay = 9.0,  trim = 0.36},
+  -- the left diagonal, running in from the edge -- the four seats the grove's
+  -- pitch fields used to have.
+  {id = "fen",     x = 1,  y = 4, attack = 1.2, decay = 6.0},
+  {id = "mire",    x = 2,  y = 5, attack = 2.0, decay = 8.0},
+  {id = "carr",    x = 3,  y = 6, attack = 0.8, decay = 10.0},
+  {id = "holt",    x = 4,  y = 7, attack = 2.5, decay = 9.0},
+  -- the right diagonal, the original four.
+  {id = "rain",    x = 16, y = 4, attack = 1.2, decay = 6.0},
+  {id = "cicada",  x = 15, y = 5, attack = 2.0, decay = 8.0},
+  {id = "thunder", x = 14, y = 6, attack = 0.8, decay = 10.0},
+  {id = "sea",     x = 13, y = 7, attack = 2.5, decay = 9.0},
 }
 
--- these four sit on a diagonal from the right edge inward. they used to
--- carry a `pan` of their own, taken from the column the way a gust's is,
--- because they mixed themselves; the Out cell each is cabled to decides that
--- now, so there is nothing left here but the recording and its envelope.
 for i, sm in ipairs(SMP_CELLS) do
-  reg("SMP", "smp." .. sm.id, sm.name, {{sm.x, sm.y}}, {
+  reg("SMP", "smp." .. sm.id, "Sample " .. i, {{sm.x, sm.y}}, {
     letter = "S",
     index = i - 1,
-    file = sm.file,
     attack = sm.attack,
     decay = sm.decay,
-    trim = sm.trim,
+    pan = (((sm.x - 1) / 15) * 2 - 1) * SMP_PAN_MAX,
   })
 end
 
 topology.SAMPLES = SMP_CELLS
-
--- 2.6 the grove -- F (4) -----------------------------------------------------
--- the pitch fields, mechanic unchanged (mode keys match grove.lua). trimmed
--- from 8 to 4 -- one representative of each of the most distinct shapes
--- (call/drone/cascade/octave) rather than paired seams; every mode not given
--- a seat here is still reachable by K1+E2 cycling on any F cell.
-
-local F_CELLS = {
-  {id = "cuckoo",   x = 1, y = 4, mode = "call"},
-  {id = "nightjar", x = 2, y = 5, mode = "drone"},
-  {id = "curlew",   x = 3, y = 6, mode = "cascade"},
-  {id = "bittern",  x = 4, y = 7, mode = "octave"},
-}
-
-for _, f in ipairs(F_CELLS) do
-  local id = "f." .. f.id
-  local name = f.id:sub(1, 1):upper() .. f.id:sub(2)
-  reg("F", id, name, {{f.x, f.y}}, {
-    mode = f.mode,
-    snap = true,
-  })
-end
 
 -- 2.7 the weave -- R (6) -----------------------------------------------------
 -- trimmed from 14 to 6: the rules the panel's own history and prose already
@@ -283,8 +292,8 @@ end
 -- unchanged mechanic (§2.7b's small drum voice, struck directly, answers
 -- with its own pulse a tick later) -- renamed and repositioned into row 2.
 -- the three ping cells read "F" on the panel, the three noise cells read
--- "N"; a `letter` field carries the display override since the true grove
--- pitch fields already own the bare type string "F".
+-- "N"; a `letter` field carries the display override, since the mechanic's
+-- own type string is "GVOICE".
 
 -- §8.6 `trim`, as on the modal voices above: the two kinds carry their own
 -- output constant in the engine and this is the difference between cells of
@@ -496,7 +505,6 @@ local FAMILY = {
   TM     = "Register",
   C      = "Clock",
   E      = "Exciter",
-  F      = "Field",
   SMP    = "Sample",
   GUST   = "Gust",
   LFO    = "LFO",

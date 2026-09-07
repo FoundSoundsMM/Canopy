@@ -48,18 +48,20 @@ bench("LFOs, all four modulating a knob", function(M)
   M.rambler.tick = function(...) M.lfo.apply(); return base(...) end
 end)
 
--- the grove's continuous half is the other thing that costs something with
--- no D cell involved. trimmed from 8 fields to 4 -- still every one of them
--- cabled to a voice and to each other, at full range.
-bench("grove, all 4 fields cabled", function(M)
-  local ps, voices = {}, {}
+-- the registers are the other thing that costs something on the pitch side.
+-- this used to be the grove's continuous half -- four fields cabled to the
+-- voices and to each other, moving on every tick -- and that family is gone
+-- (§2.6). a register moves only when something clocks it, so all four are
+-- cabled to a voice each and driven off one trigger.
+bench("registers, all 4 clocked and tuning", function(M)
+  local tms, voices = {}, {}
   for id, c in M.topology.each() do
-    if c.type == "F" then table.insert(ps, id); M.state.character[id] = 1.0 end
+    if c.type == "TM" then table.insert(tms, id) end
     if c.type == "voice" then table.insert(voices, id) end
   end
-  for i, id in ipairs(ps) do
+  for i, id in ipairs(tms) do
+    M.patch.add("d.gabriel", id, 0.9)
     M.patch.add(id, voices[((i - 1) % #voices) + 1], 0.8)
-    M.patch.add(id, ps[(i % #ps) + 1], 0.6)
   end
   M.patch.add("d.gabriel", "oak", 0.9)
 end)

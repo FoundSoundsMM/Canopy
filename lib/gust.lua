@@ -35,8 +35,8 @@
 -- it to screenui and gridui through the one code path they already have.
 --
 -- §2.11b this file carries a SECOND page as well: the family's own, reached
--- with K3 from the main screen and sitting just before the mixer: five
--- offsets that slide all twelve cells together (gust.MACRO, below). it is
+-- with K3 from the main screen and sitting just before the mixer: six
+-- offsets that move all twelve cells together (gust.MACRO, below). it is
 -- `gust.MACROS`, in the same shape gparam.PARAMS and mixer.PARAMS are, so
 -- screenui and Canopy.lua drive all three identically.
 
@@ -53,10 +53,19 @@ local gust = {}
 -- register nothing else on the panel occupies.
 gust.REF_HZ = 55.0
 
--- Pitch: the same +-2 octaves a GVOICE cell's Pitch has, and for the same
--- reason -- wide enough to move a cell into another register entirely, fine
--- enough at the centre to nudge one note.
-gust.PITCH_RANGE_ST = 24
+-- Pitch: +-4 octaves. it was +-2, matched to a GVOICE cell's, on the
+-- reasoning that a cell only ever wants to be moved into a neighbouring
+-- register -- but a gust is the family whose seat IS its note (the twelve
+-- roots span barely two octaves between them, §2.11's keyboard), and the
+-- thing anyone reaches for on this row is not "a little higher", it is a
+-- sub-bass under the bed or a whistle over the top of it. four octaves each
+-- way reaches both from any seat, and the whole eight-octave sweep still
+-- passes through the cell's own root at the centre detent, so nothing that
+-- was dialled in before this changed has moved.
+--
+-- what stops it running off the end of the audible band is downstream and
+-- unchanged: \wl_gust clips its own oscillator to 8..8000 Hz.
+gust.PITCH_RANGE_ST = 48
 
 -- Attack and Decay are logarithmic: the useful half of a swell time is the
 -- bottom of it, and a knob linear in seconds spends most of its travel
@@ -82,7 +91,7 @@ local last_note = {}   -- id -> util.time() of the last one that landed
 
 -- the family macros (§2.11b) --------------------------------------------------
 -- the gusts got a page of their own, before the mixer, and this is the half
--- of it that is not the delay line: one Pitch, Timbre, Attack, Decay, Cross
+-- of it that is not the delay line: one Pitch, Timbre, Attack, Vib, Cross
 -- and Level over all twelve cells at once.
 --
 -- they are OFFSETS, not values. twelve cells you have spent a while setting
@@ -95,12 +104,13 @@ local last_note = {}   -- id -> util.time() of the last one that landed
 -- back to the middle and the twelve are exactly where they were.
 --
 -- Pitch is in semitones because that is the unit it is already in everywhere
--- else on the panel; the other five are offsets on the 0..1 knobs they ride,
--- so 0.5 is the neutral position and the sum is clamped per cell -- which is
+-- else on the panel; the rest are offsets on the 0..1 knobs they ride, so
+-- 0.5 is the neutral position and the sum is clamped per cell -- which is
 -- what makes the macro run out of travel gracefully at the ends rather than
--- wrapping or shoving cells past each other.
+-- wrapping or shoving cells past each other. Vib is the one exception and
+-- says why in the table itself.
 --
--- there are five of them and not six: there is no family Decay here, because
+-- there is no family Decay here, because
 -- there already is one. the global page's Decay macro scales every gust's
 -- fall along with every voice's and every drum's (gust.decay_seconds folds
 -- voice.decay_mult_ratio in), and it is one K2 press away. a second knob
@@ -113,13 +123,43 @@ gust.MACRO = {
   attack = 0.5,
   cross  = 0.5,
   level  = 0.5,
+  -- Vib is the one offset here whose neutral is NOT the centre of its knob.
+  -- every other row on this page rides a per-cell knob whose default is
+  -- somewhere in the middle of its travel, so "leave them alone" is the
+  -- middle of the macro too. vibrato has a real zero -- none of it -- and
+  -- both the cell knob and this one start there, so the family knob ADDS
+  -- rather than slides: at 0 the twelve are wherever they were put, and
+  -- turning it up puts vibrato on all twelve without having to visit each.
+  vib    = 0,
 }
 
--- an octave either way. deliberately narrower than a single cell's own
--- +-2 octaves: this moves twelve cells at once and the useful gesture is
--- moving the family into another register, not folding half of it past the
--- other half.
-gust.MACRO_PITCH_ST = 12
+-- the macro rows whose neutral is 0 rather than 0.5, and therefore add to
+-- the per-cell knob instead of sliding it. see gust.effective.
+local MACRO_ADDITIVE = {vib = true}
+
+-- and the one whose bottom half is a FADE rather than a slide. Level is the
+-- family's fader, and a fader that cannot reach silence is not one: sliding
+-- twelve cells down by half a knob leaves a cell that was at 0.7 sitting at
+-- 0.2, which is quieter and audibly still there. so below the centre detent
+-- this MULTIPLIES -- 0.5 is the cells' own levels untouched, and 0 is
+-- genuinely nothing, whatever the twelve were individually set to. above the
+-- centre it slides as every other row here does, because the top half is
+-- "all of them louder" and there is no equivalent of silence at that end.
+--
+-- it is only Level. Timbre, Attack and Cross have no zero worth reaching in
+-- one gesture, and a bottom half that behaved differently from the top on
+-- those would be a knob that changes meaning halfway along for nothing.
+local MACRO_FADE = {level = true}
+
+-- four octaves either way -- the same span a single cell's own Pitch row has,
+-- rather than the narrower one this used to keep. the argument for narrower
+-- was that this moves twelve cells at once and the useful gesture is shifting
+-- the family into a neighbouring register; the argument against is that the
+-- family IS the bed, and dropping the whole of it an octave under everything
+-- else, or lifting it into a register nothing else on the panel occupies, is
+-- exactly the gesture a knob over all twelve is for. the engine's own 8..8000
+-- Hz clip is what stops it running off the end.
+gust.MACRO_PITCH_ST = 48
 
 -- which per-cell knob each offset rides, and what that knob's own default is.
 local MACRO_OVER = {
@@ -127,6 +167,7 @@ local MACRO_OVER = {
   attack = 0.5,
   cross  = 0.3,
   level  = 0.7,
+  vib    = 0,
 }
 
 local function macro_defaults()
@@ -158,7 +199,10 @@ end
 -- are combined and no way for a push and a readout to disagree about it.
 function gust.effective(id, key)
   local base = state.get_vparam(id, key, MACRO_OVER[key] or 0.5)
-  return util.clamp(base + (gust.macro(key) - 0.5), 0, 1)
+  local m = gust.macro(key)
+  if MACRO_ADDITIVE[key] then return util.clamp(base + m, 0, 1) end
+  if MACRO_FADE[key] and m < 0.5 then return util.clamp(base * (m * 2), 0, 1) end
+  return util.clamp(base + (m - 0.5), 0, 1)
 end
 
 -- pitch ---------------------------------------------------------------------
@@ -225,6 +269,40 @@ function gust.cross(id)
   return gust.effective(id, "cross")
 end
 
+-- vibrato ---------------------------------------------------------------------
+-- §2.11d one knob, and deliberately one: depth. a second knob for rate would
+-- be the difference between a shimmer and a warble, which is worth having on
+-- a lead voice -- but twelve drones all warbling at one rate is a chorus
+-- pedal stuck on, and twelve at rates a player set individually is twelve
+-- knobs nobody is going to visit. so the rate is fixed per cell and spread
+-- across the family (gust.vib_rate below), and what the player sets is how
+-- much.
+--
+-- a semitone at the top of the knob. wider than that stops reading as vibrato
+-- and starts reading as a siren, and the cell already has a Cross input for
+-- anyone who wants pitch modulation on that scale.
+gust.VIB_MAX_ST = 1.0
+
+-- how fast, per cell, in Hz. one base rate with a small spread across the
+-- twelve seats, so the family never breathes in lockstep -- the same
+-- reasoning grove.lua's DRIFT_RATES has, and the same fix: a fixed, uneven
+-- ladder rather than a random one, so a patch sounds the same twice.
+gust.VIB_RATE_BASE = 4.9
+gust.VIB_RATE_SPREAD = 0.11
+
+function gust.vib_rate(id)
+  local cell = topology.get(id)
+  local i = (cell and cell.index or 1) - 1
+  -- an irrational-ish step so twelve cells land on twelve rates that never
+  -- come back into phase with each other.
+  return gust.VIB_RATE_BASE * (1 + ((i * 0.37) % 1) * gust.VIB_RATE_SPREAD)
+end
+
+-- the depth this cell is actually running at, its own knob plus the family's.
+function gust.vib(id)
+  return gust.effective(id, "vib")
+end
+
 -- sounding --------------------------------------------------------------------
 
 -- play this cell's note. `force` is how hard -- a key press is full, a pulse
@@ -280,13 +358,14 @@ end
 
 gust.PARAMS = {
   {
-    -- shown as the note it will actually sound, not as the knob's own
-    -- offset: with a Scale selected the knob moves in steps the offset does
-    -- not, and the number worth reading is where the key has landed.
+    -- shown as the NOTE it will actually sound, not as the knob's own offset
+    -- and not in hertz: with a Scale selected the knob moves in steps the
+    -- offset does not, and what is worth reading off a drone's page is which
+    -- note it is holding. §5.2e -- grove.note_name owns the spelling.
     key = "pitch", label = "Pitch", glyph = "marker", default = 0.5,
     get = vp_get("pitch", 0.5), set = vp_set("pitch"),
     text = function(id)
-      return string.format("%.1f Hz", gust.note_hz(id))
+      return wl("grove").note_name(gust.note_hz(id)) or "-"
     end,
     push = function(id)
       local cell = topology.get(id)
@@ -330,6 +409,26 @@ gust.PARAMS = {
     push = function(id)
       local cell = topology.get(id)
       bridge.gust_timbre(cell.index - 1, gust.timbre(id))
+    end,
+  },
+  {
+    -- §2.11d vibrato depth, in semitones at the top of the knob. zero by
+    -- default, here and on the family page, so a fresh patch sounds exactly
+    -- as it did before this row existed.
+    --
+    -- `wander` rather than `wave`: Timbre above already draws a waveform on
+    -- this page, and the thing this row sets is not a shape -- it is how far
+    -- the note strays from the line it is meant to be sitting on, which is
+    -- what that glyph draws.
+    key = "vib", label = "Vib", glyph = "wander", default = 0,
+    get = vp_get("vib", 0), set = vp_set("vib"),
+    text = function(id)
+      return string.format("%.2f st", gust.vib(id) * gust.VIB_MAX_ST)
+    end,
+    push = function(id)
+      local cell = topology.get(id)
+      bridge.gust_vib(cell.index - 1, gust.vib(id) * gust.VIB_MAX_ST,
+                      gust.vib_rate(id))
     end,
   },
   {
@@ -476,8 +575,42 @@ gust.MACROS = {
   },
   macro_row("timbre", "Timbre", "wave"),
   macro_row("attack", "Attack", "rampup"),
+  {
+    -- §2.11d the one row on this page that is an AMOUNT rather than an
+    -- offset, because vibrato has a real zero and every other row here does
+    -- not (see gust.MACRO). it reads in semitones -- the unit the per-cell
+    -- row reads in -- rather than as a signed offset, since "+0.30" off a
+    -- centre nobody can see would be a number about the knob instead of a
+    -- number about the sound.
+    key = "gust_vib", label = "Vib", glyph = "wander",
+    coarse = COARSE, fine = FINE, min = 0, max = 1,
+    get = function() return gust.macro("vib") end,
+    set = function(v) gust.set_macro("vib", v) end,
+    text = function()
+      return string.format("%.2f st", gust.macro("vib") * gust.VIB_MAX_ST)
+    end,
+    frac = function() return gust.macro("vib") end,
+    push = function() gust.push_key("vib") end,
+  },
   macro_row("cross",  "Cross",  "link"),
-  macro_row("level",  "Level",  "fader"),
+  {
+    -- the family fader. its bottom half fades to silence rather than sliding
+    -- (see MACRO_FADE), so it reads as a fader's own travel -- "off" at the
+    -- bottom, "0.00" at the centre detent where the twelve are exactly where
+    -- they were put, and a signed offset above it.
+    key = "gust_level", label = "Level", glyph = "fader",
+    coarse = COARSE, fine = FINE, min = 0, max = 1,
+    get = function() return gust.macro("level") end,
+    set = function(v) gust.set_macro("level", v) end,
+    text = function()
+      local m = gust.macro("level")
+      if m <= 0 then return "off" end
+      if m < 0.5 then return string.format("x%.2f", m * 2) end
+      return string.format("%+.2f", m - 0.5)
+    end,
+    frac = function() return gust.macro("level") end,
+    push = function() gust.push_key("level") end,
+  },
 }
 
 gust.MACRO_COUNT = #gust.MACROS

@@ -45,9 +45,9 @@ state.gparam_focus = 1
 
 -- §4.1 global macros. `swing` and `scatter` used to be one combined "Weather"
 -- knob (low half swing, high half chaos/wildness); gparam.lua now exposes
--- them as independent params, so quantise.lua and every rhythm/field
--- "wildness" read in rambler.lua/grove.lua that used to share the one
--- weather value now reads `scatter` directly. the global page calls it Rain
+-- them as independent params, so quantise.lua and every rhythm "wildness"
+-- read in rambler.lua that used to share the one weather value now reads
+-- `scatter` directly. the global page calls it Rain
 -- on screen (gparam.lua); the key stays `scatter` because five other files
 -- read it and a rename of the word on the panel is not a rename of the
 -- mechanism.
@@ -58,11 +58,12 @@ state.global = {
   -- you had to find this row and turn it down before you could hear what
   -- the gaits themselves were doing. Swing is a thing you add now.
   swing = 0,         -- quantise.lua's swing()
-  scatter = 0,       -- quantise.lua's chaos(), plus rhythm/field wildness
+  scatter = 0,       -- quantise.lua's chaos(), plus the gaits' own wildness
   bpm = 120,         -- transport tempo, mirrored onto the norns clock param
   -- global pitch quantisation, an index into grove.SCALES; 0 = free. it
   -- starts on 1 (P.Maj) rather than on free: every pitched family on the
-  -- panel -- voices, gusts, the fields that tune them -- is more listenable
+  -- panel -- voices, gusts, the synths, the registers that tune them -- is
+  -- more listenable
   -- in tune than out of it, and "free" is the deliberate choice you make
   -- after hearing what the panel does in a scale, not the state you have to
   -- find your way out of on first boot.
@@ -88,8 +89,8 @@ state.global = {
   -- purpose: it is the same four numbers in the same place, and renaming it
   -- would silently discard them out of every patch saved before the move.
   gust_space = nil,
-  -- §2.11b the gust family's unified knobs -- one Pitch/Timbre/Attack/Cross/
-  -- Level over all twelve at once, on their own page. offsets around a
+  -- §2.11b the gust family's unified knobs -- one Pitch/Timbre/Attack/Vib/
+  -- Cross/Level over all twelve at once, on their own page. offsets around a
   -- centre rather than absolute values, so they ride over what each cell is
   -- already set to instead of flattening the twelve into one. lib/gust.lua
   -- owns the defaults and the ranges.
@@ -130,8 +131,6 @@ state.decay = {}       -- id -> that sound's decay
 state.gait = {}        -- D id -> gait key (the Gait row)
 state.rooted = {}      -- D id -> locked to the norns clock? (the Clock row)
 state.rule = {}        -- R id -> weave rule key (the Rule row)
-state.mode = {}        -- F id -> pitch-field mode key (the Mode row)
-state.snap = {}        -- F id -> quantised to the scale? (the Snap row)
 state.vparam = {}      -- any cell with a page -> {key -> 0..1}
 
 -- §2.12 an LFO's destinations: which cells it moves a knob on, which knob,
@@ -211,21 +210,12 @@ function state.get_rooted(id, default)
   return state.rooted[id]
 end
 
--- the same shape for an R cell's rule (§2.7), an F cell's mode/snap pair
--- (§2.6) and a C cell's shape (§2.8), for the same reason.
+-- the same shape for an R cell's rule (§2.7), for the same reason. the grove's
+-- own pair (`state.mode` / `state.snap`, an F cell's Mode and Snap rows) sat
+-- here alongside it and went with that family (§2.6).
 function state.get_rule(id, default)
   if state.rule[id] == nil then state.rule[id] = default end
   return state.rule[id]
-end
-
-function state.get_mode(id, default)
-  if state.mode[id] == nil then state.mode[id] = default end
-  return state.mode[id]
-end
-
-function state.get_snap(id, default)
-  if state.snap[id] == nil then state.snap[id] = default and true or false end
-  return state.snap[id]
 end
 
 -- §5.5 the eight per-voice sound parameters, all stored 0..1. voice.lua owns

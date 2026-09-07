@@ -5,8 +5,26 @@ local ROOT = arg[1] or os.getenv("ROOT") or "."
 T = 0
 TEMPO = 120
 
+-- what the folder the sample cells read (§2.5) is pretending to hold. norns'
+-- util.scandir is a real directory read; here it is this table, so a test can
+-- put a different set of files in the folder without one existing. set it to
+-- nil to be a machine whose scandir fails, which is the path sample.scan's
+-- shipped-files fallback is for.
+--
+-- deliberately not just the four .wav files: the last two are there so the
+-- extension filter and the directory marker are exercised by every test that
+-- touches the list rather than by one that remembers to.
+SCANDIR_FILES = {"Rain.wav", "Thunder.wav", "Cicada.wav", "Sea.wav",
+                 "notes.txt", "old/"}
+
 util = {}
 function util.time() return T end
+function util.scandir(_)
+  if not SCANDIR_FILES then error("no such directory") end
+  local out = {}
+  for i, name in ipairs(SCANDIR_FILES) do out[i] = name end
+  return out
+end
 function util.clamp(x, a, b) if x < a then return a elseif x > b then return b else return x end end
 function util.round(x) return math.floor(x + 0.5) end
 function util.linlin(a, b, c, d, x) return c + (d - c) * ((x - a) / (b - a)) end
@@ -77,11 +95,13 @@ local function fresh_calls()
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
     smp_load = {}, smp_note = {}, smp_attack = {}, smp_decay = {},
     smp_speed = {}, smp_level = {}, smp_hold = {},
+    smp_pan = {}, smp_loop = {}, smp_gate = {},
     master_level = {}, out_level = {}, colour = {},
     g_strike = {}, g_pitch = {}, g_decay = {}, g_tone = {}, g_punch = {},
     g_drive = {}, g_amp = {},
     gust_note = {}, gust_pitch = {}, gust_attack = {}, gust_decay = {},
     gust_timbre = {}, gust_cross = {}, gust_amp = {}, gust_pan = {},
+    gust_vib = {},
     gust_space = {},
     lfo_rate = {}, lfo_shape = {},
     fm_note = {}, fm_pitch = {}, fm_set = {}, fm_hold = {},
@@ -167,6 +187,8 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.gust_amp, {t = T, index = a[1], v = a[2]})
     elseif k == "gust_pan" then
       table.insert(CALLS.gust_pan, {t = T, index = a[1], v = a[2]})
+    elseif k == "gust_vib" then
+      table.insert(CALLS.gust_vib, {t = T, index = a[1], st = a[2], rate = a[3]})
     elseif k == "gust_space" then
       table.insert(CALLS.gust_space, {t = T, mix = a[1], time = a[2], fb = a[3],
                                       tone = a[4]})
@@ -204,6 +226,12 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.smp_level, {t = T, index = a[1], v = a[2]})
     elseif k == "smp_hold" then
       table.insert(CALLS.smp_hold, {t = T, index = a[1], on = a[2]})
+    elseif k == "smp_pan" then
+      table.insert(CALLS.smp_pan, {t = T, index = a[1], v = a[2]})
+    elseif k == "smp_loop" then
+      table.insert(CALLS.smp_loop, {t = T, index = a[1], on = a[2]})
+    elseif k == "smp_gate" then
+      table.insert(CALLS.smp_gate, {t = T, index = a[1], on = a[2]})
     elseif k == "voice_hold" then
       table.insert(CALLS.voice_hold, {t = T, voice = a[1], on = a[2]})
     elseif k == "g_hold" then

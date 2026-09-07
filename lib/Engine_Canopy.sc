@@ -28,15 +28,18 @@
 // the output Compressor are both gone.
 //
 // the four field recordings (rain, cicada, thunder, sea) used to run as
-// always-on loops with a fader each. they are four playable cells now
-// (\wl_smp x nSmp, §2.5): the buffer is the same, but nothing sounds until a
-// pulse triggers it, and what it does then is swell in under an attack and
-// out under a fall the player sets per cell. each one used to pan itself by
-// where its cell sits and sum into one shared stereo bus \woodland_fx read,
-// so an SFX loop was audible with no patching at all; it writes a mono tap
-// into its own patchBus slot now (smpOutBase) and is heard through an
-// Output-row cable like every other source, panned by the Out cell it lands
-// on. one rule about what is audible, for every family that makes a sound.
+// always-on loops with a fader each. they are playable cells now (\wl_smp x
+// nSmp, §2.5) -- eight of them, on the seats the heartwood lattice and the
+// grove's pitch fields used to have, and each pointed at any file in the
+// script's audio/ folder rather than at one fixed .wav. nothing sounds until
+// a pulse triggers it, and what it does then is swell in under an attack and
+// out under a fall the player sets per cell -- once, or round and round until
+// the next pulse lets it go (`loop`/`gate`).
+//
+// each writes TWO outputs: a mono tap into its own patchBus slot (smpOutBase),
+// which is what a cable out of it carries, and a panned copy into a shared
+// stereo bus (smpBus) that \woodland_fx reads directly. the second is what
+// makes a bed audible with nothing patched, the way a gust already was.
 //
 // the gusts (§2.11): the Q4/Q6 step-sequencer lanes' ten cells become ten
 // (later grown to twelve)
@@ -61,7 +64,7 @@
 
 Engine_Canopy : CroneEngine {
 	var gSrc, gPatch, gVoice, gTap, gFx;
-	var patchBus, excMeterBus, outMeterBus, outLevelBus, gustBus, gustSpaceBus;
+	var patchBus, excMeterBus, outMeterBus, outLevelBus, gustBus, gustSpaceBus, smpBus;
 	var voiceSynths;
 	var gSynths;
 	var excSynths;
@@ -117,7 +120,7 @@ Engine_Canopy : CroneEngine {
 		\wl_g_noise, \wl_g_noise, \wl_g_noise
 	];
 
-	classvar nVoices = 4, nExc = 6, nG = 6, nOut = 16, nSmp = 4,
+	classvar nVoices = 4, nExc = 6, nG = 6, nOut = 16, nSmp = 8,
 		nGust = 12,
 		nLfo = 4,
 		// §2.13 the two new synth families on the right of the instrument
@@ -159,10 +162,13 @@ Engine_Canopy : CroneEngine {
 	// sixteen fixed-pan buses). `lfoOutBase` is one sine tap per LFO cell, no
 	// mod-input bus of its own since the family is a pure source (see
 	// bridge.lua's BUS comment). the heartwood's two bus families are gone
-	// with the lattice itself; `smpOutBase` is one tap per sample cell that
-	// took its seats -- those four used to pan themselves into a shared
-	// stereo bus \woodland_fx read directly, and are ordinary cabled sources
-	// now, so an SFX loop is routed exactly like a voice.
+	// with the lattice itself, and so is the grove; `smpOutBase` is one tap
+	// per sample cell, and there are eight of them on those two families'
+	// seats now (§2.5). a sample cell reaches the speakers on a panned path
+	// of its own (smpBus, below) the way a gust does, so this tap is not what
+	// makes it audible -- it is what a cable OUT of one carries: a second
+	// copy at an Output cell, a helping into the send, a modulator on a
+	// synth.
 	// §2.13 adds two families of the same shape a gust already had -- one
 	// mono tap out per cell and one summed mod input per cell -- and §2.11c
 	// adds one more channel on the end: `sendBase`, the single mono bus every
@@ -174,9 +180,9 @@ Engine_Canopy : CroneEngine {
 		voiceOutBase = 16, gvoiceOutBase = 20, outBase = 26,
 		gustOutBase = 42, gustModBase = 54, lfoOutBase = 66,
 		smpOutBase = 70,
-		fmOutBase = 74, fmModBase = 76, vaOutBase = 78, vaModBase = 80,
-		sendBase = 82,
-		patchTotal = 83;
+		fmOutBase = 78, fmModBase = 80, vaOutBase = 82, vaModBase = 84,
+		sendBase = 86,
+		patchTotal = 87;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -226,6 +232,15 @@ Engine_Canopy : CroneEngine {
 		// reaches the speakers through an Output-row cell or not at all.
 		gustBus = Bus.audio(server, 2);
 		gustSpaceBus = Bus.audio(server, 2);
+
+		// §2.5 the sample cells' own automatic route to the mix, the same
+		// shape the gusts' is and for the same reason: every \wl_smp pans
+		// itself into here, and \woodland_fx reads it alongside the Output
+		// row. it does NOT go through \wl_gust_space -- that delay is the
+		// gust family's own colour, and a bed arriving pre-delayed is a bed
+		// nobody asked for. a sample cell that wants the send has a Send row
+		// like every other cell.
+		smpBus = Bus.audio(server, 2);
 
 		// smpBufs/smpSynths hold one buffer and one \wl_smp synth per sample
 		// cell, filled in as smp_load's async reads land; smpArgs is every
@@ -500,7 +515,7 @@ Engine_Canopy : CroneEngine {
 		SynthDef(\wl_gust, {
 			arg out=0, spaceOut=0, modIn=0, t_trig=0, force=0.8,
 				freq=220, atk=0.8, dcy=3.0, timbre=0.35, cross=0.3,
-				amp=0.7, pan=0, hold=0;
+				amp=0.7, pan=0, hold=0, vib=0, vibRate=4.9;
 
 			var x = cross.clip(0, 1);
 			var modRaw = InFeedback.ar(modIn, 1);
@@ -535,12 +550,23 @@ Engine_Canopy : CroneEngine {
 			// a pair of gusts cabled together and both turned up genuinely
 			// modulate each other, which is what Cross was always for.
 			var fmSemis = mod * 24;
+			// §2.11d vibrato: depth in SEMITONES straight off Lua (gust.lua's
+			// VIB_MAX_ST is the knob's own top), at a rate fixed per cell so
+			// the twelve never breathe in step. summed with the cross-mod
+			// bend rather than applied after it, so one .midiratio does both
+			// and a modulated gust's vibrato rides its bend instead of
+			// fighting it.
+			//
+			// control rate, unlike `mod`: this is a few cycles a second, and
+			// an audio-rate oscillator to make one would be paying for a
+			// resolution nothing can hear.
+			var vibSemis = SinOsc.kr(vibRate.clip(0.05, 20)) * vib.clip(0, 4);
 			// the tuned pitch, lagged so an OSC retune is a move rather than
 			// a step, and then the modulated one on top of it. the two are
 			// kept apart because only the oscillators want the modulated
 			// version -- see the filter below.
 			var fBase = Lag.kr(freq, 0.04);
-			var f = (fBase * fmSemis.midiratio).clip(8, 8000);
+			var f = (fBase * (fmSemis + vibSemis).midiratio).clip(8, 8000);
 
 			// a slow swell and a slow fall. the curves matter more than the
 			// times do: \sin-ish rise (curve 3) is the shape of something
@@ -658,8 +684,13 @@ Engine_Canopy : CroneEngine {
 			var f = (fBase * (mod * 12).midiratio).clip(8, 8000);
 
 			var holdAmt = Lag.kr(hold.clip(0, 1), 0.15);
+			// §2.13 the ceilings match lib/synth.lua's own ATTACK_MAX and
+			// DECAY_MAX. the decay one was 20 and is 30: the Decay row's
+			// upper half was widened so these two can hold a note the way a
+			// gust does, and a clip below the knob's own top would have made
+			// the last of its travel do nothing.
 			var a = atk.clip(0.001, 8);
-			var d = dcy.clip(0.02, 20);
+			var d = dcy.clip(0.02, 30);
 			var env = EnvGen.ar(Env.perc(a, d, 1, [-2, -4]), t_trig)
 				* force.clip(0, 1);
 			// §2.9b a Clock cell set to High: the same envelope shape held
@@ -720,8 +751,13 @@ Engine_Canopy : CroneEngine {
 			var f = (fBase * (mod * 12).midiratio).clip(8, 8000);
 
 			var holdAmt = Lag.kr(hold.clip(0, 1), 0.15);
+			// §2.13 the ceilings match lib/synth.lua's own ATTACK_MAX and
+			// DECAY_MAX. the decay one was 20 and is 30: the Decay row's
+			// upper half was widened so these two can hold a note the way a
+			// gust does, and a clip below the knob's own top would have made
+			// the last of its travel do nothing.
 			var a = atk.clip(0.001, 8);
-			var d = dcy.clip(0.02, 20);
+			var d = dcy.clip(0.02, 30);
 			var env = EnvGen.ar(Env.perc(a, d, 1, [-2, -4]), t_trig)
 				* force.clip(0, 1);
 			var sustEnv = EnvGen.ar(Env.asr(a, 1, d, [-2, -4]), hold);
@@ -923,9 +959,9 @@ Engine_Canopy : CroneEngine {
 		// instrument -- an encoder step that steps the whole mix is a click
 		// on every one of them.
 		SynthDef(\woodland_fx, {
-			arg outBus=0, out=0, level=0.8, lvlBus=0, gustIn=0,
+			arg outBus=0, out=0, level=0.8, lvlBus=0, gustIn=0, smpIn=0,
 				tape=0, crush=0, alias=0, loss=0,
-				chorus=0, swirl=0.3, shape=0.5, comp=0;
+				chorus=0, swirl=0.113, shape=0.5, comp=0;
 			var chans = In.ar(outBus, nOut);
 			var lvls = Lag.kr(In.kr(lvlBus, nOut).clip(0, 1).squared, 0.08);
 			var panPos = Array.fill(nOut, { |i| -1 + (2 * i / (nOut - 1)) });
@@ -941,7 +977,15 @@ Engine_Canopy : CroneEngine {
 			// automatic route is against the cabled one, which is what it was
 			// always really doing.
 			var gustDry = In.ar(gustIn, 2) * 0.35;
-			var sig = dry + gustDry;
+			// §2.5 the sample cells, already panned by cell position and
+			// already scaled at the source (\wl_smp's own 0.35 on mixOut) --
+			// the second family that arrives here without a cable. no level
+			// of its own on this line for that reason: the gusts' 0.35 above
+			// is applied here because they come through a shared delay that
+			// has no per-cell gain to fold it into, and a sample cell has
+			// nothing between it and this bus.
+			var smpDry = In.ar(smpIn, 2);
+			var sig = dry + gustDry + smpDry;
 			var kTape = Lag.kr(tape.clip(0, 1), 0.08);
 			var kCrush = Lag.kr(crush.clip(0, 1), 0.08);
 			var kAlias = Lag.kr(alias.clip(0, 1), 0.08);
@@ -1234,24 +1278,33 @@ Engine_Canopy : CroneEngine {
 			Out.kr(out, Amplitude.kr(sig * lvls, 0.005, 0.4));
 		}).add;
 
-		// §2.5 one sample cell: Rain, Cicada, Thunder or Sea. these four
-		// recordings used to be always-on loops with a fader each; they are
-		// played now, and the whole instrument is the envelope over the top
-		// of them.
+		// §2.5 one sample cell. eight of them now, on the seats the
+		// heartwood lattice and the grove's pitch fields used to have. the
+		// four recordings that ship with the script used to be always-on
+		// loops with a fader each; they are PLAYED now, any file in the
+		// script's audio/ folder can be in any slot, and the whole instrument
+		// is the envelope over the top.
 		//
-		// `out` is this cell's own mono patchBus tap (smpOutBase), which
-		// means an SFX loop is heard only through an Output-row cable, like
-		// a voice or a percussion cell. it used to Pan2 itself by its cell's
-		// column into a shared stereo bus \woodland_fx read directly; the pan
-		// now comes from the Out cell the cable lands on, which is what the
-		// Output row is for, and the mono sum that used to happen just ahead
-		// of that Pan2 happens just ahead of this Out instead.
+		// two outputs, and they do different jobs:
 		//
-		// the buffer still loops underneath, and deliberately so: a trigger
-		// restarts it from the top (PlayBuf's own `trigger`), but a second
-		// trigger arriving twenty seconds into a forty-second fall finds the
-		// recording still running rather than having stopped at its end and
-		// gone silent. what is heard is entirely the envelope.
+		//   `out`      this cell's own mono patchBus tap (smpOutBase). it is
+		//              what a cable OUT of the cell carries -- a second copy
+		//              at an Output cell, a helping into the send, a
+		//              modulator on a synth.
+		//   `mixOut`   the family's shared stereo bus (smpBus), panned by the
+		//              column the cell sits in. this is what makes a sample
+		//              cell audible with nothing patched, the same way a gust
+		//              is. it spent one build routed only through `out`,
+		//              which meant a bed cost an Output seat and a cable
+		//              before it made a sound.
+		//
+		// LOOP or one shot (`loop`). one shot is the default and stops at the
+		// end of the buffer, whether or not the envelope is still open --
+		// which is what "one shot" has to mean. looping wraps instead, and is
+		// held open by `gate`: the Lua side toggles that on alternate
+		// arrivals, so the same cable that starts a bed stops it. the buffer
+		// used to wrap unconditionally, so a short file repeated under a long
+		// fall with no way to ask it not to.
 		//
 		// Env.perc with the same curve pair \wl_gust uses -- a \sin-ish rise
 		// (curve 3) is the shape of weather arriving rather than a ramp, and
@@ -1267,47 +1320,69 @@ Engine_Canopy : CroneEngine {
 		// Level is squared for the same reason a fader is, and lagged so
 		// turning it while the cell is sounding is a fade.
 		SynthDef(\wl_smp, {
-			arg out=0, bufnum=0, t_trig=0, force=1,
-				atk=1.0, dcy=6.0, speed=1, level=0.7, hold=0;
+			arg out=0, mixOut=0, bufnum=0, t_trig=0, force=1,
+				atk=1.0, dcy=6.0, speed=1, level=0.7, pan=0,
+				hold=0, loop=0, gate=0;
 			var rate = BufRateScale.kr(bufnum) * speed.clip(0.125, 8);
-			var sig = PlayBuf.ar(2, bufnum, rate, trigger: t_trig, loop: 1);
+			var sig = PlayBuf.ar(2, bufnum, rate,
+			                     trigger: t_trig, loop: loop.clip(0, 1));
 			var env = Lag.ar(
 				EnvGen.ar(Env.perc(atk.clip(0.02, 20), dcy.clip(0.1, 40), 1, [3, -4]),
 				          t_trig),
 				0.005
 			) * force.clip(0, 1);
-			// §2.9b a Clock cell set to High: the gate is held rather than
-			// struck, so the cell has to SUSTAIN instead of falling away. an
-			// asr running off the same attack time rises exactly as the perc
-			// envelope would and then simply stays there; `hold` selects
-			// between the two, so a cell nothing is holding is bit-identical
-			// to what it was before this argument existed.
+			// two ways of holding this cell open, and they must not be able
+			// to close each other: §2.9b a Clock cell set to High (`hold`),
+			// and §2.5 a looping cell the player has toggled on (`gate`).
+			// whichever is up wins, so releasing one while the other is still
+			// raised leaves the cell sounding.
+			var held = (hold + gate).clip(0, 1);
+			// the gate is held rather than struck, so the cell has to SUSTAIN
+			// instead of falling away. an asr running off the same attack
+			// time rises exactly as the perc envelope would and then simply
+			// stays there; `held` selects between the two, so a cell nothing
+			// is holding is bit-identical to what it was before either of
+			// these arguments existed.
 			var sust = EnvGen.ar(
 				Env.asr(atk.clip(0.02, 20), 1, dcy.clip(0.1, 40), [3, -4]),
-				hold
+				held
 			);
 			// see \wl_gust: a real edge for the EnvGen, a ramp for the mix.
-			var holdAmt = Lag.kr(hold.clip(0, 1), 0.15);
+			var holdAmt = Lag.kr(held, 0.15);
 			var amp = Lag.kr(level.clip(0, 1).squared, 0.1);
+			var mono;
 			// mono-summed: these are field recordings, so the two channels
-			// are near enough the same thing, and the Out cell this is cabled
-			// to is what decides where in the image it lands.
+			// are near enough the same thing, and where the cell lands in the
+			// image is decided by its seat (`pan`) or by the Out cell a cable
+			// takes it to.
 			//
 			// §8.6 the constant was 0.5 * 0.35 -- the same headroom factor
 			// every synthesised voice carries, on the reasoning that a
 			// full-level recording should not sit hotter than a voice at the
 			// same knob position. the flaw in that is the premise: these
-			// recordings are not full-level. measured, the four ran from -42
-			// to -55 LUFS against a gust's -22, so the quietest of them
-			// (Cicada) was thirty-three decibels down and effectively
+			// recordings are not full-level. measured, the four that ship
+			// ran from -42 to -55 LUFS against a gust's -22, so the quietest
+			// of them (Cicada) was thirty-three decibels down and effectively
 			// inaudible however far its fader went up.
 			//
-			// this constant is set by the quietest of the four; the other
-			// three are trimmed back down per cell (topology.lua's SMP_CELLS)
-			// so that every trim is at most 1 and none can push `level` past
-			// the clip below.
-			Out.ar(out, Mix.ar(sig) * 8.6
-			            * ((env * (1 - holdAmt)) + (sust * holdAmt)) * amp);
+			// this constant is set by the quietest of those four; the rest
+			// are trimmed back down per RECORDING on the Lua side
+			// (sample.lua's FILE_TRIM) so that every trim is at most 1 and
+			// none can push `level` past the clip above.
+			// LeakDC because of `loop`. with the buffer set to stop at its
+			// end rather than wrap, PlayBuf holds its LAST FRAME from then
+			// on -- and a recording that does not fade out ends on a nonzero
+			// sample, so a short file under a long envelope would sit on a
+			// DC offset for the rest of that envelope. on a field recording
+			// this is otherwise a no-op.
+			mono = LeakDC.ar(Mix.ar(sig)) * 8.6
+			       * ((env * (1 - holdAmt)) + (sust * holdAmt)) * amp;
+			Out.ar(out, mono);
+			// 0.35 against the tap, the same balance \woodland_fx strikes
+			// between the gusts' automatic route and the cabled one: what
+			// this number says is how loud a cell is when nobody has placed
+			// it, not how loud the family is.
+			Out.ar(mixOut, Pan2.ar(mono * 0.35, pan.clip(-1, 1)));
 		}).add;
 
 		server.sync;
@@ -1404,7 +1479,8 @@ Engine_Canopy : CroneEngine {
 			\outBus, patchBus.index + outBase,
 			\out, context.out_b.index,
 			\lvlBus, outLevelBus.index,
-			\gustIn, gustSpaceBus.index
+			\gustIn, gustSpaceBus.index,
+			\smpIn, smpBus.index
 		], gFx);
 
 		// gTap: after gVoice (so the exciter meters below share the group
@@ -1663,6 +1739,17 @@ Engine_Canopy : CroneEngine {
 			if (i >= 0 and: { i < nGust }) { gustSynths[i].set(\cross, msg[2]) };
 		});
 
+		// gust_vib(index, semitones, rateHz) -- §2.11d. depth and rate arrive
+		// together because only the depth is a knob: the rate is fixed per
+		// cell on the Lua side (gust.vib_rate) and never moves on its own, so
+		// a second command for it would only ever be sent alongside this one.
+		this.addCommand("gust_vib", "iff", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nGust }) {
+				gustSynths[i].set(\vib, msg[2], \vibRate, msg[3]);
+			};
+		});
+
 		this.addCommand("gust_amp", "if", { |msg|
 			var i = msg[1].asInteger;
 			if (i >= 0 and: { i < nGust }) { gustSynths[i].set(\amp, msg[2]) };
@@ -1906,7 +1993,11 @@ Engine_Canopy : CroneEngine {
 				if (smpBufs[i].notNil) { smpBufs[i].free; smpBufs[i] = nil };
 				if (smpSynths[i].notNil) { smpSynths[i].free; smpSynths[i] = nil };
 				smpBufs[i] = Buffer.read(server, path, action: { |buf|
-					var args = [\out, patchBus.index + smpOutBase + i, \bufnum, buf.bufnum];
+					var args = [
+						\out, patchBus.index + smpOutBase + i,
+						\mixOut, smpBus.index,
+						\bufnum, buf.bufnum
+					];
 					if (smpSynths[i].notNil) { smpSynths[i].free };
 					smpArgs[i].keysValuesDo({ |k, v| args = args ++ [k, v] });
 					smpSynths[i] = Synth.new(\wl_smp, args, gSrc);
@@ -1958,11 +2049,45 @@ Engine_Canopy : CroneEngine {
 			};
 		});
 
+		// smp_pan(index, -1..1) -- §2.5: where this cell sits on the family's
+		// own route to the mix. fixed by the cell's column and pushed once at
+		// init, exactly like gust_pan.
+		this.addCommand("smp_pan", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nSmp }) {
+				smpArgs[i][\pan] = msg[2];
+				if (smpSynths[i].notNil) { smpSynths[i].set(\pan, msg[2]) };
+			};
+		});
+
+		// smp_loop(index, 0|1) -- §2.5: whether the buffer wraps at its end
+		// or stops there. the Mode row.
+		this.addCommand("smp_loop", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nSmp }) {
+				smpArgs[i][\loop] = msg[2];
+				if (smpSynths[i].notNil) { smpSynths[i].set(\loop, msg[2]) };
+			};
+		});
+
+		// smp_gate(index, 0|1) -- §2.5: the envelope gate a LOOPING cell
+		// toggles. separate from smp_hold below, which is a Clock cell on
+		// High doing the same thing from outside; \wl_smp takes whichever of
+		// the two is up, so neither can close the other.
+		this.addCommand("smp_gate", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nSmp }) {
+				smpArgs[i][\gate] = msg[2];
+				if (smpSynths[i].notNil) { smpSynths[i].set(\gate, msg[2]) };
+			};
+		});
+
 		// smp_hold(index, 0|1) -- §2.9b: a Clock cell set to High holds this
 		// cell's envelope open instead of striking it, so the recording plays
 		// continuously for as long as the gate is up. \wl_smp crossfades
-		// between its perc and its asr on this argument, so a cell nobody is
-		// holding never leaves the path it has always had.
+		// between its perc and its asr on this argument OR smp_gate above,
+		// whichever is raised, so a cell nobody is holding never leaves the
+		// path it has always had.
 		this.addCommand("smp_hold", "if", { |msg|
 			var i = msg[1].asInteger;
 			if (i >= 0 and: { i < nSmp }) {
@@ -1994,6 +2119,7 @@ Engine_Canopy : CroneEngine {
 		outMeterBus.free;
 		gustBus.free;
 		gustSpaceBus.free;
+		smpBus.free;
 		gFx.free;
 		gTap.free;
 		gVoice.free;

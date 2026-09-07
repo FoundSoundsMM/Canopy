@@ -34,11 +34,11 @@ local bridge = {}
 -- is a pure source (the same shape a Clock cell is on the pulse side).
 --
 -- the two heartwood families (`heart_in` / `heart_out`) are gone with the
--- lattice itself (§2.5). the four Sample cells that took those seats used to
--- reach the mix on their own panned path inside the engine, exactly as a gust
--- does, and needed no bus here; they are ordinary cabled sources now
--- (`smp_out`), so an SFX loop is heard the same way a voice is -- through an
--- Output-row cell or not at all.
+-- lattice itself (§2.5), and so is the grove. the eight Sample cells on
+-- those seats reach the mix on their own panned path inside the engine, the
+-- way a gust does -- but they still need a tap here, because a cable OUT of
+-- one still means something: a second copy at an Output cell, a helping into
+-- the send, a modulator on a synth.
 bridge.BUS = {
   exc        = {base = 0,  n = 6},  -- E cell raw outputs
   colour_mod = {base = 6,  n = 6},  -- per-E colour cross-mod sum
@@ -49,18 +49,18 @@ bridge.BUS = {
   gust_out   = {base = 42, n = 12}, -- per-GUST audio tap
   gust_mod   = {base = 54, n = 12}, -- per-GUST cross-mod input sum
   lfo_out    = {base = 66, n = 4},  -- per-LFO sine tap
-  smp_out    = {base = 70, n = 4},  -- per-SMP (sample cell) audio tap
+  smp_out    = {base = 70, n = 8},  -- per-SMP (sample cell) audio tap
   -- §2.13 the two new synth families, each the same shape a gust already
   -- has: one mono tap out per cell, and one summed mod input per cell that
   -- the cell's own Cross knob scales.
-  fm_out     = {base = 74, n = 2},  -- per-FM cell audio tap
-  fm_mod     = {base = 76, n = 2},  -- per-FM cross-mod input sum
-  va_out     = {base = 78, n = 2},  -- per-VA cell audio tap
-  va_mod     = {base = 80, n = 2},  -- per-VA cross-mod input sum
+  fm_out     = {base = 78, n = 2},  -- per-FM cell audio tap
+  fm_mod     = {base = 80, n = 2},  -- per-FM cross-mod input sum
+  va_out     = {base = 82, n = 2},  -- per-VA cell audio tap
+  va_mod     = {base = 84, n = 2},  -- per-VA cross-mod input sum
   -- §2.11c the send bus: ONE mono channel, not one per cell. every source's
   -- Send knob is the gain on an ordinary patch synth from that source's own
   -- tap into here, and here is what the shared effect reads (lib/send.lua).
-  send       = {base = 82, n = 1},
+  send       = {base = 86, n = 1},
 }
 
 function bridge.bus(name, index)
@@ -224,6 +224,13 @@ function bridge.gust_cross(index, v)
   engine.gust_cross(index, v)
 end
 
+-- §2.11d vibrato: depth in semitones and rate in Hz, sent together because
+-- the rate is not a knob -- it is fixed per cell (gust.vib_rate) and only
+-- ever travels alongside a depth the player has just moved.
+function bridge.gust_vib(index, semitones, rate_hz)
+  engine.gust_vib(index, semitones, rate_hz)
+end
+
 function bridge.gust_amp(index, v)
   engine.gust_amp(index, v)
 end
@@ -371,20 +378,17 @@ function bridge.out_level(index, v)
   engine.out_level(index, v)
 end
 
--- §2.5 the four Sample cells (lib/sample.lua): Rain, Cicada, Thunder, Sea.
--- `index` is 0-based and matches the cell's own `index` field, which is also
--- the engine's buffer slot. smp_load fires once per cell at init with that
--- sample's absolute path; the engine reads each async and only lets that slot
--- sound once its buffer is ready. every knob below is held engine-side
--- whether or not the buffer has landed, so pushing them straight after the
--- load (which sample.init always does) loses nothing.
+-- §2.5 the eight Sample cells (lib/sample.lua). `index` is 0-based and
+-- matches the cell's own `index` field, which is also the engine's buffer
+-- slot. the engine reads each file async and only lets that slot sound once
+-- its buffer is ready. every knob below is held engine-side whether or not
+-- the buffer has landed, so pushing them straight after a load (which
+-- sample.init and the File row both do) loses nothing.
 --
--- these replaced amb_load/amb_volume, which played the same four recordings
--- as an always-on bed with a fader each. same files, same buffers -- they are
--- triggered now rather than left running, so a level is no longer the only
--- thing there is to say about one. there is no smp_pan: a sample cell used to
--- pan itself by its seat on the panel, and is cabled to an Output cell now
--- (`smp_out` above), so the Out cell it lands on is what places it.
+-- smp_load fires once per cell at init AND every time the File row lands on a
+-- different recording -- the folder is a knob now, so this is no longer a
+-- once-per-boot message. the engine frees that slot's synth and buffer and
+-- restarts it on the new one, carrying every knob across (its smpArgs).
 function bridge.smp_load(index, path)
   engine.smp_load(index, path)
 end
@@ -410,6 +414,29 @@ end
 
 function bridge.smp_level(index, v)
   engine.smp_level(index, v)
+end
+
+-- where this sample sits in the stereo field. fixed by the cell's column
+-- (topology's `pan`) and pushed once at init -- there is no knob for it, the
+-- same arrangement a gust has and for the same reason: a family that mixes
+-- itself has to be spread by something, and where the cell physically sits is
+-- the one placement the player can see without opening a page.
+function bridge.smp_pan(index, v)
+  engine.smp_pan(index, v)
+end
+
+-- §2.5 one shot or loop: whether the buffer wraps at its end or simply stops.
+-- the Mode row's half of the pair.
+function bridge.smp_loop(index, on)
+  engine.smp_loop(index, on and 1 or 0)
+end
+
+-- and the other half: the envelope gate a looping cell toggles. distinct from
+-- smp_hold below, which is a Clock cell on High holding the same envelope
+-- open from outside -- the engine takes whichever of the two is up, so
+-- neither can silence a cell the other is holding.
+function bridge.smp_gate(index, on)
+  engine.smp_gate(index, on and 1 or 0)
 end
 
 -- §2.9b the four gates. a Clock cell set to High (lib/clockcell.lua) holds

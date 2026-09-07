@@ -290,8 +290,8 @@ local function tempo_text()
 end
 
 -- tag: what kind of page this is, dim, in front of the name. it is the one
--- thing the name alone cannot tell you: "Bittern" does not say whether it is
--- a pitch field or a drum.
+-- thing the name alone cannot tell you: "Yaffle" does not say whether it is
+-- a drum or a trigger.
 --
 -- it used to be the cell's one-letter panel code -- "M Oak", "T Hob",
 -- "R Tangle". that letter is silk-screened nowhere; on a monome there is no
@@ -607,7 +607,7 @@ end
 
 -- "what does this cell do", under the grid rather than instead of it: it
 -- only fits when the page on screen right now leaves its whole second row
--- empty (four rows or fewer -- D, R, F, E, H, C, O, and a voice's second
+-- empty (four rows or fewer -- D, R, E, H, C, O, and a voice's second
 -- page all qualify; TM's eight and a voice's first page do not, and a
 -- GVOICE/GUST page's six leaves it only half empty, so those stay quiet
 -- rather than crowd two free columns). toggle_page (gridui.lua) resets
@@ -1483,8 +1483,7 @@ end
 --
 -- the shape of the matrix: a voice is one point that reacts to whatever is at
 -- the other end. a pulse always strikes it. a continuous stream (an exciter,
--- a gust, an LFO) always drives its mod path. a pitch field or a register
--- tunes it. another voice does both at once, in both directions. an Output
+-- a gust, an LFO) always drives its mod path. a register tunes it. another voice does both at once, in both directions. an Output
 -- cell is a pure destination and never talks back.
 local INTERACTION_DESC = {
   ["voice|voice"] = "each voice's sound modulates the other, and either one answers a strike",
@@ -1494,7 +1493,6 @@ local INTERACTION_DESC = {
   ["voice|TM"] = "the pattern tunes the voice, and the voice's strike steps it",
   ["voice|C"] = "the clock pulse strikes the voice",
   ["voice|E"] = "the exciter drives the voice's mod path. Balance sets what it does",
-  ["voice|F"] = "the field tunes the voice, as far as its own Range knob allows",
   ["D|D"] = "the two pull each other into time, and each also triggers the other",
   ["D|R"] = "the pulse goes through this rule on its way out",
   ["R|R"] = "two rules in series. the chain is the pattern",
@@ -1502,17 +1500,12 @@ local INTERACTION_DESC = {
   ["R|E"] = "the changed pulse fires one grain of the exciter",
   ["E|E"] = "each exciter modulates the other's colour",
   ["E|O"] = "the exciter is heard, panned to where this output sits",
-  ["D|F"] = "each pulse steps the field to a new note",
-  ["R|F"] = "the changed pulse steps the field",
-  ["E|F"] = "the exciter's colour follows the field's line",
-  ["F|F"] = "the two fields pull together, or apart at negative gain",
   ["D|C"] = "nothing. a clock cell only ever sends",
   -- §2.7b a percussion cell has no separate trigger socket: it is struck
   -- directly and answers with a pulse of its own a tick later.
   ["D|GVOICE"] = "the pulse strikes the drum, which answers with a pulse of its own",
   ["R|GVOICE"] = "the changed pulse strikes the drum, which answers in turn",
   ["E|GVOICE"] = "the drum's answering pulse fires one grain of the exciter",
-  ["F|GVOICE"] = "the drum's answering pulse steps the field",
   ["GVOICE|GVOICE"] = "one drum's answering pulse strikes the next",
   ["GVOICE|O"] = "the drum is heard, panned to where this output sits",
   -- §2.3b a register takes a pulse in and answers with a NOTE, not with
@@ -1521,7 +1514,6 @@ local INTERACTION_DESC = {
   ["D|TM"] = "the pulse steps the pattern to its next note",
   ["R|TM"] = "the changed pulse steps the pattern to its next note",
   ["E|TM"] = "nothing. a register sends notes, and an exciter takes a trigger",
-  ["F|TM"] = "nothing. a register takes a trigger, not a note",
   ["TM|GVOICE"] = "nothing. a drum takes a trigger, and a register sends notes",
   ["TM|TM"] = "nothing. neither one clocks the other",
   -- clock cells: pure sources, in time with the transport at their own ratio.
@@ -1529,7 +1521,6 @@ local INTERACTION_DESC = {
   ["R|C"] = "the clock pulse goes through this rule on its way out",
   ["C|GVOICE"] = "the clock pulse strikes the drum, which answers with a pulse",
   ["E|C"] = "the clock pulse cuts the exciter into a short grain",
-  ["F|C"] = "each clock pulse steps the field to a new note",
   ["C|TM"] = "the clock pulse steps the pattern to its next note",
   ["C|GUST"] = "the clock pulse plays the gust's note",
   -- §2.11 the gusts. a pulse plays the note and the gust answers with a pulse
@@ -1543,7 +1534,6 @@ local INTERACTION_DESC = {
   ["GUST|GUST"] = "the two gusts FM each other. turn up Cross on both to hear it",
   ["voice|GUST"] = "the gust drives the voice's mod path, and the voice bends the gust",
   ["E|GUST"] = "the exciter bends the gust, and the gust rides the exciter's colour",
-  ["F|GUST"] = "nothing. a gust takes its pitch from the Scale, not from a field",
   ["GUST|O"] = "a second copy of the gust here, on top of the one it mixes itself",
   -- §2.5 the sample cells. a pulse plays the recording from the top; nothing
   -- comes back out, because a swell seconds long is not an event anything
@@ -1555,7 +1545,6 @@ local INTERACTION_DESC = {
   ["GVOICE|SMP"] = "the drum's answering pulse plays the sample",
   ["voice|SMP"] = "the voice's own strike plays the sample",
   ["E|SMP"] = "nothing continuous. only a pulse plays a sample",
-  ["F|SMP"] = "nothing. a sample cell takes a trigger, not a note",
   ["GUST|SMP"] = "nothing. neither one sends the other a pulse",
   ["LFO|SMP"] = "the LFO moves one knob on the sample. pick which on its Param row",
   ["SMP|SMP"] = "nothing. a sample cell never sends a pulse",
@@ -1564,14 +1553,13 @@ local INTERACTION_DESC = {
   -- position, and cabling it to a second Out cell moves it rather than
   -- adding to it. two Out cells together is not a cable at all -- and a
   -- pulse cell reaching one is not either: an output carries audio, and a
-  -- trigger, a rule, a clock, a register and a field all make pulses and
-  -- notes rather than sound.
+  -- trigger, a rule, a clock and a register all make pulses and notes rather
+  -- than sound.
   ["O|O"] = "nothing. an output is a destination, never a source",
   ["D|O"] = "nothing. an output carries sound, and a trigger makes pulses",
   ["R|O"] = "nothing. an output carries sound, and a rule makes pulses",
   ["C|O"] = "nothing. an output carries sound, and a clock makes pulses",
   ["TM|O"] = "nothing. an output carries sound, and a register makes notes",
-  ["F|O"] = "nothing. an output carries sound, and a field makes notes",
   -- a drum answers its own strike with a pulse a tick later, so it can drive
   -- a voice the way a trigger does.
   ["voice|GVOICE"] = "the drum's answering pulse strikes the voice, which answers in turn",
@@ -1584,7 +1572,6 @@ local INTERACTION_DESC = {
   ["LFO|TM"] = "open the LFO's page to pick which of the register's knobs it moves",
   ["LFO|D"] = "open the LFO's page to pick which of the trigger's knobs it moves",
   ["LFO|R"] = "open the LFO's page to pick which of the rule's knobs it moves",
-  ["LFO|F"] = "open the LFO's page to pick which of the field's knobs it moves",
   ["LFO|C"] = "open the LFO's page to pick which of the clock's knobs it moves",
   ["LFO|LFO"] = "nothing. an LFO has no knob another one can move",
   ["LFO|O"] = "heard directly. turn Speed up into the audio range for a plain tone",
@@ -1601,7 +1588,6 @@ local SYNTH_DESC = {
   R = "the changed pulse plays a note, which answers in turn",
   C = "the clock pulse plays a note on the synth",
   TM = "the register tunes the synth. cable a trigger in to play it",
-  F = "the field tunes the synth, as far as its own Range knob allows",
   E = "the exciter bends the synth, and the synth rides the exciter's colour",
   GVOICE = "the drum's answering pulse plays a note, and its sound bends the synth",
   GUST = "the two cross modulate. turn up Cross on both to hear it",
@@ -1612,7 +1598,7 @@ local SYNTH_DESC = {
 }
 
 local TYPE_ORDER = {
-  LFO = 0, voice = 1, D = 2, R = 3, E = 4, F = 6, C = 7, TM = 8,
+  LFO = 0, voice = 1, D = 2, R = 3, E = 4, C = 7, TM = 8,
   GVOICE = 9, GUST = 10, FM = 10.3, VA = 10.6, SMP = 11, O = 12,
 }
 
@@ -1639,8 +1625,8 @@ local SYNTH_HIGH = "the synth holds its note open for as long as this is high"
 -- clock pulse ..." line above is the wrong sentence for it. keyed on the
 -- OTHER end's type alone, since the near end is a High clock by definition.
 -- a type missing here falls through to the ordinary table, which is right:
--- a High cell cabled to a field or a register does exactly what it says
--- there, which is nothing.
+-- a High cell cabled to a register does exactly what it says there, which
+-- is nothing.
 local HIGH_DESC = {
   FM = SYNTH_HIGH,
   VA = SYNTH_HIGH,

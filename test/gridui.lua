@@ -39,16 +39,16 @@ do
     "OOOOOOOOOOOOOOOO",
     "MMMM.FFFNNN.XXVV",
     "................",
-    "F..ttCTTTTCtt..S",
-    ".F...CTTTTC...S.",
-    "E.F...LLLL...S.R",
-    "EE.F.GGGGGG.S.RR",
+    "S..ttCTTTTCtt..S",
+    ".S...CTTTTC...S.",
+    "E.S...LLLL...S.R",
+    "EE.S.GGGGGG.S.RR",
     "EEE..GGGGGG..RRR",
   }
   -- the letter each type prints on the map above. lower case only to keep the
   -- two-character family (TM) to one column each.
   local LETTER = {O = "O", voice = "M", GVOICE = nil, D = "T", TM = "t",
-                  C = "C", SMP = "S", E = "E", R = "R", F = "F", GUST = "G",
+                  C = "C", SMP = "S", E = "E", R = "R", GUST = "G",
                   LFO = "L", FM = "X", VA = "V"}
   local rows_ok = true
   local first_bad = nil

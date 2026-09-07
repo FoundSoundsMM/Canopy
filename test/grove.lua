@@ -1,23 +1,26 @@
--- build phase 5b: the §2.6 pitch fields. that a cabled field actually
--- retunes a voice before it is struck, that Range bounds how far, that snap
--- lands on the scale and free does not, that a pulse steps a field on its own
--- clock, that F<->F cables pull two fields together, and that a voice with no
--- field cabled to it still never plays the same note twice.
+-- lib/grove.lua: pitch. what decides the note every pitched cell on the panel
+-- actually sounds, and the one place all of it is summed.
+--
+-- this file used to be about the §2.6 pitch fields, because grove.lua used to
+-- be. that family is gone -- its four seats are sample players now (§2.5) --
+-- and what is checked here is the half of it every other family depended on:
+-- that the SCALES quantise and that "free" does not, that a note prints as a
+-- note rather than as hertz, that grove.hz sums the root, the cell's own Tune,
+-- the registers cabled in and the global transpose and quantises the SUM,
+-- that a strike carries Plonks and that a bare voice therefore never plays
+-- the same note twice, that the SC-side drift is on for every modal voice and
+-- for nothing else, and that pulling the last register cable hands a cell
+-- back its own root.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
 dofile(SP .. "/harness.lua")
 
--- the grove trimmed from 8 F cells to 4: f.cuckoo (call), f.nightjar (drone),
--- f.curlew (cascade), f.bittern (octave). f.merlin/plover/raven no longer
--- exist -- every test below that used to reach for one of them now uses one
--- of the four survivors instead, with its mode set explicitly wherever the
--- test relied on a particular mode's shape rather than just "a field moves".
-local OAK_ROOT = 55
-local CUCKOO, CURLEW = "f.cuckoo", "f.curlew"
-local BITTERN, NIGHTJAR = "f.bittern", "f.nightjar"
+print("== grove ==")
 
--- semitones between an emitted Hz and a voice's own fundamental
+local OAK_ROOT = 55
+
+-- semitones between an emitted Hz and a cell's own fundamental
 local function st(hz, root)
   return 12 * math.log(hz / (root or OAK_ROOT)) / math.log(2)
 end
@@ -31,235 +34,195 @@ local function pitches_for(voice)
 end
 
 -- one D cell striking Oak, as fast as the metric gait will go, so a test can
--- get plenty of strikes out of a short virtual run. d.hob's own default gait
--- is euclidean now (Knocker/metric is gone), so the gait is set explicitly.
+-- get plenty of strikes out of a short virtual run.
 local function knock_oak(M)
   M.rambler.set_gait("d.hob", "metric")
   M.patch.add("d.hob", "oak", 1.0)
   M.state.character["d.hob"] = 1.0  -- 4 x beat
 end
 
-print("\n-- a cabled field retunes the voice, and does it before the strike --")
+print("\n-- the scale bank --")
 do
   local M = fresh(1)
-  knock_oak(M)
-  M.patch.add(CUCKOO, "oak", 1.0)   -- scatter: a new degree every step
-  M.state.character[CUCKOO] = 1.0        -- widest range
-  run(M, 4)
-
-  local p = pitches_for(0)
-  check("pitch reaches the engine", #p > 4, "#" .. #p)
-  check("and the voice is actually struck", #CALLS.strike > 4, "#" .. #CALLS.strike)
-
-  -- every strike must be preceded by the pitch it is meant to land on
-  local ok = true
-  for _, s in ipairs(CALLS.strike) do
-    local last
-    for _, c in ipairs(p) do
-      if c.t <= s.t then last = c else break end
+  check("a name for every scale",
+        #M.grove.SCALE_NAMES == #M.grove.SCALES,
+        #M.grove.SCALE_NAMES .. " names, " .. #M.grove.SCALES .. " scales")
+  check("and every name fits the Scale row's five characters", (function()
+    for _, n in ipairs(M.grove.SCALE_NAMES) do
+      if #n > 5 then return false end
     end
-    if not last then ok = false break end
-  end
-  check("every strike has a pitch sent ahead of it", ok)
-  -- the socket collapse means Oak now has two cables into its one point (the
-  -- driver and the field), so patch.degree(oak) > 1 and every strike also
-  -- makes Oak answer into its only other neighbour -- the field -- a tick
-  -- later (dispatch.lua's strike_voice/post_source, unconditional now that
-  -- there is no separate O socket to gate it on). that self-answer steps the
-  -- field again and pushes a second pitch, so the budget is two pushes per
-  -- strike rather than one: the direct pre-strike retune plus the delayed
-  -- self-answer's. the +1 is the push sent when the cable itself is made.
-  check("two pushes per strike -- the retune and the voice's own self-answer",
-        #p <= 2 * #CALLS.strike + 1,
-        #p .. " pitches for " .. #CALLS.strike .. " strikes")
+    return true
+  end)())
 
-  local lo, hi = math.huge, -math.huge
-  for _, c in ipairs(p) do
-    local s = st(c.hz)
-    lo, hi = math.min(lo, s), math.max(hi, s)
-  end
-  check("and the line actually moves", (hi - lo) > 3,
-        string.format("%.2f .. %.2f st", lo, hi))
-end
-
-print("\n-- Range (E2) is what bounds how far the field roams --")
-do
-  local function spread(range)
-    local M = fresh(3)
-    knock_oak(M)
-    M.patch.add(CUCKOO, "oak", 1.0)
-    M.state.character[CUCKOO] = range
-    M.state.notify_character_change(CUCKOO)
-    run(M, 6)
-    local lo, hi = math.huge, -math.huge
-    for _, c in ipairs(pitches_for(0)) do
-      local s = st(c.hz)
-      lo, hi = math.min(lo, s), math.max(hi, s)
+  -- degrees are SEMITONES, not MIDI notes, and several of them are not whole
+  -- ones -- which is the whole reason the maqam and dastgah rows are here.
+  check("every degree is inside one octave and ascending", (function()
+    for _, scale in ipairs(M.grove.SCALES) do
+      local last = -1
+      for _, d in ipairs(scale) do
+        if d < 0 or d >= 12 or d <= last then return false end
+        last = d
+      end
     end
-    return hi - lo, hi
-  end
-
-  local narrow = spread(0)
-  local wide, wide_hi = spread(1)
-  check("at Range 0 it is a detuner, not a melody", narrow < 1.0,
-        string.format("%.3f st", narrow))
-  check("at Range 1 it plays across octaves", wide > 12,
-        string.format("%.2f st", wide))
-  check("and never leaves the two octaves it is given", wide_hi <= 24.5,
-        string.format("%.2f st", wide_hi))
-end
-
-print("\n-- snap puts the field on the scale; K1+tap sets it free --")
-do
-  local function on_scale(hz)
-    local x = st(hz)
-    local rem = x - math.floor(x / 12) * 12
-    for _, s in ipairs(wl("grove").SCALE) do
-      if math.abs(rem - s) < 0.02 or math.abs(rem - 12) < 0.02 then return true end
+    return true
+  end)())
+  check("and some of them are genuinely microtonal", (function()
+    for _, scale in ipairs(M.grove.SCALES) do
+      for _, d in ipairs(scale) do
+        if d % 1 ~= 0 then return true end
+      end
     end
     return false
-  end
+  end)())
+end
 
-  local M = fresh(5)
-  -- the global Scale row now starts on P.Maj (state.lua), and it quantises
-  -- the SUM downstream of a field's own snap -- so leaving it on would be
-  -- testing that scale rather than this one. free, here, on purpose.
+print("\n-- quantise: free is the identity, a scale is not --")
+do
+  local M = fresh(2)
   M.state.global.scale_i = 0
-  M.patch.add(CUCKOO, "oak", 1.0)
-  M.state.character[CUCKOO] = 1.0
-  M.state.notify_character_change(CUCKOO)
-  -- step the field directly: a strike would add its own few cents of detune,
-  -- which is exactly the thing that would blur a snap test.
-  for _ = 1, 40 do M.grove.step(CUCKOO, 1) end
-  local snapped, total = 0, 0
-  for _, c in ipairs(pitches_for(0)) do
-    total = total + 1
-    if on_scale(c.hz) then snapped = snapped + 1 end
-  end
-  check("every degree lands on a scale tone", total > 10 and snapped == total,
-        snapped .. "/" .. total)
+  check("free passes anything through",
+        M.grove.quantise_semitones(3.7) == 3.7,
+        tostring(M.grove.quantise_semitones(3.7)))
 
-  M.grove.toggle_snap(CUCKOO)
-  CALLS.voice_pitch = {}
-  for _, id in ipairs({}) do end
-  for _ = 1, 40 do M.grove.step(CUCKOO, 1) end
-  local off = 0
-  for _, c in ipairs(pitches_for(0)) do
-    if not on_scale(c.hz) then off = off + 1 end
-  end
-  check("a freed field sits between the notes", off > 0, "off-scale: " .. off)
+  -- minor pentatonic: 0 3 5 7 10. 3.7 is not a degree of it.
+  M.state.global.scale_i = 2
+  local q = M.grove.quantise_semitones(3.7)
+  check("a scale pulls a value onto a degree", (function()
+    local rem = q % 12
+    for _, d in ipairs(M.grove.SCALES[2]) do
+      if math.abs(rem - d) < 1e-9 then return true end
+    end
+    return false
+  end)(), tostring(q))
+  check("and to the nearest one", math.abs(q - 3) < 1e-9, tostring(q))
+
+  -- a value just under an octave snaps UP to it rather than back down to the
+  -- seventh, which is the whole of snap_to's second half.
+  check("just under an octave snaps up to it",
+        math.abs(M.grove.quantise_semitones(11.9) - 12) < 1e-9,
+        tostring(M.grove.quantise_semitones(11.9)))
 end
 
-print("\n-- a narrow field ignores snap, because a scale needs room --")
+print("\n-- §5.2e a pitch reads as a note, not as hertz --")
 do
-  local M = fresh(41)
-  M.patch.add(CUCKOO, "oak", 1.0)
-  M.state.character[CUCKOO] = 0.2       -- well under the smallest interval
-  M.state.notify_character_change(CUCKOO)
-  check("it reads as free even with snap set", M.grove.info(CUCKOO).snap == false)
-  local moved = false
-  for _ = 1, 30 do
-    M.grove.step(CUCKOO, 1)
-    if math.abs(M.grove.offset("oak")) > 1e-6 then moved = true end
-  end
-  check("and it still detunes rather than collapsing onto the root", moved)
+  local M = fresh(3)
+  check("A4 is A4", M.grove.note_name(440) == "A4",
+        tostring(M.grove.note_name(440)))
+  check("and the panel's own reference is A1",
+        M.grove.note_name(55) == "A1", tostring(M.grove.note_name(55)))
+  check("middle C is C4", M.grove.note_name(261.6256) == "C4",
+        tostring(M.grove.note_name(261.6256)))
+  check("sharps, not flats", M.grove.note_name(466.16) == "A#4",
+        tostring(M.grove.note_name(466.16)))
+
+  -- a quarter-tone off gets a mark rather than being rounded onto a note it
+  -- is not on: the microtonal scales land genuinely between two. 40 cents
+  -- rather than exactly 50, which is the boundary itself and belongs to
+  -- whichever of the two names rounding picks.
+  check("a quarter-tone sharp says so",
+        M.grove.note_name(440 * (2 ^ (0.4 / 12))) == "A4+",
+        tostring(M.grove.note_name(440 * (2 ^ (0.4 / 12)))))
+  check("and a quarter-tone flat too",
+        M.grove.note_name(440 * (2 ^ (-0.4 / 12))) == "A4-",
+        tostring(M.grove.note_name(440 * (2 ^ (-0.4 / 12)))))
+  -- a couple of cents off is still the note. every strike carries a detune,
+  -- so a reading that flickered a mark on and off would be unreadable.
+  check("a couple of cents off is still the note",
+        M.grove.note_name(440 * (2 ^ (0.05 / 12))) == "A4",
+        tostring(M.grove.note_name(440 * (2 ^ (0.05 / 12)))))
+
+  check("nothing in, nothing out", M.grove.note_name(nil) == nil)
+  -- every name has to fit the value line, which is five or six characters.
+  check("and no name is longer than four characters", (function()
+    for midi = 12, 120 do
+      local n = M.grove.note_name(440 * (2 ^ ((midi - 69) / 12)))
+      if not n or #n > 4 then return false end
+    end
+    return true
+  end)())
 end
 
-print("\n-- an F->E cable makes the exciter's colour ride the line --")
+print("\n-- which cells have a pitch at all --")
 do
-  local M = fresh(43)
-  M.patch.add("e.mistle", "oak", 0.8)  -- cable it so the exciter is live
-  M.patch.add(CUCKOO, "e.mistle", 1.0)
-  -- Cuckoo's own default mode (call) only ever visits three positions, which
-  -- caps this at three distinct colours -- scatter is the mode that actually
-  -- wants to be seen moving continuously, so it is set explicitly.
-  M.grove.set_mode(CUCKOO, "scatter")
-  M.state.character[CUCKOO] = 1.0
-  M.state.notify_character_change(CUCKOO)
-  local before = #CALLS.exciter_colour
-  local seen, in_range = {}, true
-  for _ = 1, 30 do M.grove.step(CUCKOO, 1) end
-  for i = before + 1, #CALLS.exciter_colour do
-    local c = CALLS.exciter_colour[i]
-    seen[c.v] = true
-    if c.v < 0 or c.v > 1 then in_range = false end
-  end
-  local n = 0
-  for _ in pairs(seen) do n = n + 1 end
-  check("colour moves with the field", n > 3, "distinct colours: " .. n)
-  check("and stays inside 0..1", in_range)
-
-  -- and the offset must not survive the cable that created it
-  local base = M.state.get_character("e.mistle", M.topology.get("e.mistle"), 0, 1)
-  M.patch.remove(CUCKOO, "e.mistle")
-  local last = CALLS.exciter_colour[#CALLS.exciter_colour]
-  check("pulling the cable hands the exciter its own colour back",
-        last and math.abs(last.v - base) < 1e-9,
-        last and string.format("%.3f vs %.3f", last.v, base) or "no colour sent")
+  local M = fresh(4)
+  local want = {voice = true, FM = true, VA = true}
+  check("the four modal voices and the two synth families, and nothing else",
+        (function()
+          for _, cell in M.topology.each() do
+            local is = M.grove.is_pitched(cell)
+            if is ~= (want[cell.type] or false) then return false end
+          end
+          return true
+        end)())
+  check("and a nil cell is not one", M.grove.is_pitched(nil) == false)
 end
 
-print("\n-- octave mode transposes; it never plays a line --")
+print("\n-- grove.hz sums the whole thing and quantises the sum --")
 do
-  local M = fresh(7)
-  M.patch.add(BITTERN, "oak", 1.0)
-  M.state.character[BITTERN] = 1.0
-  M.state.notify_character_change(BITTERN)
-  for _ = 1, 60 do M.grove.step(BITTERN, 1) end
-  local ok, seen = true, {}
-  for _, c in ipairs(pitches_for(0)) do
-    local s = st(c.hz)
-    if math.abs(s - math.floor(s / 12 + 0.5) * 12) > 0.02 then ok = false end
-    seen[math.floor(s / 12 + 0.5)] = true
-  end
-  local n = 0
-  for _ in pairs(seen) do n = n + 1 end
-  check("every pitch is a whole number of octaves off the root", ok)
-  check("and it uses more than one of them", n > 1, "octaves seen: " .. n)
+  local M = fresh(5)
+  M.state.global.scale_i = 0
+  M.state.global.pitch_offset = 0
+  check("at rest a voice sits on its own root",
+        math.abs(M.grove.hz("oak") - OAK_ROOT) < 1e-9,
+        tostring(M.grove.hz("oak")))
+
+  -- the sound page's Tune knob, in semitones. it is asymmetric (two octaves
+  -- up, three down), so the step is taken off the half it is moving into.
+  M.state.set_vparam("oak", "tune", 0.5 + 1 / (2 * M.voice.TUNE_UP_ST))
+  check("Tune moves it by exactly that many semitones",
+        math.abs(st(M.grove.hz("oak")) - 1) < 1e-6,
+        string.format("%.4f st", st(M.grove.hz("oak"))))
+
+  -- and the global transpose on top of it.
+  M.state.global.pitch_offset = 12
+  check("and the global Pitch macro transposes it further",
+        math.abs(st(M.grove.hz("oak")) - 13) < 1e-6,
+        string.format("%.4f st", st(M.grove.hz("oak"))))
+  M.state.global.pitch_offset = 0
+
+  -- the Scale has the last word, and has it on the SUM rather than on any one
+  -- term: 1 st is not a degree of minor pentatonic and comes back as 0.
+  M.state.global.scale_i = 2
+  check("with a Scale on, the sum is quantised",
+        math.abs(st(M.grove.hz("oak"))) < 1e-6,
+        string.format("%.4f st", st(M.grove.hz("oak"))))
+
+  -- a cell with no pitch of its own answers nothing rather than guessing.
+  check("an unpitched cell has no Hz", M.grove.hz("e.bracken") == nil)
+  check("nor does a cell that does not exist", M.grove.hz("nope") == nil)
 end
 
-print("\n-- a pulse steps the field on its own clock --")
+print("\n-- §4.1c Plonks: every strike lands a little off --")
 do
-  local M = fresh(11)
-  -- no strike path at all: Shuck only feeds the field, nothing knocks Oak.
-  M.patch.add(CUCKOO, "oak", 1.0)
-  M.patch.add("d.shuck", CUCKOO, 1.0)
-  M.state.character["d.shuck"] = 1.0   -- 0.5 Hz
-  M.state.character[CUCKOO] = 0.8
-  M.state.notify_character_change(CUCKOO)
-  run(M, 12)
-  check("no strikes -- nothing is cabled to the trigger socket", #CALLS.strike == 0,
-        "#" .. #CALLS.strike)
-  check("but the field moved the voice anyway", #pitches_for(0) > 3,
-        "#" .. #pitches_for(0))
-end
-
-print("\n-- an F<->F cable pulls two fields together --")
-do
-  local function converge(gain)
-    local M = fresh(13)
-    M.patch.add(NIGHTJAR, CURLEW, gain)
-    local a, b = M.grove.get(NIGHTJAR), M.grove.get(CURLEW)
-    a.pos, b.pos = -0.9, 0.9
-    local before = math.abs(a.pos - b.pos)
-    run(M, 6)
-    return before, math.abs(a.pos - b.pos)
+  local M = fresh(6)
+  M.state.global.drops = 0
+  local floor_max = 0
+  for _ = 1, 400 do
+    floor_max = math.max(floor_max, math.abs(M.grove.strike_detune()))
   end
+  -- the floor is what an unpatched voice's breathing has always been. it does
+  -- not fall to zero the way a drum head's does (gvoice.strike_detune): a
+  -- modal voice was never dead still.
+  check("at Plonks 0 there is still a floor", floor_max > 0 and floor_max <= 0.02,
+        string.format("%.4f st", floor_max))
 
-  local before, after = converge(1.0)
-  check("positive gain closes the gap", after < before * 0.5,
-        string.format("%.2f -> %.2f", before, after))
-
-  local rbefore, rafter = converge(-1.0)
-  check("negative gain does not", rafter >= rbefore * 0.9,
-        string.format("%.2f -> %.2f", rbefore, rafter))
+  M.state.global.drops = 1
+  local wide_max = 0
+  for _ = 1, 400 do
+    wide_max = math.max(wide_max, math.abs(M.grove.strike_detune()))
+  end
+  check("and at Plonks 1 it widens to the macro's own range",
+        wide_max > 1.0 and wide_max <= 0.02 + M.gparam.DROPS_MAX_ST,
+        string.format("%.4f st", wide_max))
+  M.state.global.drops = 0
 end
 
-print("\n-- a voice with no field still never plays the same note twice --")
+print("\n-- a bare voice still never plays the same note twice --")
 do
   local M = fresh(17)
-  -- same reason as the snap test above: a global scale would quantise every
-  -- one of these sub-semitone draws onto the same tone, which is what the
-  -- Scale row is FOR and not what this test is about.
+  -- a global scale would quantise every one of these sub-semitone draws onto
+  -- the same tone, which is what the Scale row is FOR and not what this test
+  -- is about.
   M.state.global.scale_i = 0
   knock_oak(M)
   run(M, 4)
@@ -283,7 +246,7 @@ do
         string.format("%.3f st", math.max(-lo, hi)))
 end
 
-print("\n-- the SC-side drift is on for every voice, and deepens under a field --")
+print("\n-- the SC-side drift is on for every modal voice, and only those --")
 do
   local M = fresh(19)
   M.grove.init()
@@ -296,82 +259,49 @@ do
         (depth[0] or 0) > 0 and (depth[0] or 1) < 0.1,
         string.format("%.3f st", depth[0] or -1))
 
-  local base = depth[0]
-  M.state.character[NIGHTJAR] = 1.0    -- a two-octave field
-  M.patch.add(NIGHTJAR, "oak", 1.0)
-  local now = base
-  for _, c in ipairs(CALLS.voice_drift) do if c.voice == 0 then now = c.depth end end
-  check("cabling a wide field in makes the voice breathe harder", now > base,
-        string.format("%.3f -> %.3f st", base, now))
-  check("and still nowhere near out of tune", now <= 0.35 + 1e-9,
-        string.format("%.3f st", now))
+  -- it used to deepen under a wide field cabled in. there are no fields, so
+  -- it is a constant -- and the four voices share it rather than each being
+  -- given a number of its own.
+  check("all four are on the same depth", (function()
+    for v = 1, 3 do
+      if math.abs((depth[v] or -1) - depth[0]) > 1e-9 then return false end
+    end
+    return true
+  end)())
+
+  -- §2.13 the FM and VA cells are oscillators: a portamento and a continuous
+  -- few-cents wander are part of what a bank of ringing resonators is, and
+  -- not part of what an oscillator is.
+  check("and neither synth family gets one", (function()
+    for _, c in ipairs(CALLS.voice_drift) do
+      if c.voice > 3 then return false end
+    end
+    return true
+  end)())
 end
 
-print("\n-- Still freezes the fields with everything else --")
-do
-  local M = fresh(23)
-  -- wander's step size scales with Scatter (grove.lua's wild()), which now
-  -- defaults to 0 rather than the old Weather knob's 0.4 -- pinned explicitly
-  -- so this test (about Still, not about Scatter) keeps the same headroom it
-  -- always had.
-  M.state.global.scatter = 0.4
-  -- none of the four surviving F cells defaults to wander any more, so it is
-  -- set explicitly -- the whole point of this test is a mode that moves on
-  -- the tick, unprompted.
-  M.grove.set_mode(CURLEW, "wander")
-  M.patch.add(CURLEW, "oak", 1.0)  -- wander: moves on the tick, unprompted
-  M.state.character[CURLEW] = 1.0
-  M.state.notify_character_change(CURLEW)
-  -- 4s, not 2: a wander field emits a retune each time its glide crosses a
-  -- step, which at the low end of its rate is only ~2.5 a second. a 2s window
-  -- sat one retune above the threshold and turned any change in how the RNG
-  -- stream is consumed elsewhere into a failure here.
-  run(M, 4)
-  local before = #pitches_for(0)
-  check("a continuous field moves on its own", before > 5, "#" .. before)
-  local first, last = pitches_for(0)[1].hz, pitches_for(0)[before].hz
-  check("and it is genuinely moving, not repeating one pitch",
-        math.abs(st(last) - st(first)) > 0.25,
-        string.format("%.2f -> %.2f st", st(first), st(last)))
-
-  M.state.global.still = true
-  run(M, 4)
-  check("and stops dead under Still", #pitches_for(0) == before,
-        before .. " -> " .. #pitches_for(0))
-
-  M.state.global.still = false
-  run(M, 2)
-  check("and picks up again after it", #pitches_for(0) > before)
-end
-
-print("\n-- pulling the cable hands the voice back its own root --")
+print("\n-- pulling the cable hands the cell back its own root --")
 do
   local M = fresh(29)
-  local edge = M.patch.add(CUCKOO, "oak", 1.0)
-  M.state.character[CUCKOO] = 1.0
-  M.state.notify_character_change(CUCKOO)
-  for _ = 1, 20 do M.grove.step(CUCKOO, 1) end
-  check("the field has the voice somewhere else", math.abs(M.grove.offset("oak")) > 0,
-        string.format("%.2f st", M.grove.offset("oak")))
+  M.state.global.scale_i = 0
+  -- a register is the pitch source now. steps 0 is the fully locked end of
+  -- the ladder, so the line it plays repeats rather than wandering off.
+  local edge = M.patch.add("tm.padfoot", "oak", 1.0)
+  local moved = false
+  for _ = 1, 12 do
+    M.tm.pulse_in("tm.padfoot", 1, nil, 0)
+    if math.abs(M.grove.hz("oak") - OAK_ROOT) > 1e-6 then moved = true end
+  end
+  check("the register has the voice somewhere else", moved,
+        string.format("%.2f Hz", M.grove.hz("oak")))
 
   M.patch.remove_edge(edge.id)
   check("and severing it returns the voice to its fundamental",
-        M.grove.offset("oak") == 0 and math.abs(M.grove.hz("oak") - OAK_ROOT) < 1e-9,
+        math.abs(M.grove.hz("oak") - OAK_ROOT) < 1e-9,
         string.format("%.3f Hz", M.grove.hz("oak")))
-end
-
-print("\n-- mode swap and the field's own readout --")
-do
-  local M = fresh(31)
-  local first = M.grove.info(CUCKOO).mode
-  check("an F cell starts on its topology default", first == "call", first)
-  local key = M.grove.cycle_mode(CUCKOO, 1)
-  check("cycle_mode advances it", key ~= first and M.grove.info(CUCKOO).mode == key, key)
-  check("info reads out the range in musical units",
-        M.grove.info(CUCKOO).param:find("cents") or M.grove.info(CUCKOO).param:find("st"),
-        M.grove.info(CUCKOO).param)
-  check("snap toggles", M.grove.toggle_snap(CUCKOO) == false
-        and M.grove.toggle_snap(CUCKOO) == true)
+  check("and the engine was told, rather than left on the old note",
+        math.abs(CALLS.voice_pitch[#CALLS.voice_pitch].hz - OAK_ROOT) < 1e-9,
+        tostring(CALLS.voice_pitch[#CALLS.voice_pitch].hz))
 end
 
 report()

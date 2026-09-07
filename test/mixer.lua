@@ -49,20 +49,23 @@ end
 
 -- 1: the sample cells' recordings load once each ----------------------------
 
-print("\n-- the four recordings load once each, at the engine's own slots --")
+print("\n-- the recordings load once each, at the engine's own slots --")
 do
-  -- these used to be the mixer's four always-on loops. they are the four
+  -- these used to be the mixer's four always-on loops. they are the eight
   -- Sample cells now (§2.5, lib/sample.lua) and the mixer knows nothing about
   -- them -- but they still have to be loaded exactly once at init, at the
   -- indices the .sc file expects, which is what this checks.
-  check("init loaded exactly four samples", #CALLS.smp_load == 4,
+  check("init loaded exactly one sample per cell", #CALLS.smp_load == 8,
         tostring(#CALLS.smp_load))
   local seen, paths_ok = {}, true
   for _, c in ipairs(CALLS.smp_load) do
     seen[c.index] = true
     if not c.path:match("/audio/[A-Za-z]+%.wav$") then paths_ok = false end
   end
-  check("at indices 0..3", seen[0] and seen[1] and seen[2] and seen[3])
+  check("at indices 0..7", (function()
+    for i = 0, 7 do if not seen[i] then return false end end
+    return true
+  end)())
   check("each an absolute path under audio/", paths_ok,
         CALLS.smp_load[1] and CALLS.smp_load[1].path)
 
@@ -137,13 +140,18 @@ do
         mixer.PARAM_COUNT == 0, tostring(mixer.PARAM_COUNT))
 end
 
-print("\n-- the four SFX loops are channels like everything else --")
+print("\n-- a sample cell placed on the Output row is a channel too --")
 do
+  -- §2.5 this family mixes itself now, so a cable to an Out cell is a SECOND
+  -- copy of it rather than the only way to hear the first -- and that second
+  -- copy is a mixer channel like any other source's.
   patch.clear()
   patch.add("smp.thunder", "o.12", 0.8)
   check("a sample cell cabled to an output is a channel",
         mixer.PARAM_COUNT == 1, tostring(mixer.PARAM_COUNT))
-  check("named after the recording", mixer.PARAMS[1].label == "Thunder",
+  -- named for the SEAT, not for a recording: the File row decides which one
+  -- the seat is holding, and it can be any file in the folder.
+  check("named for the cell", mixer.PARAMS[1].label == "Sample 7",
         mixer.PARAMS[1].label)
   patch.clear()
 end

@@ -156,6 +156,12 @@ screen = setmetatable(rec, {__index = function() return function() end end})
 -- ---------------------------------------------------------------------------
 
 local M = fresh(1)
+
+-- §2.5 the sample cells' File row prints a filename, and a filename it does
+-- not have yet prints a dash -- which is the one thing this tool exists to
+-- catch. the harness's scandir stub answers from SCANDIR_FILES, so this
+-- touches no disk.
+M.sample.init("/tmp/audio/")
 local screenui = wl("screenui")
 local cellparam = wl("cellparam")
 
@@ -265,10 +271,10 @@ T = T + 3.1
 shot("09-lfo-scope")
 
 -- a page that still gets its sentence
-M.state.cell_edit = cell_of("H"); M.state.vparam_focus = 1
-shot("10-heartwood")
-M.state.cell_edit = cell_of("F"); M.state.vparam_focus = 2
-shot("11-field")
+M.state.cell_edit = cell_of("E"); M.state.vparam_focus = 1
+shot("10-exciter")
+M.state.cell_edit = cell_of("SMP"); M.state.vparam_focus = 1
+shot("11-sample")
 M.state.cell_edit = cell_of("GUST"); M.state.vparam_focus = 4
 shot("12-gust")
 

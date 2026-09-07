@@ -36,6 +36,9 @@ print("\n-- Speed is log-mapped and reaches the engine --")
 do
   local M = fresh(2)
   local id = "lfo.flood"
+  -- the free half of the row: a cell comes up synced (lfo.SYNC_DEFAULT), and
+  -- what is under test here is the Hz sweep, so this one is set free first.
+  M.lfo.set_synced(id, false)
   local lo = M.lfo.rate_hz(id)
   check("centred at 0.5, well inside the range", lo > M.lfo.RATE_MIN
         and lo < M.lfo.RATE_MAX, tostring(lo))
@@ -76,10 +79,13 @@ do
   local page = M.cellparam.page(id)
   local row = page.PARAMS[1]
 
-  check("a fresh cell is free-running", M.lfo.synced(id) == false)
+  -- §2.12b synced is the default: everything else on the panel is in time
+  -- and a modulator that is not is the exception, not the norm.
+  check("a fresh cell is synced", M.lfo.synced(id) == true)
 
   -- free and synced keep separate knobs, so flipping back and forth is
   -- lossless.
+  M.lfo.set_synced(id, false)
   M.state.set_vparam(id, "rate", 0.9)
   local free_hz = M.lfo.rate_hz(id)
   M.lfo.set_synced(id, true)
@@ -161,6 +167,7 @@ do
 
   -- a free cell is unaffected by any of this: it still integrates wall time.
   local c = "lfo.eddy"
+  M.lfo.set_synced(c, false)
   M.state.set_vparam(c, "rate", 0.5)
   local p0 = M.lfo.phase(c)
   T = T + 0.5

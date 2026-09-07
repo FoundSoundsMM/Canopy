@@ -90,11 +90,22 @@ local function voices()
   return ids
 end
 
--- the global Decay macro (below) reaches the GVOICE, GUST and SMP cells too
--- -- each of their decay_seconds() already folds voice.decay_mult_ratio() in,
--- same as voice.lua's own does, so this is the only other place that needs
--- to know they exist as well as the four corner voices.
-local DECAY_MACRO_TYPES = {voice = true, GVOICE = true, GUST = true, SMP = true}
+-- the global Decay macro (below) reaches the GVOICE, GUST, SMP, FM and VA
+-- cells too -- each of their decay_seconds() already folds
+-- voice.decay_mult_ratio() in, same as voice.lua's own does, so this is the
+-- only other place that needs to know they exist as well as the four corner
+-- voices.
+--
+-- the two synth families were the one omission. synth.decay_seconds has
+-- folded the multiplier in since the day it was written and synth.lua
+-- registers its own on_decay_change listener, so the whole path was there --
+-- what was missing was this list, which is what decides who gets NOTIFIED
+-- when the macro moves. so the knob reached every sounding family on the
+-- panel except the two newest, and it did so silently: an FM cell picked the
+-- multiplier up on the next touch of its own Decay row and not before.
+local DECAY_MACRO_TYPES = {
+  voice = true, GVOICE = true, GUST = true, SMP = true, FM = true, VA = true,
+}
 
 local function sounding_cells()
   local ids = {}

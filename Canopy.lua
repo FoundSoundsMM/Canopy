@@ -20,10 +20,10 @@
 -- (BPM, Swing, Rain, Scale, Plonks, Decay, Pitch, Drums), E2/E3 nudge it
 -- coarse/fine. K1+E3: master level.
 -- K3: forward, one page at a time, down the signal --
---   main screen -> gusts (one Pitch/Timbre/Attack/Cross/Level over all twelve
---     gust cells at once; the family's Decay is the global page's Decay,
---     which already reaches them, and the delay line they used to own is on
---     the send page below)
+--   main screen -> gusts (one Pitch/Timbre/Attack/Vib/Cross/Level over all
+--     twelve gust cells at once; the family's Decay is the global page's
+--     Decay, which already reaches them, and the delay line they used to own
+--     is on the send page below)
 --   -> mixer (a fader for every Output cell something is cabled to; the list
 --     grows and shrinks with the patch)
 --   -> send (the one delay every voice can reach: Space, Delay, Regen, Tone.
@@ -117,8 +117,8 @@
 -- lib/synth.lua): a pair of two-operator FM voices ("X") and a pair of
 -- wavefolding virtual-analogue voices ("V"). each is struck like a voice, has
 -- an envelope of its own, and runs its pitch through grove like a modal voice
--- does -- so a field or a Turing machine cabled in plays it in the same key
--- as everything else. with them, four more changes: the Turing machines are
+-- does -- so a Turing machine cabled in plays it in the same key as
+-- everything else. with them, four more changes: the Turing machines are
 -- the right-hand side of a Marbles and no longer generate triggers of their
 -- own (§2.8); the gusts' delay line is a SEND every voice can reach, with a
 -- Send row at the bottom of every sounding cell's page and its own knobs on a
@@ -126,6 +126,24 @@
 -- microtonal (Hijaz, Rast, Bayati, Sikah, Homayoun, slendro, pelog,
 -- Anchihoye); and Tape lost the wow that was never a wow -- a delayed wet
 -- path summed against the dry one, which is a comb filter, not a transport.
+-- the fields out, the samples in. the grove (§2.6) is gone: four F cells,
+-- eight modes, a wandering degree per cell that voices were cabled into. a
+-- register does that job now and does it where you can see it, so its four
+-- seats on the left-hand diagonal are a SECOND diagonal of sample players
+-- (§2.5) mirroring the first. eight of them, and none owns a recording any
+-- more -- a File row walks every .wav in the script's audio/ folder, so
+-- adding a sound to the instrument is dropping one in there. each is one shot
+-- or a loop you toggle, and all eight are heard with no cable at all, panned
+-- by their seat, the way a gust already was.
+-- and seven smaller things: the LFOs come up SYNCED to the transport rather
+-- than free (§2.12b); a gust's Pitch spans four octaves either way and the
+-- family's transpose spans the same, with a family Vib on that page and a Vib
+-- row on every cell's (§2.11d); the family fader fades to silence rather than
+-- sliding; the global Plonks and the global Decay both reach the FM and VA
+-- cells, which they had never quite done; those two families' Attack and
+-- Decay reach a swell rather than stopping at a strike; every Pitch row reads
+-- as a NOTE rather than in hertz (§5.2e); and the master chorus comes up at
+-- 0.44 Hz, which is a drift instead of a wobble.
 
 engine.name = "Canopy"
 
@@ -157,7 +175,7 @@ local gvoice   = wl("gvoice")
 local gust     = wl("gust")   -- §2.11: the twelve drone cells on the bottom rows
 local synth    = wl("synth")  -- §2.13: the two FM and two VA cells, right of the drums
 local lfo      = wl("lfo")    -- §2.12: the four sine LFOs above the gusts
-local sample   = wl("sample") -- §2.5: the four sample cells on the right diagonal
+local sample   = wl("sample") -- §2.5: the eight sample cells, two diagonals
 local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
 local gparam   = wl("gparam")
 local mixer    = wl("mixer")
@@ -190,8 +208,8 @@ end
 -- between two things that have nothing to say to each other, and what you got
 -- back was silence. this one builds a patch with a *shape* -- a couple of
 -- pulse-makers, some of them routed through the weave, landing on triggers;
--- an exciter under each voice that plays; sometimes a field, sometimes some
--- weather, sometimes one voice feeding another -- and then lets the dice
+-- an exciter under each voice that plays; sometimes a register, sometimes
+-- some weather, sometimes one voice feeding another -- and then lets the dice
 -- decide everything else. it is still a different patch every time. it is
 -- just always a patch that plays.
 --
@@ -274,8 +292,11 @@ local function do_regrow()
   local dcells  = shuffled(ids_of("D"))
   local rcells  = shuffled(ids_of("R"))
   local ecells  = shuffled(ids_of("E"))
-  local fcells  = shuffled(ids_of("F"))
   local smcells = shuffled(ids_of("SMP"))
+  -- the melody source. it used to be an F cell here; the fields are gone
+  -- (§2.6) and a register is what tunes a voice now, so the one list is
+  -- shared between this and the synth block further down.
+  local tmcells = shuffled(ids_of("TM"))
   local ocells  = shuffled(ids_of("O"))
 
   local n_voices = math.min(#voices, 2 + math.random(3))
@@ -311,15 +332,16 @@ local function do_regrow()
       end
     end
 
-    -- and now and then a field, which is the difference between a drum part
-    -- and a tune -- also cabled straight to the voice's own point now.
+    -- and now and then a register, which is the difference between a drum
+    -- part and a tune. cabled to the voice's own point, and clocked by the
+    -- same pulse-maker that strikes it -- a TM answers a trigger with a note
+    -- and has no clock of its own, so a register nothing steps is a register
+    -- holding one note forever.
     if math.random() < 0.45 then
-      local f = take(fcells)
-      if f then
-        -- a modest range: at the top of the knob a field is two octaves wide,
-        -- which is a melody nobody asked for under a drum part.
-        state.character[f] = 0.15 + math.random() * 0.4
-        patch.add(f, v, gain(0.4, 0.9), false)
+      local tm_id = take(tmcells)
+      if tm_id then
+        patch.add(d, tm_id, gain(0.6, 1.0), false)
+        patch.add(tm_id, v, gain(0.4, 0.9), false)
       end
     end
 
@@ -409,7 +431,6 @@ local function do_regrow()
   -- worth showing.
   local syncells = shuffled(ids_of("FM"))
   for _, id in ipairs(shuffled(ids_of("VA"))) do table.insert(syncells, id) end
-  local tmcells = shuffled(ids_of("TM"))
   if #used_d > 0 and math.random() < 0.6 then
     local sy = take(syncells)
     local o = take(ocells)
@@ -439,18 +460,16 @@ local function do_regrow()
     end
   end
 
-  -- §2.5 a soundscape underneath, now and then: one of the four sample cells
+  -- §2.5 a soundscape underneath, now and then: one of the eight sample cells
   -- hung off a clock rather than off a trigger, because what these are for is
-  -- a swell that arrives once in a while rather than a part. it takes an
-  -- Output cable of its own now -- these four used to mix themselves, and a
-  -- regrown patch that seeded one without routing it would be seeding
-  -- silence.
+  -- a swell that arrives once in a while rather than a part. no Output cable
+  -- -- this family routes itself to the mix, panned by its seat, so one cable
+  -- from a clock is the whole patch.
   local ccells = shuffled(ids_of("C"))
   if math.random() < 0.5 then
     local sm = take(smcells)
     local c = take(ccells)
-    local o = take(ocells)
-    if sm and c and o then
+    if sm and c then
       -- a long attack and a long fall: these want to be weather, not a hit.
       state.set_vparam(sm, "attack", 0.55 + math.random() * 0.35)
       state.decay[sm] = 0.55 + math.random() * 0.35
@@ -460,7 +479,6 @@ local function do_regrow()
       -- "once in a while" rather than "every few seconds" (clockcell.lua).
       state.character[c] = 0.05 + math.random() * 0.2
       patch.add(c, sm, gain(0.5, 1.0), false)
-      patch.add(sm, o, gain(0.6, 1.0), false)
     end
   end
 
@@ -789,9 +807,11 @@ function init()
   -- amount. all of the latter are zero on a fresh patch, so this costs four
   -- messages and no synths at all until something is actually sent.
   send.init()
-  -- §2.5 the four sample cells. the engine reads each .wav async and holds
-  -- every knob in the meantime, so pushing them straight afterwards loses
-  -- nothing.
+  -- §2.5 the eight sample cells. this both SCANS that folder -- every .wav
+  -- in it is an entry on every cell's File row, so adding a recording to the
+  -- script means dropping it in there and reloading -- and pushes each cell's
+  -- knobs. the engine reads each file async and holds every knob in the
+  -- meantime, so the order loses nothing.
   --
   -- norns.state.path, not a hardcoded "Canopy/" under _path.code: the
   -- installed script folder is not guaranteed to be named or cased exactly

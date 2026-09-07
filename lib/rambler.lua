@@ -34,7 +34,6 @@ local topology  = wl("topology")
 local patch     = wl("patch")
 local state     = wl("state")
 local dispatch  = wl("dispatch")
-local grove     = wl("grove")
 local quantise  = wl("quantise")
 local weave     = wl("weave")
 local clockcell = wl("clockcell")
@@ -735,11 +734,10 @@ function rambler.tick()
   -- traffic freeze with them rather than flushing on resume.
   if state.global.still then return end
 
-  -- 0. the continuous half of the pitch fields (§2.6), and the weather that
-  --    is slowly moving everybody's knobs (§2.8). both decimate themselves;
-  --    both sit inside the Still check, so a frozen patch is frozen in pitch
-  --    and in weather too.
-  grove.tick(now)
+  -- 0. the clock cells (§2.9), which decimate themselves and sit inside the
+  --    Still check like everything below, so a frozen patch is frozen here
+  --    too. the pitch fields used to run first on this same line; that family
+  --    is gone (§2.6) and nothing has moved in to take the slot.
   clockcell.tick(now)
 
   -- 1. the weave's own scheduled taps (echoes, flams, delays, rolls).

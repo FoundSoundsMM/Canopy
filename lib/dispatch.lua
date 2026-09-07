@@ -187,13 +187,6 @@ HANDLERS["E"] = function(source_id, target_id, edge, weight)
   state.flash(target_id, amp)
 end
 
--- -> F: a pulse steps the pitch field (§2.6, unchanged). an F cell never
--- emits a pulse, so nothing here can feed back round into itself.
-HANDLERS["F"] = function(source_id, target_id, edge, weight)
-  local w = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
-  grove.step(target_id, w, source_id)
-end
-
 -- -> a Sample cell: §2.5, play its recording from the top under that cell's
 -- own slow attack and fall. it does not answer with a pulse of its own the
 -- way a drum or a gust does -- a fifteen-second swell is not an event

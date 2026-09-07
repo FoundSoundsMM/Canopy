@@ -398,8 +398,8 @@ do
         live["oak"] and live["oak"] > idle["oak"],
         tostring(live["oak"]) .. " vs idle " .. tostring(idle["oak"]))
   check("map, a live patch: an uncabled cell is unchanged",
-        live["f.bittern"] == idle["f.bittern"],
-        tostring(live["f.bittern"]) .. " vs idle " .. tostring(idle["f.bittern"]))
+        live["e.wisp"] == idle["e.wisp"],
+        tostring(live["e.wisp"]) .. " vs idle " .. tostring(idle["e.wisp"]))
 
   -- holding a cell from the map still goes straight to that cell's own
   -- settings page -- same as from any other screen -- rather than staying on
@@ -485,7 +485,7 @@ print("\n-- a heavily cabled cell --")
 do
   local M2 = fresh(2)
   for _, other in ipairs({"o.1", "o.16", "e.bracken", "smp.thunder", "d.hob",
-                          "f.cuckoo", "tm.padfoot"}) do
+                          "gu.sough", "tm.padfoot"}) do
     M2.patch.add("oak", other, 0.5)
   end
   M2.state.held = {"oak"}

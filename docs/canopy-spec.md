@@ -2,7 +2,7 @@
 
 A monome norns script for grid (128). Four modal/pinged-filter voices, a
 sealed core of pulse-makers and clocks, small percussion cells, weave
-transforms, drone synths, sample players, pitch fields and sine modulators,
+transforms, drone synths, sample players, shift registers and sine modulators,
 patched by hand, with an explicit Output row deciding what is ever heard at
 all.
 Inspired by the Ciat-Lonbarde Plumbutter; dressed in British woodland
@@ -56,15 +56,15 @@ Coordinates are `(x, y)`, x = column 1..16, y = row 1..8, matching `g.key(x,y,z)
  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
  2    M   M   M   M   ·   F   F   F   N   N   N   ·   X   X   V   V
  3    ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·
- 4    F   ·   ·  TM  TM   C   T   T   T   T   C  TM  TM   ·   ·   S
- 5    ·   F   ·   ·   ·   C   T   T   T   T   C   ·   ·   ·   S   ·
- 6    E   ·   F   ·   ·   ·   L   L   L   L   ·   ·   ·   S   ·   R
- 7    E   E   ·   F   ·   G   G   G   G   G   G   ·   S   ·   R   R
+ 4    S   ·   ·  TM  TM   C   T   T   T   T   C  TM  TM   ·   ·   S
+ 5    ·   S   ·   ·   ·   C   T   T   T   T   C   ·   ·   ·   S   ·
+ 6    E   ·   S   ·   ·   ·   L   L   L   L   ·   ·   ·   S   ·   R
+ 7    E   E   ·   S   ·   G   G   G   G   G   G   ·   S   ·   R   R
  8    E   E   E   ·   ·   G   G   G   G   G   G   ·   ·   R   R   R
 
- O = output (16)       M = modal voice (4)   F = grove field / percussion-ping
+ O = output (16)       M = modal voice (4)   F = percussion-ping (3)
  N = percussion-noise  TM = Turing Machine   C = clock (4)
- T = trigger source (8) S = sample player (4) R = weave (6)
+ T = trigger source (8) S = sample player (8) R = weave (6)
  G = gust (12)         L = LFO (4)           E = exciter (6)
  X = 2-op FM synth (2) V = wavefolding VA synth (2)
  · = unregistered coordinate, dark and inert
@@ -84,15 +84,21 @@ does nothing. Row 3 is entirely dark on purpose: it is what separates the
 voice/percussion row from the trigger-and-clock core below it, the same way
 the sealed box around the old D core once did.
 
-**`F` is deliberately reused for two different cell types at different
-coordinates** — the untouched pitch fields (§2.6) on the left seam, and the
-three "ping" percussion cells (§2.7b) in row 2 — because both genuinely read
-as "F" on the panel and neither collides with the other's `id` prefix
-(`f.*` vs `gv.*`). Nothing reads the bare display letter programmatically; it
-is documentation, the same as `counterpart` always was.
+**The two S diagonals mirror each other.** Four sample cells run in from the
+left edge and four in from the right (§2.5). The left-hand four are the seats
+the grove's pitch fields had; that family is gone (§2.6), and what took its
+place is the family it is most unlike — a bed rather than a line, and one that
+needs no cable to be heard.
 
-**Cell counts.** 16 O + 4 voice + 8 T(D) + 4 TM + 4 C(clock) + 4 S(sample)
-+ 4 F(grove) + 6 R + 6 GVOICE(F/N) + 6 E + 12 G(gust) + 4 L(LFO)
+**`F` is a display letter, not a type.** The three "ping" percussion cells
+(§2.7b) in row 2 read "F" on the panel; the mechanic's own type string is
+`GVOICE`. Nothing reads the bare display letter programmatically; it is
+documentation, the same as `counterpart` always was. It used to collide, in
+display only, with the grove's own `F` on the left seam — that family is gone
+and the letter is unambiguous again.
+
+**Cell counts.** 16 O + 4 voice + 8 T(D) + 4 TM + 4 C(clock) + 8 S(sample)
++ 6 R + 6 GVOICE(F/N) + 6 E + 12 G(gust) + 4 L(LFO)
 + 2 X(FM) + 2 V(VA) = 82 live cells; 46 dark.
 
 ### 2.1 The Output row — O (16)
@@ -168,7 +174,7 @@ cover a kit.
   sound page's **Balance** knob (§5.5) decides what that means: at 0 the
   stream is excitation into the resonator; at 1 it is a control signal on the
   body (damping, brightness, a little structure); between, a mix.
-- A **field or a TM cell** cabled to a voice tunes it — the old P socket's
+- A **TM cell** cabled to a voice tunes it — the old P socket's
   job, now reached by cabling straight to the voice, scaled by the sound
   page's own **Depth** knob (§5.5).
 - A cable to an **Output cell** is how the voice is heard at all (§2.1).
@@ -284,86 +290,149 @@ fired by that pulse. E↔E cables cross-modulate each other's colour. Gating is
 T/R cables only, deliberately — a voice or gust cable's usual meaning here is
 colouring, not gating.
 
-### 2.5 Sample players — S (4)
+### 2.5 Sample players — S (8)
 
-Four cells, one field recording each, on the diagonal in from the right edge.
-A pulse plays that recording from the top, under an envelope with a slow
-attack and a slow fall the player sets per cell.
+Eight cells on two mirrored diagonals, four in from each edge. A pulse plays
+that cell's recording from the top, under an envelope with a slow attack and a
+slow fall the player sets per cell.
 
 ```
-(16,4) Rain -- (15,5) Cicada -- (14,6) Thunder -- (13,7) Sea
+(1,4) S1 -- (2,5) S2 -- (3,6) S3 -- (4,7) S4        the grove's old seats
+(16,4) S5 -- (15,5) S6 -- (14,6) S7 -- (13,7) S8    the heartwood's old seats
 ```
 
 | Row | Range | Notes |
 |--------|-------------|-------|
+| File   | the folder  | one detent per playable file in the script's `audio/` |
+| Mode   | once / loop | one shot stops at the end of the buffer; loop wraps and holds |
 | Attack | 0.02 – 20 s | log-mapped around the cell's own default, ±3 octaves |
 | Decay  | 0.1 – 40 s  | rides `state.decay`, so the global Decay macro reaches it |
 | Speed  | ±1.5 oct    | playback rate, as a ratio of the recording's own |
 | Level  | 0 – 1       | this cell's own level in the mix |
+| Send   | 0 – 1       | how much of it reaches the shared send (§2.11c) |
 
-It is **routed like every other source**: cable it to an Output cell or it is
-not heard, and the Out cell it lands on is what pans it. This is a change —
-it used to be the second family (with the gusts, §2.11) that mixed itself,
-panned by where the cell sits, and needed no cable at all. Routing it costs
-one cable and buys three things: one rule about what is audible for every
-family that makes a sound, a fader on the mixer page under the recording's
-own name (§4.1b), and a K1+tap that warns when the cell cannot be heard
-instead of staying quiet about it.
+**The recording is a knob.** `file` used to be a field on the cell record, one
+`.wav` per seat, fixed at load — which made the family exactly as big as the
+folder that shipped with the script. The **File** row walks every playable
+file in `audio/` instead (`sample.scan`, via norns' `util.scandir`, filtered
+to `.wav` / `.aif` / `.aiff` / `.flac` and sorted by name so a saved patch
+comes back on the file it was left on). A cell is a *player* rather than a
+sound; anything dropped into that folder is on the panel next time the script
+loads; and eight seats are eight things that can be sounding at once rather
+than four things that can only ever be those four.
 
-It keeps its own **Level** knob even so, the way a gust does: a field
-recording's loudness is a property of the recording rather than of the cable
-carrying it, and Thunder.wav and Sea.wav are nowhere near each other to
-start with.
+Sorted by name and not by discovery order, because the row's index is what is
+persisted. The eight seats come up spread across the list — cell *i* defaults
+to entry *i mod n* — so a folder with eight files in it opens with eight
+different recordings loaded rather than eight copies of the first.
+
+If the folder cannot be read at all, the four that ship stand in. A fallback
+rather than an error: `Buffer.read` has no path back to Lua, so a missing file
+is already indistinguishable from a Level of zero, and a cell with nothing to
+play is a cell that makes no sound rather than a script that will not start.
+
+**One shot or loop**, per cell, one shot by default because that is what a
+pulse means everywhere else on the panel.
+
+- *One shot* plays the recording once and stops, whether or not the envelope
+  is still open. The buffer used to wrap unconditionally, so a short file
+  repeated under a long fall with no way to ask it not to.
+- *Loop* wraps and **holds**: the first arrival opens the envelope gate and
+  starts the buffer round, and the next arrival on the same cell lets it go.
+  A toggle rather than a gate, because there is nothing on the far end of a
+  cable to release it — a pulse is an instant, and the only family that sends
+  a sustained anything is a Clock cell on High, which has its own path to the
+  same argument.
+
+**It is heard with no cable at all**, panned by the column the cell sits in —
+the second family after the gusts (§2.11) that routes itself, and for the same
+kind of reason. It spent one build cabled to an Output cell like a voice, on
+the principle that one rule about what is audible beats two. The principle is
+right and the exception is righter: a field recording is a bed, the thing you
+reach for one to do is fill the room under a patch, and spending an Output
+seat and a cable on each of eight of them to get there was a tax on the one
+family that never wanted the placement. A cable to an Output cell is still
+allowed and still means what it means — it places a second copy rather than
+being the only way to hear the first, and that copy is a mixer channel like
+any other (§4.1b).
+
+Engine-side that is two outputs per cell: a mono tap into its own `patchBus`
+slot (`smpOutBase`), which is what a cable out of the cell carries, and a
+panned copy into a shared stereo bus (`smpBus`) that `\woodland_fx` reads
+directly alongside the Output row.
+
+It keeps its own **Level** knob, the way a gust does: a field recording's
+loudness is a property of the recording rather than of the cable carrying it,
+and Thunder.wav and Sea.wav are nowhere near each other to start with. §8.6's
+per-recording trim is the same argument one level down, and it moved with
+`file`: it is keyed by filename (`sample.FILE_TRIM`) rather than by seat,
+because a correction for how loud a recording happens to be stops meaning
+anything the moment a seat can play any of them. A file nobody measured gets
+no trim; guessing at one would be worse than leaving it alone, and the Level
+knob is exactly what that case is for.
 
 It emits no answering pulse: a swell measured in seconds is not an event
 anything downstream could be timed against, and a family with no pulse out
 cannot be half of a feedback loop.
 
-An **LFO** cabled to one reaches all four of its rows, Level included — pick
-which on the LFO's own Param row (§2.12). That is the ordinary
-Target/Param machinery rather than anything special to this family; what
-changed is only that these four now have knobs worth aiming it at.
+An **LFO** cabled to one reaches all of its rows, Level included — pick which
+on the LFO's own Param row (§2.12). That is the ordinary Target/Param
+machinery rather than anything special to this family.
 
 A **Clock cell set to High** (§2.9b) holds the envelope open instead of
 striking it, so the recording plays continuously for as long as the gate is
-up — `smp_hold(i, 0|1)`, which crossfades `\wl_smp` between its perc envelope
-and an asr off the same two knobs.
+up — `smp_hold(i, 0|1)`. That and the loop toggle's own `smp_gate(i, 0|1)`
+raise the same envelope; `\wl_smp` takes whichever of the two is up, so
+neither can close a cell the other is holding.
 
-**What was here before.** These four seats were the **heartwood**, a
+**What was here before.** The right-hand four seats were the **heartwood**, a
 diffusion lattice: a pulse injected at one node spread outward with a per-hop
 delay and loss and emerged from the others later and quieter, under a single
-"conductance" knob standing in for both quantities at once. It was the
-hardest family on the panel to hear the shape of and the hardest to aim, and
-it is cut outright — `lib/heartwood.lua`, `\wl_heartwood`, the `heart_in` /
-`heart_out` bus families and every H pair in the §6 matrix with it. The four
-recordings these cells play are the same four the mixer used to run as an
-always-on bed (§4.1b); they are played now rather than left running — and
-back on the mixer page, but as channels of the patch under their own names
-rather than as four fixed rows nothing could remove.
+"conductance" knob standing in for both quantities at once. It was the hardest
+family on the panel to hear the shape of and the hardest to aim, and it is cut
+outright — `lib/heartwood.lua`, `\wl_heartwood`, the `heart_in` / `heart_out`
+bus families and every H pair in the §6 matrix with it. The left-hand four
+were the **grove** (§2.6). The four recordings that ship with the script are
+the same four the mixer used to run as an always-on bed (§4.1b); they are
+played now rather than left running, and they are four entries on a row rather
+than four cells.
 
-### 2.6 The grove — F (4)
+### 2.6 The grove — F (4, removed)
 
-The pitch fields. Trimmed from eight to four for the grid overhaul — one seam
-instead of two, and one representative of each of the most distinct shapes
-rather than all eight modes having a dedicated cell. Mechanically unchanged:
-mode keys match `grove.lua`, and every mode not given a seat here is still
-reachable by `K1 + E2` cycling on any F cell.
+The pitch fields are gone. Four cells, eight modes, a wandering degree per
+cell in a normalised −1..+1 that a Range knob scaled into semitones; voices
+and synths cabled into one were retuned by it, on a strike, on an incoming
+pulse, or continuously on the scheduler tick; two fields cabled together
+pulled toward each other or apart.
 
-| Cell | Name | Default mode |
-|--------|----------|--------------|
-| (1,4)  | Cuckoo   | call — two notes back and forth, never quite the same twice |
-| (2,5)  | Nightjar | drone — stays on the root; only the last few cents move |
-| (3,6)  | Curlew   | cascade — a descending run, then a leap back to the top |
-| (4,7)  | Bittern  | octave — register jumps only; ignores the scale |
+**Why it went.** A field was a melody generator you patched, and the panel has
+grown one that does the job better and more legibly. A Turing machine (§2.8)
+answers a clock with a number you can see the shape of, hold, and set the
+length and spread of; the global Scale (§4.1) decides what that number lands
+on. A field's eight modes were invisible on the grid as anything but a
+brightness, four of them were variations on "randomly", and the coupling
+between two of them was a behaviour with no reading anywhere on the screen.
+Nothing reachable with a field is unreachable with a register and a Scale, and
+four seats on the panel were worth more to a family that wanted them.
 
-**A field reaches a voice by cabling straight to it now** — the old P socket
-is gone with the rest of the socket cluster, and there is no other meaning a
-field's pulse-less "neither" family link to a voice could have (§2.2, §6).
-The voice's own sound-page **Depth** knob (§5.5) is what used to be the P
-socket's own depth knob: a multiplier on everything the fields (and TM
-cells) do to that voice's pitch. Everything else about a field —
-strike-driven stepping, pulse-driven stepping, the continuous modes, F↔F
-coupling, snap — is unchanged from before the overhaul.
+**What survives, in `lib/grove.lua`.** The file keeps its name and the half of
+it every other family depended on:
+
+- the **SCALES** and `grove.quantise_semitones` — the final global
+  quantisation stage every pitch passes through (§4.1);
+- `grove.note_name` — what every Pitch row on the panel reads (§5.2e);
+- `PITCHED`: the three families whose pitch runs through here (the four modal
+  voices, the two FM cells, the two VA cells) and the three things that differ
+  between them;
+- `grove.hz`: root + the cell's own Tune + whatever registers are cabled in,
+  scaled by the sound page's **Depth** knob + the global Pitch macro + this
+  strike's own detune, quantised **as a whole**;
+- `grove.on_strike` and `grove.strike_detune` — §4.1c Plonks;
+- the per-voice SC-side detune drift, which is a `\woodland_voice` LFO and is
+  only set from here. It used to deepen with the Range of whatever field was
+  cabled in; with the fields gone it is a constant, and it stays because it is
+  the reason a bare, unpatched patch does not sound like a sample being
+  retriggered.
 
 ### 2.7 The weave — R (6)
 
@@ -431,7 +500,8 @@ own six-parameter sound page) — **renamed and repositioned** into row 2, next
 to the voices, and split into two labelled groups on the panel: the three
 "ping" cells read **F**, the three "noise" cells read **N**. The underlying
 type is `GVOICE` and the `id` prefix is `gv.*`, so the display letter `F`
-here never collides with the true pitch fields' own `f.*` ids (§2.6).
+here is a display letter only; the mechanic's own type string is `GVOICE`
+(§2.6 took the grove, and with it the collision this note used to describe).
 
 | Cell | Name | Kind | Character |
 |------|------|------|-----------|
@@ -556,7 +626,7 @@ swelling and going.
 | gust             | `gust_hold` — an asr off the same Attack/Decay, in place of the perc |
 | sample cell      | `smp_hold` — the same, so the recording plays on |
 | exciter          | nothing, and nothing is needed: an exciter free-runs unless a *trigger* cell gates it (§2.4), so a clock cell has always left it sounding |
-| everything else  | nothing. A field takes a note and a register takes a trigger; neither has an envelope to hold |
+| everything else  | nothing. A register takes a trigger and has no envelope to hold |
 
 A High cell **does not fire**. It emits no pulses at all — a gate that also
 clocked would be two things, and the Ratio knob it would clock at is exactly
@@ -598,20 +668,31 @@ struck cell.
 
 | Row | What it does |
 |--------|--------------|
-| Pitch  | ±2 octaves from the cell's own seat, then quantised to the Scale |
+| Pitch  | ±4 octaves from the cell's own seat, then quantised to the Scale |
 | Attack | 0.01 – 12 s, log-mapped around the cell's own default |
 | Decay  | 0.05 – 30 s; rides `state.decay`, so the global Decay macro reaches it — and there is deliberately no family Decay on §2.11b for that reason |
 | Timbre | how hard the triangle is folded: flute at 0, horn at 1 |
+| Vib    | vibrato depth, 0 – 1 semitone. Zero by default (§2.11d) |
 | Cross  | how deeply whatever is cabled in modulates this gust |
 | Level  | this cell's own level in the mix |
+
+**Pitch spans four octaves either way**, not two. Two was matched to a
+percussion cell's, on the reasoning that a cell only ever wants moving into a
+neighbouring register — but a gust is the family whose *seat is its note* (the
+twelve roots span barely two octaves between them), and the thing anyone
+reaches for on that row is not "a little higher": it is a sub-bass under the
+bed or a whistle over the top of it. The whole eight-octave sweep still passes
+through the cell's own root at the centre detent, and `\wl_gust`'s own
+8 – 8000 Hz clip is what stops it running off the end.
 
 Two things a gust does that nothing else on the panel does. **It is heard
 uncabled** — the engine pans it by the column it sits in and mixes it in,
 through the shared send effect (§2.11c), which was this family's own delay
 line until every other family got a Send knob into it.
-It is now the only family that reaches the mix uncabled: the sample cells (§2.5)
-did too and are routed like everything else. An Output cable is still allowed
-and still means what it means; it just places a second copy. And **its pitch
+The sample cells (§2.5) are the other family that does, for a related reason:
+one is a key you press and one is a bed you lay down, and neither wants an
+Output seat spent on it to make a sound. An Output cable is still allowed and
+still means what it means; it just places a second copy. And **its pitch
 is not its own**: the cell's seat plus its Pitch knob is pulled onto the global Scale
 before it sounds, so twelve keys pressed at random are twelve notes of one
 scale.
@@ -636,18 +717,27 @@ and the mixer (`gust.MACROS` in `lib/gust.lua`).
 
 | Row | What it does |
 |--------|--------------|
-| Pitch  | transposes all twelve, ±12 st, before the Scale quantises them |
+| Pitch  | transposes all twelve, ±48 st, before the Scale quantises them |
 | Timbre | offsets every cell's fold |
 | Attack | offsets every cell's swell time |
+| Vib    | *adds* vibrato to every cell, 0 – 1 semitone (§2.11d) |
 | Cross  | offsets every cell's cross-modulation depth |
-| Level  | offsets every cell's level |
+| Level  | fades to silence below the centre, offsets above it |
 
 The three delay rows that used to end this page — Space, Delay, Regen — are
 gone from it. That line is a send every family can reach now (§2.11c) and its
 rows are on a page of their own past the mixer; a knob that has stopped being
 about one family has no business on that family's page.
 
-**The five family knobs are offsets, not values.** Twelve cells you have
+**The family transpose spans as far as a single cell's own row.** It was
+narrower — one octave against a cell's two — on the argument that this moves
+twelve cells at once and the useful gesture is shifting the family into a
+neighbouring register. The argument against, and the one that won: the family
+*is* the bed, and dropping the whole of it under everything else or lifting it
+into a register nothing else on the panel occupies is exactly the gesture a
+knob over all twelve is for.
+
+**The family knobs are offsets, not values.** Twelve cells you have
 spent a while setting individually are the whole point of having twelve, and
 a unified knob that wrote absolute values would erase that the first time you
 touched it — worse, invisibly, since the twelve cell pages would go on
@@ -657,7 +747,23 @@ spread is between them, and turning it back to the middle puts them exactly
 where they were. The sum is clamped **per cell**, so a macro runs out of
 travel gracefully at the ends rather than wrapping or shoving cells past each
 other. Pitch is in semitones because that is the unit every other pitch on
-the panel is in; the other four ride the 0..1 knobs they offset.
+the panel is in; the rest ride the 0..1 knobs they offset.
+
+Two of them are not plain offsets, because their knobs have a meaningful zero
+where the others do not.
+
+- **Vib** *adds*. Vibrato's neutral is none of it, and both the cell knob and
+  this one start there — so at 0 the twelve are wherever they were put, and
+  turning it up puts vibrato on all twelve without having to visit each.
+- **Level** fades below the centre and slides above it. A fader that cannot
+  reach silence is not one: sliding twelve cells down by half a knob left a
+  cell that was at 0.7 sitting at 0.2, which is quieter and audibly still
+  there. Below the centre detent it *multiplies*, so 0 is genuinely nothing
+  whatever the twelve were individually set to; above it, it slides, because
+  the top half is "all of them louder" and there is no equivalent of silence
+  at that end. It is only Level: Timbre, Attack and Cross have no zero worth
+  reaching in one gesture, and a bottom half that behaved differently from the
+  top on those would be a knob that changes meaning halfway along for nothing.
 
 **What a cell page reads is what that cell sounds.** The per-cell rows
 (§2.11) report the *effective* value — knob plus macro — while `E2`/`E3` go on
@@ -739,6 +845,33 @@ The state stays on `state.global.gust_space` under its old key. It is the same
 numbers in the same place, and renaming it would silently discard them out of
 every patch saved before the move.
 
+#### 2.11d Vibrato — one knob, per cell and over the family
+
+Every gust has a **Vib** row and the family page has one over all twelve, both
+at zero on a fresh patch — so nothing that was playing before this row existed
+sounds any different.
+
+**One knob and deliberately one: depth.** A second knob for rate is the
+difference between a shimmer and a warble, which is worth having on a lead
+voice. Twelve drones warbling at one rate is a chorus pedal stuck on, and
+twelve at rates a player set individually is twelve knobs nobody is going to
+visit. So the rate is fixed per cell and spread across the family — one base
+around 4.9 Hz with a small deterministic spread, the same reasoning the
+per-voice detune rates have (§2.6) and the same fix: a fixed uneven ladder
+rather than a random one, so a patch sounds the same twice.
+
+Depth tops out at **one semitone**. Wider than that stops reading as vibrato
+and starts reading as a siren, and the cell already has a Cross input for
+anyone who wants pitch modulation on that scale.
+
+Engine-side it is `gust_vib(i, semitones, rateHz)` — the two travel together
+because only the depth is a knob — and a control-rate `SinOsc` summed with the
+cross-modulation bend *before* the single `.midiratio`, so a modulated gust's
+vibrato rides its bend instead of fighting it. The filter still tracks the
+untouched tuned pitch, as it does for the cross-mod bend: `LPF` reads its
+cutoff once per block, and handing it a modulated pitch aliases the modulator
+into a stepped cutoff.
+
 ### 2.12 The LFOs — L (4, internally type `LFO`)
 
 Four free-running modulators on the row directly above the gusts. No sound of
@@ -773,9 +906,15 @@ sample-and-hold at `1/2` a sequence in time with the drums.
 
 Free and synced keep **separate knobs** — flipping Sync and flipping back
 finds both where you left them, the same way a Clock cell's Mode leaves its
-Ratio alone. Free is still the default: a modulator whose job is to be at odds
-with the beat wants nothing to do with this, and neither does one cabled to an
-Output cell to be heard as a tone.
+Ratio alone.
+
+**Synced at `1 x` is the default.** It was free, on the reasoning that a free
+modulator is what an LFO has always been. Against that: the four cells sit on
+the panel between the Clock family and the gusts, everything else on it is
+already in time, and a modulator that is not is the exception rather than the
+norm. So the four come up locked to the transport at one cycle a beat, and a
+player who wants one at odds with the beat — or one cabled to an Output cell
+to be heard as a tone — says so, in one detent.
 
 Tempo is not ours to be told about — it moves from the norns PARAMS menu, from
 a MIDI clock, from a Link peer, none of which call into this script — so the
@@ -872,8 +1011,8 @@ the shape of while you turn the knob.
 | Ratio  | a ladder of sixteen exact ratios, 0.5 to 16 |
 | Index  | how deep the modulation is — the brightness knob |
 | Fbk    | the modulator's own feedback: sine → saw-like → noise |
-| Attack | 1 ms – 8 s, log-mapped around a 10 ms centre |
-| Decay  | rides on `state.decay`, so the global Decay macro reaches it |
+| Attack | 1 ms – 8 s, log-mapped around a 10 ms centre, asymmetrically |
+| Decay  | 0.02 – 30 s; rides on `state.decay`, so the global Decay macro reaches it |
 | Cross  | how deeply a cable into this cell modulates it |
 | Level  | |
 | Send   | how much of it goes to the shared send effect (§2.11c) |
@@ -919,7 +1058,7 @@ amount would be a decision the player could hear and could not reach.
   a drum has. They are not gusts: a gust is a key you press and a drone that
   routes itself, and these are neither.
 * Their pitch runs through `grove.lua`, the **same route a modal voice's
-  does**. A field or a register cabled in tunes them, the global Pitch
+  does**. A register cabled in tunes them, the global Pitch
   transposes them, and the global Scale has the last word. That is the whole
   reason to put them through grove rather than give them a private note like a
   gust has: a TM cabled to one has to play it in the same key as everything
@@ -932,7 +1071,7 @@ amount would be a decision the player could hear and could not reach.
   nobody asked for.
 * They have no **Depth** row, and sit at the ×1 that row's own centre detent
   means. There are already nine and twelve rows on these pages, and a second
-  scaling knob under the one the field itself has is the first thing that
+  scaling knob under the one the register itself has is the first thing that
   would come off again.
 
 Engine-side they are the same shape a gust is — one mono tap out per cell, one
@@ -943,6 +1082,41 @@ than nine written out. Both families answer a single keyed setter (`fm_set` /
 for the same reason.
 
 ---
+
+**Both envelopes open upward, not symmetrically.** Attack and Decay use the
+same log mapping every other envelope on the panel does — 0.5 is the cell's own
+default and the knob sweeps octaves of ratio either side — with one difference:
+the two halves are not the same width. Three octaves each way put the top of
+the Attack row at *eighty milliseconds*, which is a soft strike and not an
+arrival, and two octaves put the top of Decay under four seconds. These are the
+only oscillator voices on the panel and there was no way to make either of them
+speak slowly, which is half of what an oscillator with an envelope is for.
+
+So the range is opened upward and only upward: three octaves down and most of
+ten up on Attack, two down and four and a half up on Decay. Down is what it
+always was, so a struck FM cell at the bottom of either row is bit-identical to
+the one that was there before. A symmetric widening would instead have bought a
+knob whose bottom third sat clamped against a floor — an attack of a
+ten-thousandth of a second is not a different sound from a thousandth.
+
+**The global macros reach them.** Both were meant to and neither quite did.
+
+- **Decay** (§4.1) had the whole path built — `synth.decay_seconds` has folded
+  the multiplier in since the day it was written, and `lib/synth.lua` registers
+  its own `state.on_decay_change` listener. What was missing was the list in
+  `gparam.lua` deciding *who gets notified* when the macro moves, which stopped
+  at the voices, the drums, the gusts and the sample cells. So the knob reached
+  every sounding family on the panel except the two newest, and silently: an FM
+  cell picked the change up on the next touch of its own Decay row and not
+  before.
+- **Plonks** (§4.1c) was worse than absent, it was overwritten. `grove.on_strike`
+  pushes a detuned pitch onto `freq`, and then the note command writes `freq`
+  again with the undetuned number a moment later. `synth.play` asks
+  `grove.strike_detune()` for one itself now and sounds the note already
+  detuned, which is what makes the macro audible here. The floor is a modal
+  voice's own 0.02 st rather than a drum's zero, because these are pitched
+  cells and a pitched cell that is dead still on repeat is the thing the floor
+  exists to prevent.
 
 ## 3. Patching grammar
 
@@ -956,7 +1130,6 @@ for the same reason.
 | Tap a **voice**, **GVOICE** or **TM** cell (nothing else held) | open its sound page (§5.5); tap again to close |
 | Tap a **GUST** cell (nothing else held) | it sounds on the way *down*; the release still opens its page |
 | `K1` + tap a **T** cell | root it to the clock, or set it wild |
-| `K1` + tap an **F** cell | snap its field to the scale, or set it free |
 
 Cables are undirected and bipolar. Gain range `-1.0 .. +1.0` through zero.
 Negative gain inverts: streams are phase-inverted, pulse coupling becomes
@@ -1009,7 +1182,8 @@ Rain also draws the one shape on the panel that **moves on its own**
 more streaks, longer, falling faster and more slanted.
 
 **Scale** starts on **P.Maj**, the major pentatonic, rather than on free.
-Every pitched family here — voices, gusts, the fields that tune them — is
+Every pitched family here — voices, gusts, the synths, the registers that
+tune them — is
 more listenable in tune than out of it, and free is the deliberate choice you
 make after hearing what the panel does in a scale rather than the state you
 have to find your way out of on first boot. The names are abbreviations
@@ -1123,11 +1297,13 @@ set one channel at a time.
 **What used to be here.** Four always-on soundscape loops — Rain, Cicada,
 Thunder, Sea — with a fader each, plus the master, plus the gusts' shared
 delay line, which together came to exactly eight rows and one screen. The
-loops are the four sample cells now (§2.5), played rather than left running,
-and they are back here as ordinary channels because they are cabled to the
-Output row like everything else; the delay line went to the global page,
-where the rest of the patch-wide numbers already were; the master went to
-`K1`+`E3` alone. What is left is the one thing a mixer is actually for.
+loops are entries on the sample cells' File row now (§2.5), played rather
+than left running; the delay line went to the global page, where the rest of
+the patch-wide numbers already were, and on to a page of its own (§2.11c);
+the master went to `K1`+`E3` alone. What is left is the one thing a mixer is
+actually for. A sample cell appears here when one is cabled to an Output cell
+— that family mixes itself, so such a cable is a second copy placed
+deliberately, and a channel is exactly what a deliberately placed copy wants.
 
 The four recordings still load once each at init, at the same engine indices
 — they belong to `sample.init` rather than to this page now. The old
@@ -1136,21 +1312,31 @@ resonator) has no successor at all: the six E cells (§2.4) are the panel's
 excitation sources, and `\woodland_voice` is excited only by its own strike
 burst and by whatever a cable puts on its mod path.
 
-Engine side: `smp_load(i, path)`, `smp_note(i, force)`, `smp_hold(i, 0|1)`
-and the four knob setters, with one `\wl_smp` synth per cell writing a mono
-tap into its own `patchBus` slot (`smpOutBase`) — the shared stereo `smpBus`
-those four used to pan themselves into is gone with the self-mixing, and
-there is no `smp_pan` any more either. Level is applied inside each
-`\wl_smp`; the pan comes from the Out cell the cable lands on. Every knob is
-held engine-side whether or not that cell's `Buffer.read` has completed, so
-pushing a whole page at init — which `sample.init` does — loses nothing; a
-missing file simply leaves that one cell silent and does not touch the other
-three.
+Engine side: `smp_load(i, path)`, `smp_note(i, force)`, `smp_pan(i, v)`,
+`smp_loop(i, 0|1)`, `smp_gate(i, 0|1)`, `smp_hold(i, 0|1)` and the four knob
+setters, with one `\wl_smp` synth per cell writing two outputs — a mono tap
+into its own `patchBus` slot (`smpOutBase`) for cables, and a `Pan2` copy
+into the shared stereo `smpBus` that makes it audible uncabled (§7.3). Level
+is applied inside each `\wl_smp`; the automatic pan comes from the column the
+cell sits in, and a cable to an Out cell places a second copy at that cell's
+own position.
+
+`smp_load` is no longer a once-per-boot message: the File row (§2.5) sends one
+every time it lands on a different recording, and the engine frees that slot's
+synth and buffer and restarts it on the new one, carrying every knob across
+(its `smpArgs`). Lua only sends when the path actually changes — a `Buffer.read`
+is a disk read, and a row that re-sent the same path every detent would be
+re-reading a twelve-megabyte file per click. Every knob is held engine-side
+whether or not that cell's read has completed, so pushing a whole page at init
+— which `sample.init` does — loses nothing; a missing file simply leaves that
+one cell silent and does not touch the other seven.
 
 **Cost.** Thunder and Cicada are minutes long; between them the four buffers
-hold roughly 130 MB of scsynth memory. If that ever becomes a problem, the
-fix is `VDiskIn` streaming rather than `PlayBuf`, or shorter loops — nothing
-above changes.
+that ship hold roughly 130 MB of scsynth memory, and eight cells can now hold
+eight buffers rather than four. Two of the eight default to each shipped file,
+so a fresh load is the same 130 MB — but a folder of eight long recordings all
+loaded at once is not. If that becomes a problem the fix is `VDiskIn`
+streaming rather than `PlayBuf`, or shorter files; nothing above changes.
 
 ### 4.1c External clock and transport
 
@@ -1186,8 +1372,9 @@ The eighth row on the global page, and the one that is not a knob.
 
 Three of the macros above — **Plonks**, **Decay** and **Pitch** — were
 written for the four corner voices. Decay quietly grew to reach the drums,
-the gusts and the sample cells, because a decay multiplier means the same
-thing to all of them. Plonks and Pitch never did, for a good reason: a kit
+the gusts, the sample cells and the two synth families, because a decay
+multiplier means the same thing to all of them; Plonks reaches the synths too
+(§2.13). Plonks and Pitch never reached the drums, for a good reason: a kit
 that transposes with the tune and detunes on every hit is a particular
 musical choice rather than the obvious one, and making it the default would
 have taken the drums away from anyone using them as drums.
@@ -1263,7 +1450,6 @@ T and R cells are the exception, and §4.2b is the whole of it.
 | T cell | rate / clock relation | gait-dependent |
 | R cell | the transform's own amount | rule-dependent |
 | E cell | **Colour** — the source's filter/character | 0..1 |
-| F cell | **Range** — how far the field roams (25 cents .. 2 octaves) | 0..1 |
 | C cell | **Ratio** — multiple/division of the master clock | 1/128 .. 8x |
 
 There is no longer a weather offset riding on top of E2 anywhere — Climate is
@@ -1389,9 +1575,18 @@ the page existed, and costs the same handful of UGens it always would. There
 is no bypass switch because there is nothing to switch off.
 
 Defaults are all 0 except **Shape** (0.5, bipolar and neutral in the middle)
-and **Swirl** (0.3 — a rate, inaudible until Chorus is up, and starting it at
-zero would make the first thing anyone hears on turning Chorus up a static
-comb filter rather than a chorus).
+and **Swirl** — a rate, inaudible until Chorus is up, and starting it at zero
+would make the first thing anyone hears on turning Chorus up a static comb
+filter rather than a chorus.
+
+**Swirl comes up at 0.44 Hz.** It was 0.3 of a knob, which is about 1.1 Hz —
+audible as a wobble the moment Chorus is touched, which is the one thing a
+master-bus chorus should never be. 0.44 Hz is a slow drift: it thickens
+without announcing itself, and the rest of the row is there for anyone who
+wants a warble. `colour.SWIRL_DEFAULT_HZ` is the number that is chosen and the
+knob position is derived from it (`colour.swirl_knob`), rather than the other
+way round — the rate is the thing worth picking, and where it falls on a
+0.05 – 3.5 Hz sweep is arithmetic.
 
 **Comp is percussion-focused**, which means three specific choices: a 4 ms
 attack, slow enough that the click of a drum gets out before the gain comes
@@ -1425,7 +1620,6 @@ silently set on the synth.
 | GVOICE | 2 unpatched, 4 patched | 10 while its sound page is open; flash on being struck |
 | E | 3 unpatched, 5 patched | flash on a grain firing, decay ~120 ms |
 | H | 2 | local lattice energy |
-| F | 2 | where the field currently sits; flash on each step |
 | C | 2 | flash on each clock crossing — a pure flasher, no idle "value" reading. **Set to High** (§2.9b) it sits lit at 12 and does not blink at all: a clock blinks, a gate is simply on |
 | TM | 2 unpatched, 4 patched | 10 while its sound page is open; flash on each step |
 | GUST | 2 unpatched, 5 patched | 10 while its sound page is open; flash on each note |
@@ -1553,7 +1747,7 @@ Three things went, and each paid for the same thing:
 things, as plain text at three levels: transport (triangle running, square
 frozen — Still and an external Stop are one state, §4.1c), the tag (a cell's
 panel letter, `MIX`, `MAP`, `G` — the one thing the name cannot tell you,
-since "Bittern" does not say whether it is a field or a drum), the name, page
+since "Yaffle" does not say whether it is a drum or a trigger), the name, page
 dots, and the tempo. The value readout is gone: every widget draws its own.
 
 **The block.** 128 × 64, header 8, two blocks of 27 — 62, with two spare. In
@@ -1762,6 +1956,33 @@ floor at one level, `alias` holds nine samples rather than thirteen, `squash`
 runs five peaks rather than seven), is what keeps the Colour page — the
 tightest on the panel — at 187 of its 200 with the value line on it.
 
+### 5.2e Screen — a pitch reads as a note
+
+Every Pitch row on the panel used to print hertz. Hertz is the number the
+engine wants and the wrong number to read off a page: `329.6 Hz` and
+`349.2 Hz` are a semitone apart and look nothing like it, and nobody decides
+where to put a drone by comparing three-digit numbers. `grove.note_name` owns
+the spelling; the gust page's Pitch row and the FM/VA pages' all go through it,
+and what they hand it is the pitch the cell will *actually sound* — quantised
+to the Scale, transposed, with every cabled register already summed in.
+
+**Sharps, and no key awareness.** The panel's scales include five that are not
+in 12-TET at all (§4.1), so a spelling that tried to be correct in a key would
+be inventing one. What the reading has to do is say which note, unambiguously,
+in the four characters the value line has room for.
+
+**A quarter-tone mark where it belongs.** The microtonal scales land genuinely
+between two equal-tempered notes — Rast's neutral third, slendro's 240-cent
+step — and printing the nearer of the two as though it were the note would be
+a reading that lies. More than 20 cents off gets a trailing `+` or `-`:
+`E3+` is a quarter-tone sharp of E3. Twenty rather than a few, because every
+strike carries a detune (§4.1c) and a mark that flickered on and off with it
+would be unreadable.
+
+Scientific octave numbering, so middle C is `C4` and the panel's own reference
+pitch is `A1`. Nothing in, nothing out — a caller can hand it a pitch that
+does not exist yet and print its own dash.
+
 ### 5.3 Screen — Cell view (a cell held or open)
 
 The same widget grid as §5.2c, for whichever page that cell's type has
@@ -1815,7 +2036,7 @@ carry them.
 | Strike | mallet position, comb-notching modes with a node there | 0.02 .. 0.5 |
 | Level | the voice's own amplitude | 0 .. 1.4 |
 | **Hardness** | mallet strike hardness — the old T socket's knob, read live at strike time | 0..1 |
-| **Depth** | how far a cabled field or TM cell moves this voice's pitch — the old P socket's knob | 0..2 |
+| **Depth** | how far a cabled TM cell moves this voice's pitch — the old P socket's knob | 0..2 |
 | **Balance** | what a stream landing on this voice does — the old M socket's knob: 0 injects, 1 bends the body | 0..1 |
 | **Send** | how much of this voice goes to the shared send effect (§2.11c) | 0..1, zero by default |
 
@@ -1848,14 +2069,13 @@ exactly the way every other cell on the panel already worked.
 | **T** cell | mutual phase coupling (Kuramoto) plus a small trigger nudge |
 | **R** cell | the transform's input |
 | **E** cell | fire one grain (a T or R cable is what puts the cell into grain mode at all) |
-| **F** cell | step the field to a new degree |
 | **H** cell | enter the lattice and diffuse |
 | **C** cell | nothing, deliberately — it is a pure source (§2.9) |
 | **O** cell | nothing — it is a pure destination |
 | **GVOICE** cell | strike it directly (same shape as a voice), subject to the same 28 ms refractory — §2.7b |
 | **TM** cell | clocks the shift register one step, and answers with a *number*, not a pulse — §2.8 |
 | **GUST** cell | plays its note; answers with a pulse of its own a tick later — §2.11 |
-| **FM** / **VA** cell | plays a note, at whatever pitch the fields and registers cabled to it have left it on; answers with a pulse a tick later, subject to the 28 ms refractory — §2.13 |
+| **FM** / **VA** cell | plays a note, at whatever pitch the registers cabled to it have left it on, plus this strike's own Plonks detune; answers with a pulse a tick later, subject to the 28 ms refractory — §2.13 |
 | **SMP** cell | plays its recording from the top; answers with nothing — §2.5 |
 | **LFO** cell | nothing — it is a pure continuous source (§2.12) |
 
@@ -1901,10 +2121,7 @@ stream:
 
 | Pair | Meaning |
 |------|---------|
-| **F → voice / FM / VA** | the field tunes it; the receiving cell's Depth knob (§5.5, ×1 fixed on FM and VA) scales it, and negative gain inverts the contour |
-| **F → E** | the exciter's Colour rides the field's line |
-| **F ↔ F** | the two fields pull together (apart, at negative gain) |
-| **TM → voice / FM / VA** | the register's own pitch tunes it, summed alongside whatever fields are also cabled there |
+| **TM → voice / FM / VA** | the register's own pitch tunes it; the receiving cell's Depth knob (§5.5, ×1 fixed on FM and VA) scales it, and negative gain inverts the contour |
 
 "a voice" in those last two means any **pitched** cell — the four modal voices
 and the four new synths alike (§2.13). `grove.PITCHED` is the one table that
@@ -1930,8 +2147,6 @@ Notes on the awkward pairs:
   the register is a separate cable, from whatever is keeping time.
 - **T↔T at negative gain** produces anti-phase locking.
 - **R↔R** is transforms in series, and the chain *is* the pattern.
-- **F is a source only.** A field never emits a pulse and never writes a
-  stream, so its whole column is one-way.
 - **C is a source only** (§2.9) — the same "cables are undirected, so a
   reactive pulse-in would fire on the return leg of the ordinary use" reason
   climate always had, kept even though climate itself is gone. Set to High
@@ -1939,8 +2154,9 @@ Notes on the awkward pairs:
   pulse ..." row above is simply not the sentence for it.
 - **GVOICE behaves as its own pulse source**, the same as an R cell — a Clock
   cell cannot reach it with anything but a pulse (no single knob to walk, and
-  there's no weather left to walk it with anyway), and a GVOICE cell is not a
-  target for a field either (both cables are legal to draw and mean nothing).
+  there's no weather left to walk it with anyway), and a register cannot reach
+  it either -- a drum takes a trigger, and a register sends notes (both cables
+  are legal to draw and mean nothing).
 - **Gusts, drums and the new synths chain freely** — each answers its own
   trigger with a pulse a tick later, so one can drive the next, and a cycle
   between two is safe by the same one-tick construction as a T↔T cable. A
@@ -1969,7 +2185,8 @@ Canopy/
     clockcell.lua            -- the four C-cell clock flashers (§2.9)
     quantise.lua             -- the groove: Swing/Rain place a gait's emission
     exciter.lua              -- E-cell control layer (audio side lives in SC)
-    sample.lua               -- the four S-cell sample players (§2.5)
+    sample.lua               -- the eight S-cell sample players and the
+                               audio/ folder scan behind their File row (§2.5)
     gust.lua                 -- the twelve G-cell drone synths (§2.11)
     synth.lua                -- the two FM and two VA cells + both their
                                pages (§2.13)
@@ -1977,7 +2194,8 @@ Canopy/
                                cell's Send row (§2.11c)
     lfo.lua                  -- the four L-cell modulators: eight shapes and
                                four destinations each (§2.12)
-    grove.lua                -- pitch fields: modes, coupling, voice retuning
+    grove.lua                -- pitch: the scales, the note names, and the one
+                               sum every pitched cell's Hz comes out of (§2.6)
     voice.lua                -- the thirteen-parameter voice sound page (§5.5)
     gvoice.lua               -- the six GVOICE-cell drums + their sound page
     gparam.lua                -- the eight-parameter global page (§4.1, §5.2)
@@ -1993,7 +2211,7 @@ Canopy/
     bridge.lua                -- engine command wrapper
   lib/Engine_Canopy.sc      -- SC: modal voices, GVOICE drums, exciters, the
                                gusts, the FM and VA synths, the shared send
-                               effect, the four sample players, the eight-shape
+                               effect, the eight sample players, the eight-shape
                                LFOs, the patch matrix, the Output row's
                                fixed-pan mix and the master colour chain
   audio/*.wav               -- Rain, Cicada, Thunder, Sea: one per S cell
@@ -2031,14 +2249,19 @@ patchBus        6  exciter outputs        (excBase         0)
                12  per-GUST audio tap     (gustOutBase    42)
                12  per-GUST cross-mod in  (gustModBase    54)
                 4  per-LFO shape tap      (lfoOutBase     66)
-                4  per-SMP audio tap      (smpOutBase     70)
-                2  per-FM audio tap       (fmOutBase      74)
-                2  per-FM cross-mod in    (fmModBase      76)
-                2  per-VA audio tap       (vaOutBase      78)
-                2  per-VA cross-mod in    (vaModBase      80)
-                1  the shared send bus    (sendBase       82)
+                8  per-SMP audio tap      (smpOutBase     70)
+                2  per-FM audio tap       (fmOutBase      78)
+                2  per-FM cross-mod in    (fmModBase      80)
+                2  per-VA audio tap       (vaOutBase      82)
+                2  per-VA cross-mod in    (vaModBase      84)
+                1  the shared send bus    (sendBase       86)
                --
-               83  total
+               87  total
+
+audio buses outside patchBus:
+gustBus         2  every \wl_gust pans itself in here (§2.11)
+gustSpaceBus    2  gustBus through \wl_gust_space, what \woodland_fx reads
+smpBus          2  every \wl_smp pans itself in here (§2.5)
 
 control buses:
 outLevelBus    16  the mixer's channel faders, read by \woodland_fx
@@ -2046,10 +2269,13 @@ excMeterBus     6  per-exciter envelope follower (§7.4)
 outMeterBus    16  per-Output-cell envelope follower, post-fader (§7.4)
 ```
 
-**`smpBus` is gone too.** The four sample cells used to `Pan2` themselves by
-their own seat into one shared stereo bus `\woodland_fx` read directly. They
-are ordinary cabled sources now (§2.5), so each writes a mono tap into
-`smpOutBase` and the Out cell it is cabled to is what pans it.
+**`smpBus` is back, and a sample cell writes twice.** Each `\wl_smp` puts a
+mono tap into its own `smpOutBase` slot — which is what a cable *out* of the
+cell carries — and a `Pan2` copy, placed by the column the cell sits in, into
+the shared `smpBus` that `\woodland_fx` reads directly. The second is what
+makes a bed audible with nothing patched (§2.5). It does **not** go through
+`\wl_gust_space`: that delay is the gust family's own colour, and a sample
+cell that wants the send has a Send row like every other cell.
 
 **`voiceBus` and `gBus` are gone.** Before the overhaul, every voice and
 every percussion cell wrote to two places: its own patchBus tap (for cables)
@@ -2109,21 +2335,31 @@ audio does flickers rather than reads. Both poll at 20 Hz.
 
 Unchanged mechanism. Graph format: a flat list of `{a_id, b_id, gain,
 oneway}` plus per-cell character values — **both of them** now, the primary
-and §4.2b's second knob — per-cell rule choices (gait / rule / mode, and the
-rooted / snap flags), each LFO's Target and Param, the mixer's per-output
-levels, and the sound-page parameters per voice, GVOICE cell, TM cell, gust
-and sample cell.
+and §4.2b's second knob — per-cell rule choices (gait / rule, and the rooted
+flag), each LFO's Target and Param, the mixer's per-output levels, and the
+sound-page parameters per voice, GVOICE cell, TM cell, gust, synth and sample
+cell.
+
+**A sample cell's File is a knob position, not a filename**, which is why
+`sample.scan` sorts by name: the folder's contents can change between one load
+and the next, and a stable order is what makes a saved 0.37 come back on the
+recording it was left on rather than on whichever file the filesystem happened
+to hand over first. Add a file whose name sorts before the one a cell was on
+and that cell will come back one entry along — the honest cost of persisting a
+position rather than a path, and cheaper than a saved patch that goes silent
+because a file was renamed.
 
 The second knob is one more plain 0..1 per cell in the same shape as the
 first (`state.character_b`), and it defaults per-gait and per-rule rather than
 to a constant — so a patch saved before it existed loads with every T and R
 cell doing exactly what it did, because every default is the number the gait
 or rule used to hard-code.
-Cell ids are stable strings (`"oak"`, `"d.skriker"`, `"r.drove"`, `"h.ley"`,
-`"f.cuckoo"`, `"clk.toll"`, `"q4.4"`) — never coordinates — which is what let
-the whole panel be re-cut twice now without the format changing. A saved
-patch from before the overhaul that referenced a now-gone id (`"oak.trig"`,
-`"c.moon"`, `"g.yaffle"`) fails to resolve on load and goes silently inert —
+Cell ids are stable strings (`"oak"`, `"d.skriker"`, `"r.drove"`, `"smp.rain"`,
+`"clk.toll"`) — never coordinates — which is what let the whole panel be
+re-cut twice now without the format changing. The sample cells keep their old
+spellings for exactly this reason, even though the panel calls them Sample 1..8
+now. A saved patch that referenced a now-gone id (`"oak.trig"`, `"c.moon"`,
+`"g.yaffle"`, `"f.cuckoo"`) fails to resolve on load and goes silently inert —
 every consumer already nil-guards `topology.get`, so this needs no migration
 code.
 
@@ -2210,7 +2446,9 @@ gust_space(mix, time, fb)       lfo_rate(i, hz)
 smp_load(i, path)               smp_note(i, force)
 smp_attack(i, s)                smp_decay(i, s)
 smp_speed(i, v)                 smp_level(i, v)
-smp_pan(i, v)
+smp_pan(i, v)                   smp_loop(i, 0|1)
+smp_gate(i, 0|1)                smp_hold(i, 0|1)
+gust_vib(i, semitones, rateHz)
 master_level(v)                 out_level(i, v)
 colour(key, v)
 ```
@@ -2220,7 +2458,8 @@ both discrete choke and the separate per-voice output-level knob.
 `rain_load`/`rain_volume`/`rain_excite` are gone too, and so are the
 `amb_load`/`amb_volume` pair that briefly replaced the first two: the
 recordings belong to the sample cells now (`smp_load`, `smp_note`,
-`smp_attack`, `smp_decay`, `smp_speed`, `smp_level`, `smp_pan`), and
+`smp_attack`, `smp_decay`, `smp_speed`, `smp_level`, `smp_pan`, plus
+`smp_loop` / `smp_gate` for §2.5's one-shot-or-loop switch), and
 `rain_excite` has no successor at all. `heart_conductance` is gone with the
 heartwood; `out_level` is new (§4.1b), and `colour` is new (§4.4) — one
 command for the master chain's eight knobs rather than eight named ones,
@@ -2229,7 +2468,7 @@ name.
 
 **CPU budget.** 4 voices x 6 modes = 24 resonators, plus 6 always-on GVOICE
 cells and up to 6 exciters (lazily allocated), ~50 patch synths worst case,
-12 gusts and their shared delay line, 4 sines, 4 sample players, and the
+12 gusts and their shared delay line, 4 sines, 8 sample players, and the
 master colour chain (§4.4) — two amplitude followers, a Compander, four
 short delay lines, two LPFs, two BPFs and a Latch, all stereo, all always
 running whether or not any of the eight knobs is up. Smaller
@@ -2475,6 +2714,55 @@ instrument as it stood before the grid overhaul; what follows is additive.
       decimals, then whole words, and never at the front. The widget grid
       draws in passes rather than widget by widget, purely so the level calls
       the value line would have cost stay inside the frame budget.
+
+    Two rounds followed this one and are not written up here: the instrument
+    row's re-cut, which added the FM and VA families, and the T/R one-page
+    pass. They are documented in §2.13 and §4.2b rather than in this list.
+
+14. **The fields out, the samples in.** One structural change and seven
+    smaller ones.
+    - **The grove is gone** (§2.6). Four pitch fields, eight modes, a
+      wandering degree per cell that voices were cabled into. A Turing machine
+      (§2.8) does that job now and does it where you can see it, and the
+      global Scale decides what its number lands on; nothing reachable with a
+      field is unreachable with a register and a scale. `lib/grove.lua` keeps
+      its name and the half every other family depended on — the scales, the
+      note names, `PITCHED`, `grove.hz`, Plonks and the per-voice drift.
+    - **Eight sample cells** (§2.5), on two mirrored diagonals: the
+      heartwood's old four and the grove's old four. And three changes to what
+      one *is*. **The folder is a knob** — a File row walking every playable
+      file in the script's `audio/`, so adding a sound to the instrument is
+      dropping a file in there rather than editing a cell record, and the
+      per-recording level trim moved with it, from the seat to the filename.
+      **One shot or loop**, one shot by default: one shot really stops at the
+      end of the buffer now, and loop wraps and holds until the next pulse on
+      that cell lets it go. And **they are heard with no cable at all**,
+      panned by the column they sit in, the way a gust is — each `\wl_smp`
+      writes a mono tap for cables and a panned copy into a shared `smpBus`
+      (§7.3). A field recording is a bed; spending an Output seat and a cable
+      on each of eight of them was a tax on the one family that never wanted
+      the placement.
+    - **The LFOs come up synced** at 1x (§2.12b). Everything else on the panel
+      is already in time; a modulator that is not is the deliberate choice.
+    - **The gusts reach four octaves either way**, per cell and over the
+      family (§2.11, §2.11b) — the family is the bed, and the gesture that
+      page is for is moving the whole of it into another register.
+    - **Vibrato on the gusts** (§2.11d), per cell and over all twelve, zero by
+      default. One knob — depth — with the rate fixed per cell and spread
+      across the family.
+    - **The family fader fades to silence** (§2.11b). Its bottom half
+      multiplies rather than sliding, because a fader that cannot reach zero
+      is not one.
+    - **Plonks and Decay reach the FM and VA cells** (§2.13). Decay was
+      missing only from the list of who gets notified; Plonks was being sent
+      and then overwritten by the note command a moment later.
+    - **Those two families can swell** (§2.13). Attack topped out at eighty
+      milliseconds and Decay under four seconds. Both knobs open upward only,
+      so the short end of each is exactly what it was.
+    - **Every Pitch row reads as a note** (§5.2e), quantised to the Scale by
+      the time it is printed, with a quarter-tone mark for the microtonal
+      scales that land between two — and **the master chorus comes up at
+      0.44 Hz** (§4.4), a drift rather than a wobble.
 
 ---
 

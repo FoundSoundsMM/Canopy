@@ -3,7 +3,7 @@
 --
 -- voice/GVOICE/TM cells each kept their own PARAMS list (voice.lua,
 -- gvoice.lua, tm.lua) because each is a real instrument with its own units.
--- everything else on the panel -- T, R, F, E, C, Out -- used to
+-- everything else on the panel -- T, R, E, C, Out -- used to
 -- have its settings scattered across gestures instead: E2 for "the one knob",
 -- K1+E2 to cycle a bank, K1+tap to flip a boolean, E3-with-nothing-focused
 -- for decay. that meant the same physical gesture did a different thing (or
@@ -219,38 +219,6 @@ PAGES.R = {
            function(id) return wl("weave").info(id) end, false),
   knob_row("character_b", "tilt",  "Shape",
            function(id) return wl("weave").info(id) end, true),
-}
-
--- F cells (the grove's pitch fields): how far it roams, which shape it roams
--- in, and whether it lands on the scale or between the notes.
-PAGES.F = {
-  character_row("Range", function(id)
-    local info = wl("grove").info(id)
-    return info and info.param or "-"
-  end, "span"),
-  bank_row("Mode",
-           function() return wl("grove").MODE_ORDER end,
-           function(id) local f = wl("grove").get(id); return f and f.mode end,
-           function(id, key) wl("grove").set_mode(id, key) end),
-  flag_row("Snap", "snapped", "free",
-           function(id) local f = wl("grove").get(id); return f and f.snap or false end,
-           function(id, on)
-             local f = wl("grove").get(id)
-             if f and (f.snap and true or false) ~= on then wl("grove").toggle_snap(id) end
-           end),
-  {
-    key = "degree", label = "Now", glyph = "marker",
-    get = function(id)
-      local info = wl("grove").info(id)
-      return info and util.clamp((info.pos + 1) / 2, 0, 1) or 0.5
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("grove").info(id)
-      return info and string.format("%+.2f st", info.degree) or "-"
-    end,
-    push = function() end,
-  },
 }
 
 -- E cells: the source's colour, and the ratio its envelopes run at.

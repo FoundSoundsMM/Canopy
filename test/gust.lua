@@ -119,7 +119,11 @@ do
   local M = fresh(4)
   -- Pitch up a little, off any scale degree, with Scale on "free": what
   -- comes out is exactly where the knob was put.
-  M.state.set_vparam("gu.squall", "pitch", 0.5 + (1 / 24) / 2)  -- +1 semitone
+  -- Pitch is +-4 octaves now, so one semitone is half of what it was on the
+  -- knob. written off PITCH_RANGE_ST rather than as a number, so widening the
+  -- row again does not silently turn this into a test of something else.
+  M.state.set_vparam("gu.squall", "pitch",
+                     0.5 + 1 / (2 * M.gust.PITCH_RANGE_ST))  -- +1 semitone
   M.state.global.scale_i = 0
   local free = M.gust.note_semitones("gu.squall")
   check("free tuning passes the offset through", math.abs(free - 13) < 1e-6,
@@ -308,8 +312,9 @@ do
     end
     return true
   end)(), "a delay row is still on the gusts page")
-  check("the gusts page is the five family offsets and nothing else",
-        M.gust.MACRO_COUNT == 5, tostring(M.gust.MACRO_COUNT))
+  -- six since §2.11d put a family Vib on it.
+  check("the gusts page is the six family offsets and nothing else",
+        M.gust.MACRO_COUNT == 6, tostring(M.gust.MACRO_COUNT))
   check("and none of them is left on the global page", (function()
     for i = 1, M.gparam.PARAM_COUNT do
       if M.gparam.param(i).key:match("^gust_") then return false end
@@ -471,12 +476,13 @@ do
   local M = fresh(12)
   local page = M.cellparam.page("gu.buffet")
   check("cellparam hands out the gust page", page == M.gust)
-  -- §2.11c the seventh is Send: how much of this cell goes to the shared
-  -- effect. still one screen.
-  check("seven rows, one screen", page.PARAM_COUNT == 7,
+  -- §2.11c the last is Send: how much of this cell goes to the shared
+  -- effect. eight since §2.11d added Vib, which is exactly the 4x2 the
+  -- screen draws -- still one page, and now a full one.
+  check("eight rows, one screen", page.PARAM_COUNT == 8,
         tostring(page.PARAM_COUNT))
   check("and the last of them is Send",
-        page.param(7).key == "send", tostring(page.param(7).key))
+        page.param(8).key == "send", tostring(page.param(8).key))
   for i = 1, page.PARAM_COUNT do
     local p = page.param(i)
     local v = p.get("gu.buffet")
@@ -485,6 +491,82 @@ do
   end
   local p = page.nudge("gu.buffet", 1, 0.1)
   check("nudging row 1 moves it and pushes", p.key == "pitch" and #CALLS.gust_pitch > 0)
+end
+
+print("\n-- §2.11d the family Vib, and a family fader that reaches silence --")
+do
+  local M = fresh(60)
+  local A = "gu.squall"
+
+  -- vibrato is off everywhere on a fresh patch, per cell and family alike.
+  check("no vibrato by default", M.gust.vib(A) == 0 and M.gust.macro("vib") == 0)
+
+  -- the family knob ADDS rather than slides: its neutral is zero, because
+  -- vibrato has a real one and every other row on that page does not.
+  M.gust.set_macro("vib", 0.4)
+  check("the family knob adds to every cell",
+        math.abs(M.gust.vib(A) - 0.4) < 1e-9, tostring(M.gust.vib(A)))
+  M.state.set_vparam(A, "vib", 0.3)
+  check("on top of whatever the cell was set to",
+        math.abs(M.gust.vib(A) - 0.7) < 1e-9, tostring(M.gust.vib(A)))
+  M.gust.set_macro("vib", 0)
+  M.state.set_vparam(A, "vib", 0)
+
+  -- and it reaches the engine in semitones, with a rate the cell owns.
+  local before = #CALLS.gust_vib
+  local page = M.cellparam.page(A)
+  local vib_i
+  for i = 1, page.PARAM_COUNT do
+    if page.param(i).key == "vib" then vib_i = i end
+  end
+  page.nudge(A, vib_i, 0.5)
+  check("moving Vib pushes the engine", #CALLS.gust_vib > before)
+  local sent = CALLS.gust_vib[#CALLS.gust_vib]
+  check("in semitones, inside the family's own ceiling",
+        sent.st > 0 and sent.st <= M.gust.VIB_MAX_ST, tostring(sent.st))
+  check("at a rate this cell owns, and no two cells share",
+        math.abs(sent.rate - M.gust.vib_rate(A)) < 1e-9
+        and M.gust.vib_rate(A) ~= M.gust.vib_rate("gu.haar"),
+        tostring(sent.rate))
+  M.state.set_vparam(A, "vib", 0)
+
+  -- the family Level: a slide above the centre, a fade below it, and a real
+  -- silence at the bottom. it used to slide in both directions, which left a
+  -- cell at its 0.7 default sitting at 0.2 with the knob all the way down --
+  -- quieter, and audibly still there.
+  local M2 = fresh(61)
+  local B = "gu.flurry"
+  local own = M2.state.get_vparam(B, "level", 0.7)
+  check("at the centre the cells are exactly where they were put",
+        math.abs(M2.gust.level(B) - own) < 1e-9, tostring(M2.gust.level(B)))
+  M2.gust.set_macro("level", 0.25)
+  check("halfway down is half of each cell's own level",
+        math.abs(M2.gust.level(B) - own * 0.5) < 1e-9, tostring(M2.gust.level(B)))
+  M2.gust.set_macro("level", 0)
+  check("and all the way down is silence, whatever the cells were set to",
+        (function()
+          for _, id in ipairs(M2.gust.each()) do
+            if M2.gust.level(id) ~= 0 then return false end
+          end
+          return true
+        end)())
+  M2.gust.set_macro("level", 1)
+  check("above the centre it still slides them up",
+        M2.gust.level(B) > own, tostring(M2.gust.level(B)))
+  M2.gust.set_macro("level", 0.5)
+
+  -- the family Pitch reaches as far as a single cell's own row does now.
+  check("the family transpose spans four octaves either way",
+        M2.gust.MACRO_PITCH_ST == 48, tostring(M2.gust.MACRO_PITCH_ST))
+  check("the same span a single cell's Pitch row has",
+        M2.gust.PITCH_RANGE_ST == 48, tostring(M2.gust.PITCH_RANGE_ST))
+  M2.gust.set_macro("pitch", -M2.gust.MACRO_PITCH_ST)
+  local low = M2.gust.note_hz(B)
+  M2.gust.set_macro("pitch", M2.gust.MACRO_PITCH_ST)
+  check("and the two ends really are eight octaves apart",
+        math.abs((M2.gust.note_hz(B) / low) - 256) < 1e-6,
+        tostring(M2.gust.note_hz(B) / low))
+  M2.gust.set_macro("pitch", 0)
 end
 
 report()

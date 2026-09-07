@@ -55,6 +55,10 @@ util.time = real_util.time
 util.round = real_util.round
 util.linlin = real_util.linlin
 util.wrap = function(x, a, b) return a + ((x - a) % (b - a)) end
+-- §2.5 sample.scan reads the audio folder through this. it is a real norns
+-- surface (lua/lib/util.lua) and the harness's stub answers it from
+-- SCANDIR_FILES, so nothing here touches disk.
+util.scandir = real_util.scandir
 
 local real_clock = clock
 clock = strict("clock", {})
@@ -190,8 +194,8 @@ do
   -- endpoint, already covered by "voice" -- and GVOICE, TM, GUST, O and LFO
   -- are new since the re-cut.
   local reps = {}
-  for _, kind in ipairs({"voice", "D", "R", "GVOICE", "E", "H", "F", "C", "TM",
-                         "GUST", "O", "LFO"}) do
+  for _, kind in ipairs({"voice", "D", "R", "GVOICE", "E", "SMP", "C", "TM",
+                         "GUST", "O", "LFO", "FM", "VA"}) do
     local list = ids_of(kind)
     table.insert(reps, list[1])
   end

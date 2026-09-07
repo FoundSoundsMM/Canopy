@@ -178,20 +178,9 @@ end
 
 print("\n-- pitched the same way a modal voice is --")
 do
-  local M = fresh(7)
-  -- a field cabled in tunes it, exactly as it would a voice. the Scale is off
-  -- and the field is wide, so its steps land on different notes rather than
-  -- being rounded back onto the same one -- which is a real thing the Scale
-  -- does and not what this test is about.
-  M.state.global.scale_i = 0
-  M.state.character["f.cuckoo"] = 0.8
-  M.patch.add("f.cuckoo", FM1, 1.0)
-  local before = #CALLS.fm_pitch
-  for _ = 1, 6 do M.grove.step("f.cuckoo", 1.0, nil) end
-  check("a field cabled in retunes it", #CALLS.fm_pitch > before,
-        before .. " -> " .. #CALLS.fm_pitch)
-
-  -- and a register, which is the pairing the Marbles rework was for.
+  -- a register cabled in tunes it, exactly as it would a voice -- which is
+  -- the pairing the Marbles rework was for, and the only pitch source there
+  -- is now that the fields are gone (§2.6).
   local M2 = fresh(8)
   M2.state.global.scale_i = 0
   M2.state.set_vparam("tm.padfoot", "steps", 0)
@@ -299,6 +288,26 @@ do
   check("turning the macro up lengthens them",
         M.synth.decay_seconds(VA1) > before,
         before .. " -> " .. M.synth.decay_seconds(VA1))
+
+  -- and the macro's own row PUSHES to them, which is what was missing: the
+  -- multiplier had been folded into synth.decay_seconds since the day it was
+  -- written and this file's listener was registered, but gparam's list of who
+  -- to notify stopped at the four voices, the drums, the gusts and the
+  -- samples -- so an FM cell picked the change up on the next touch of its
+  -- own Decay row and not before.
+  local M2 = fresh(26)
+  local i
+  for k = 1, M2.gparam.PARAM_COUNT do
+    if M2.gparam.param(k).key == "decay" then i = k end
+  end
+  local fm_n, va_n = #CALLS.fm_set, #CALLS.va_set
+  M2.gparam.nudge(i, 40, true)
+  check("moving the macro pushes both synth families",
+        #CALLS.fm_set > fm_n and #CALLS.va_set > va_n,
+        (#CALLS.fm_set - fm_n) .. " / " .. (#CALLS.va_set - va_n))
+  check("and it is their decay it moved",
+        last(CALLS.fm_set).key == "dcy" and last(CALLS.va_set).key == "dcy",
+        last(CALLS.fm_set).key .. " / " .. last(CALLS.va_set).key)
   -- and the per-cell Decay row pushes on the way through, via state's own
   -- decay listener rather than by anyone calling the engine directly.
   local n = #CALLS.va_set
@@ -307,6 +316,113 @@ do
   check("a decay change reaches the engine", #CALLS.va_set > n)
   check("as the dcy argument", last(CALLS.va_set).key == "dcy",
         last(CALLS.va_set).key)
+end
+
+print("\n-- §2.13 the envelope reaches a swell, not just a strike --")
+do
+  local M = fresh(27)
+  local cell = M.topology.get(FM1)
+
+  -- 0.5 is the family's own base, the same contract every other envelope on
+  -- the panel has.
+  M.state.set_vparam(FM1, "attack", 0.5)
+  check("attack at centre is the family's base",
+        math.abs(M.synth.attack_seconds(FM1) - M.synth.ATTACK_BASE) < 1e-9,
+        tostring(M.synth.attack_seconds(FM1)))
+  M.state.decay[FM1] = 0.5
+  check("decay at centre is the cell's own",
+        math.abs(M.synth.decay_seconds(FM1) - cell.decay) < 1e-9,
+        tostring(M.synth.decay_seconds(FM1)))
+
+  -- the two halves of each knob are not the same width: down is what it
+  -- always was, up reaches a pad. a symmetric widening would have spent the
+  -- bottom third of the Attack row clamped against a floor.
+  M.state.set_vparam(FM1, "attack", 0)
+  check("all the way down is where it always was",
+        math.abs(M.synth.attack_seconds(FM1)
+                 - M.synth.ATTACK_BASE / (2 ^ M.synth.ATTACK_OCTAVES_DOWN)) < 1e-9,
+        tostring(M.synth.attack_seconds(FM1)))
+  M.state.set_vparam(FM1, "attack", 1)
+  check("and all the way up is seconds, not milliseconds",
+        M.synth.attack_seconds(FM1) > 4,
+        string.format("%.3f s", M.synth.attack_seconds(FM1)))
+  check("still inside the family's own ceiling",
+        M.synth.attack_seconds(FM1) <= M.synth.ATTACK_MAX,
+        tostring(M.synth.attack_seconds(FM1)))
+
+  M.state.decay[FM1] = 1
+  check("and the fall reaches a gust's kind of length",
+        M.synth.decay_seconds(FM1) > 10
+        and M.synth.decay_seconds(FM1) <= M.synth.DECAY_MAX,
+        string.format("%.3f s", M.synth.decay_seconds(FM1)))
+  M.state.decay[FM1] = 0
+  check("while the short end is where it always was",
+        math.abs(M.synth.decay_seconds(FM1)
+                 - cell.decay / (2 ^ M.synth.DECAY_OCTAVES_DOWN)) < 1e-9,
+        tostring(M.synth.decay_seconds(FM1)))
+
+  -- every cell of both families stays inside the engine's own clips at both
+  -- ends of both knobs, which is what keeps the last of the travel from
+  -- doing nothing.
+  check("every cell's whole travel is inside the engine's clips", (function()
+    local M2 = fresh(28)
+    for _, id in ipairs(M2.synth.each()) do
+      for _, v in ipairs({0, 0.5, 1}) do
+        M2.state.set_vparam(id, "attack", v)
+        M2.state.decay[id] = v
+        local a, d = M2.synth.attack_seconds(id), M2.synth.decay_seconds(id)
+        if a < M2.synth.ATTACK_MIN or a > M2.synth.ATTACK_MAX then return false end
+        if d < M2.synth.DECAY_MIN or d > M2.synth.DECAY_MAX then return false end
+      end
+    end
+    return true
+  end)())
+end
+
+print("\n-- §4.1c Plonks lands on them too --")
+do
+  -- the detune grove pushes on a strike lands on `freq`, and then the note
+  -- command writes `freq` again -- so before synth.play asked for one itself,
+  -- the offset was being sent and overwritten a moment later and the macro
+  -- did nothing at all here.
+  local M = fresh(29)
+  M.state.global.scale_i = 0
+  M.state.global.drops = 1
+
+  local seen = {}
+  for i = 1, 12 do
+    T = T + M.synth.REFRACTORY * 2
+    M.synth.play(FM1, 1)
+    seen[i] = last(CALLS.fm_note).hz
+  end
+  local moved, spread = false, 0
+  for i = 2, 12 do
+    if seen[i] ~= seen[1] then moved = true end
+    spread = math.max(spread, math.abs(12 * math.log(seen[i] / seen[1]) / math.log(2)))
+  end
+  check("no two strikes land on the same note", moved,
+        tostring(seen[1]) .. " .. " .. tostring(seen[12]))
+  check("and it is a detune, inside the macro's own range",
+        spread > 0 and spread <= 2 * (0.02 + M.gparam.DROPS_MAX_ST),
+        string.format("%.3f st", spread))
+
+  -- at Plonks 0 what is left is the same floor a modal voice has always had,
+  -- which is what stops a bare patch sounding like a sample retriggered.
+  local M2 = fresh(30)
+  M2.state.global.scale_i = 0
+  M2.state.global.drops = 0
+  local narrow = 0
+  local first
+  for i = 1, 12 do
+    T = T + M2.synth.REFRACTORY * 2
+    M2.synth.play(FM1, 1)
+    first = first or last(CALLS.fm_note).hz
+    narrow = math.max(narrow,
+      math.abs(12 * math.log(last(CALLS.fm_note).hz / first) / math.log(2)))
+  end
+  check("at Plonks 0 it is only the floor", narrow > 0 and narrow <= 0.05,
+        string.format("%.4f st", narrow))
+  M2.state.global.drops = 0
 end
 
 report()
