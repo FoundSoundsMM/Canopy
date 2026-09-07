@@ -467,4 +467,65 @@ do
   check("the panel renders legal levels everywhere", all_legal)
 end
 
+-- §4.2b one page, two knobs, and E1 walks the list ---------------------------
+-- every other cell type keeps the cursor it always had: E1 moves it, E2 and
+-- E3 are coarse and fine on the row under it. T and R cells do not have a
+-- cursor any more, because they do not have a list of rows to put one on --
+-- E1 is the gait or the rule, E2 is the first knob and E3 is the second.
+
+print("\n-- a T or R page is driven by all three encoders --")
+do
+  local M = fresh(31)
+  local gridui, cellparam = wl("gridui"), M.cellparam
+  local D, R = "d.hob", "r.thicket"
+
+  local dpage = cellparam.page(D)
+  check("a T page declares its list", dpage.CYCLE == "Gait", tostring(dpage.CYCLE))
+  check("an R page declares its own", cellparam.page(R).CYCLE == "Rule")
+  check("and both are exactly two rows", dpage.PARAM_COUNT == 2
+        and cellparam.page(R).PARAM_COUNT == 2)
+
+  -- E1 walks the gait list, and the whole page follows it
+  M.rambler.set_gait(D, "metric")
+  local before = M.rambler.info(D)
+  gridui.page_enc(D, 1, 1)
+  local after = M.rambler.info(D)
+  check("E1 moves to the next gait",
+        after.gait == "euclidean", tostring(after.gait))
+  check("and both rows are renamed with it",
+        before.label ~= after.label or before.label2 ~= after.label2,
+        before.label2 .. " -> " .. after.label2)
+
+  -- E1 wraps rather than stopping at either end
+  for _ = 1, #M.rambler.GAIT_ORDER do gridui.page_enc(D, 1, 1) end
+  check("and the list wraps", M.rambler.info(D).gait == "euclidean",
+        M.rambler.info(D).gait)
+
+  -- E2 is row one and E3 is row two -- not coarse and fine on one row
+  M.rambler.set_gait(D, "euclidean")
+  local a1, b1 = M.state.character[D], M.state.character_b[D]
+  for _ = 1, 20 do gridui.page_enc(D, 2, 1) end
+  check("E2 moves the first knob and only the first",
+        M.state.character[D] > a1 and M.state.character_b[D] == b1)
+  local a2 = M.state.character[D]
+  for _ = 1, 20 do gridui.page_enc(D, 3, 1) end
+  check("E3 moves the second and only the second",
+        M.state.character_b[D] > b1 and M.state.character[D] == a2)
+
+  -- and there is no cursor left to move, on either of them
+  M.state.vparam_focus = 1
+  gridui.page_enc(R, 1, 1)
+  check("E1 is not a cursor on these pages", M.state.vparam_focus == 1)
+  check("it is the rule", M.weave.info(R).rule ~= "rest", M.weave.info(R).rule)
+end
+
+print("\n-- and every other page still works the way it always did --")
+do
+  local M = fresh(32)
+  local V = "oak"
+  M.state.vparam_focus = 1
+  wl("gridui").page_enc(V, 1, 1)
+  check("E1 is still the cursor on a voice", M.state.vparam_focus == 2)
+end
+
 report()

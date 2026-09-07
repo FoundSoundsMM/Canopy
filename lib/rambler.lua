@@ -98,16 +98,44 @@ rambler.GAIT_ORDER = {
   "burst", "stochastic", "drifter", "accelerando", "swarm",
 }
 
--- metric: locks to the norns clock, integer division.
+-- §4.2b every gait declares TWO knobs now, not one.
+--
+--   label / read(r)    E2. unchanged: the gait's own character.
+--   label2 / read2(r)  E3. new, and different under every gait -- a rotation,
+--                      a ratchet count, a coupling strength, a weight.
+--   d1 / d2            where both knobs sit when you scroll onto this gait.
+--                      set_gait re-seeds them, because a Rotate left over
+--                      from euclidean is not a Count on burst.
+--
+-- both read functions return `value, text`. every d2 below is chosen so the
+-- gait does exactly what it did before this knob existed: Rotate defaults to
+-- none, Weight to full, mult's decay to the 0.82 it was hard-coded at. a
+-- patch that never touches E3 sounds like it always did.
+local function char2(r)
+  local g = GAITS[r.gait]
+  return state.base_character_b(r.id, g and g.d2 or 0.5)
+end
+rambler.char2 = char2
+
+-- metric: locks to the norns clock, integer division. it is the only gait
+-- whose whole identity is its relation to the transport, so it is the one
+-- that is rooted rather than free -- which is also what makes its second
+-- knob mean anything: a phase offset on a free-running oscillator is a
+-- one-off nudge, and on a rooted one it is a part that sits behind the beat.
 local DIVS = {
   {1/4, "1/4"}, {1/3, "1/3"}, {1/2, "1/2"}, {2/3, "2/3"}, {1, "1"},
   {3/2, "3/2"}, {2, "2"}, {3, "3"}, {4, "4"},
 }
 GAITS.metric = {
-  rooted_ok = true, coupling = 0.8, drift = 0.2,
+  rooted_ok = true, rooted_default = true, coupling = 0.8, drift = 0.2,
+  label = "Div", d1 = 0.5, label2 = "Phase", d2 = 0.5,
   read = function(r)
     local i = util.clamp(math.floor(char(r) * (#DIVS - 1) + 0.5), 0, #DIVS - 1) + 1
     return DIVS[i][1], DIVS[i][2] .. " x beat"
+  end,
+  read2 = function(r)
+    local ph = char2(r) - 0.5
+    return ph, string.format("%+.0f%%", ph * 100)
   end,
   cycles_per_beat = function(r) return (GAITS.metric.read(r)) end,
   rate = function(r) return (GAITS.metric.read(r)) * bps() end,
@@ -115,20 +143,28 @@ GAITS.metric = {
 }
 
 -- euclidean: k pulses spread across n steps. steps run at 2/beat, so the
--- 8-step pattern is one bar long when rooted.
+-- 8-step pattern is one bar long when rooted. Rotate is the knob this gait
+-- has wanted since it was written: k:8 gives you the spread and nothing
+-- else, and where the spread STARTS is half of what makes it a part.
 local EUCLID_N = 8
 GAITS.euclidean = {
   rooted_ok = true, coupling = 0.8, drift = 0.2,
+  label = "Steps", d1 = 0.625, label2 = "Rotate", d2 = 0,
   read = function(r)
     local k = util.clamp(math.floor(char(r) * EUCLID_N + 0.5), 0, EUCLID_N)
     return k, k .. ":" .. EUCLID_N
+  end,
+  read2 = function(r)
+    local rot = util.clamp(math.floor(char2(r) * (EUCLID_N - 1) + 0.5), 0, EUCLID_N - 1)
+    return rot, (rot == 0) and "none" or ("+" .. rot)
   end,
   cycles_per_beat = function(r) return 2 end,
   rate = function(r) return 2 * bps() end,
   wrap = function(r)
     -- Bresenham euclidean: step i fires when (i*k) mod n < k.
     local k = GAITS.euclidean.read(r)
-    if ((r.cycle % EUCLID_N) * k) % EUCLID_N < k then return 1.0 end
+    local rot = GAITS.euclidean.read2(r)
+    if (((r.cycle + rot) % EUCLID_N) * k) % EUCLID_N < k then return 1.0 end
     return nil
   end,
 }
@@ -137,6 +173,11 @@ GAITS.euclidean = {
 -- an even spread of k in n and nothing else; this is where the crooked ones
 -- live -- the claves and the tresillo, the figures that are asymmetrical on
 -- purpose and are most of what a drum machine is actually made of.
+--
+-- Rotate turns the figure against the bar rather than turning the bar: the
+-- strong/weak weighting is read off the real bar position, so a rotated son
+-- clave still accents where the bar does, which is what a rotated clave
+-- sounds like when a person plays one.
 local FIGURES = {
   {"four",     "1000100010001000"},
   {"backbeat", "0000100000001000"},
@@ -149,49 +190,72 @@ local FIGURES = {
 }
 GAITS.figure = {
   rooted_ok = true, coupling = 0.8, drift = 0.1,
+  label = "Figure", d1 = 3/7, label2 = "Rotate", d2 = 0,
   read = function(r)
     local i = util.clamp(math.floor(char(r) * (#FIGURES - 1) + 0.5), 0, #FIGURES - 1) + 1
     return i, FIGURES[i][1]
+  end,
+  read2 = function(r)
+    local rot = util.clamp(math.floor(char2(r) * 15 + 0.5), 0, 15)
+    return rot, (rot == 0) and "none" or ("+" .. rot)
   end,
   cycles_per_beat = function(r) return 4 end,
   rate = function(r) return 4 * bps() end,
   wrap = function(r)
     local pat = FIGURES[(GAITS.figure.read(r))][2]
-    local step = (r.cycle % 16) + 1
+    local rot = GAITS.figure.read2(r)
+    local pos = r.cycle % 16
+    local step = ((pos + rot) % 16) + 1
     if pat:sub(step, step) ~= "1" then return nil end
     -- the ones that land on a beat are the ones you feel; the rest are the
     -- ones that make it a figure rather than a pulse.
-    return ((step - 1) % 4 == 0) and 1.0 or 0.72
+    return (pos % 4 == 0) and 1.0 or 0.72
   end,
 }
 
--- slow: very low rate, high weight.
+-- slow: very low rate, high weight. Weight was the one thing the description
+-- promised and the page could not move.
 GAITS.slow = {
   rooted_ok = false, coupling = 1.4, drift = 0.5,
+  label = "Rate", d1 = 0.5, label2 = "Weight", d2 = 1,
   read = function(r)
     local hz = 0.03 + char(r) * 0.47
     return hz, string.format("%.2f Hz", hz)
   end,
+  read2 = function(r)
+    local w = 0.3 + char2(r) * 0.7
+    return w, string.format("%.2f", w)
+  end,
   rate = function(r) return (GAITS.slow.read(r)) end,
-  wrap = function(r) return 1.0 end,
+  wrap = function(r) return (GAITS.slow.read2(r)) end,
 }
 
--- burst: one wrap fires a ratchet of 2-7. Scatter picks how many.
--- §4.1 wants the burst itself triggered on the beat, so it overrides the
--- rate-derived grid with a whole beat, and lays its ratchet out on a
--- subdivision of that beat rather than on a fraction of its own cycle -- the
--- flam lands on grid lines and finishes before the next beat. the old
--- free spacing comes back as chaos rises, blended in rather than switched.
+-- burst: one wrap fires a ratchet of 2-7. §4.1 wants the burst itself
+-- triggered on the beat, so it overrides the rate-derived grid with a whole
+-- beat, and lays its ratchet out on a subdivision of that beat rather than on
+-- a fraction of its own cycle -- the flam lands on grid lines and finishes
+-- before the next beat. the old free spacing comes back as chaos rises,
+-- blended in rather than switched.
+--
+-- the count is Count now, not Scatter. it used to be read off the global
+-- Scatter macro, which meant the one thing that decides what a burst IS
+-- could not be set on the cell that was bursting -- and moving Scatter to
+-- loosen the timing also silently lengthened every ratchet on the panel.
 GAITS.burst = {
   rooted_ok = false, coupling = 1.0, drift = 1.0,
   quant_grid = 1.0,
+  label = "Rate", d1 = 0.5, label2 = "Count", d2 = 0.4,
   read = function(r)
     local hz = 0.3 + char(r) * 2.7
     return hz, string.format("%.2f Hz", hz)
   end,
+  read2 = function(r)
+    local n = 2 + util.clamp(math.floor(char2(r) * 5 + 0.5), 0, 5)
+    return n, "x" .. n
+  end,
   rate = function(r) return (GAITS.burst.read(r)) end,
   ratchet = function(r, t0, weight)
-    local n = 2 + math.floor((state.global.scatter or 0) * 5 + 0.5)
+    local n = GAITS.burst.read2(r)
     if n < 2 then return end
     local chaos = quantise.chaos()
     local grid_gap = quantise.ratchet_gap(n) * quantise.spb()
@@ -210,15 +274,21 @@ GAITS.burst = {
   wrap = function(r) return 1.0 end,
 }
 
--- stochastic: a Bernoulli gate at the wrap. E2 is the probability; the rate
--- itself rides Scatter, so wilder settings also mean faster dice.
+-- stochastic: a Bernoulli gate at the wrap. E2 is the probability and E3 is
+-- how fast the dice are thrown -- which used to ride the global Scatter, for
+-- no better reason than that there was nowhere else to put it.
 GAITS.stochastic = {
   rooted_ok = false, coupling = 1.0, drift = 1.0,
+  label = "Chance", d1 = 0.5, label2 = "Rate", d2 = 0.2,
   read = function(r)
     local p = char(r)
     return p, string.format("p %.2f", p)
   end,
-  rate = function(r) return 1.5 + (state.global.scatter or 0) * 4.5 end,
+  read2 = function(r)
+    local hz = 0.5 + char2(r) * 5.5
+    return hz, string.format("%.2f Hz", hz)
+  end,
+  rate = function(r) return (GAITS.stochastic.read2(r)) end,
   wrap = function(r)
     if math.random() < (GAITS.stochastic.read(r)) then
       return 0.6 + math.random() * 0.4
@@ -227,28 +297,45 @@ GAITS.stochastic = {
   end,
 }
 
--- drifter: fast, free, strongest coupling constant.
+-- drifter: fast, free, and the strongest coupling constant on the panel --
+-- which is now a knob rather than a constant. this is the one cell you can
+-- put in a ring of others and dial from "ignores them" to "locked to them",
+-- and §2.3's whole Kuramoto term was invisible from the panel until it was.
 GAITS.drifter = {
   rooted_ok = false, coupling = 2.5, drift = 3.0,
+  label = "Rate", d1 = 0.5, label2 = "Couple", d2 = 0.5,
   read = function(r)
     local hz = 0.5 + char(r) * 7.5
     return hz, string.format("%.2f Hz", hz)
   end,
+  read2 = function(r)
+    local m = char2(r) * 2
+    return m, string.format("x%.2f", m)
+  end,
+  coupling_of = function(r) return 2.5 * (GAITS.drifter.read2(r)) end,
   rate = function(r) return (GAITS.drifter.read(r)) end,
   wrap = function(r) return 0.85 end,
 }
 
--- accelerando: rate ramps across a cycle of wraps, then resets.
+-- accelerando: rate ramps across a cycle of wraps, then resets. Ramp is how
+-- far it gets by the end of the run -- the shape of the accelerando rather
+-- than just its starting speed.
 local ACCEL_CYCLE = 8
 GAITS.accelerando = {
   rooted_ok = false, coupling = 1.0, drift = 0.5,
+  label = "Rate", d1 = 0.5, label2 = "Ramp", d2 = 0.375,
   read = function(r)
     local hz = 0.5 + char(r) * 3.5
     return hz, string.format("%.2f Hz", hz)
   end,
+  read2 = function(r)
+    local top = 1 + char2(r) * 4
+    return top, string.format("x%.2f", top)
+  end,
   rate = function(r)
     local t = (r.cycle % ACCEL_CYCLE) / ACCEL_CYCLE
-    return (GAITS.accelerando.read(r)) * (0.5 + t * 2.0)
+    local top = GAITS.accelerando.read2(r)
+    return (GAITS.accelerando.read(r)) * (0.5 + t * (top - 0.5))
   end,
   -- loudest at the start of each ramp, thinning as it speeds up
   wrap = function(r) return 1.0 - ((r.cycle % ACCEL_CYCLE) / ACCEL_CYCLE) * 0.5 end,
@@ -258,17 +345,24 @@ GAITS.accelerando = {
 -- moved to the new Clock cells (topology.lua §2.9), which freed this slot up
 -- for something no other gait does: a short, unpredictable cluster of 2-4
 -- hits with irregular gaps, rather than Boggart's fixed 2-7 ratchet on a
--- quantised grid or Spriggan's single Bernoulli gate.
+-- quantised grid or Spriggan's single Bernoulli gate. Spread is how far
+-- apart the hits in one cluster land -- a tight snap or a loose scatter.
 GAITS.swarm = {
   rooted_ok = false, coupling = 1.2, drift = 1.5,
+  label = "Rate", d1 = 0.5, label2 = "Spread", d2 = 0.26,
   read = function(r)
     local hz = 0.4 + char(r) * 3.6
     return hz, string.format("%.2f Hz", hz)
   end,
+  read2 = function(r)
+    local s = 0.3 + char2(r) * 2.7
+    return s, string.format("x%.2f", s)
+  end,
   rate = function(r) return (GAITS.swarm.read(r)) end,
   ratchet = function(r, t0, weight)
     local n = math.random(1, 3) -- extra hits, on top of the wrap's own
-    local base_gap = (1 / math.max(GAITS.swarm.read(r), 0.01)) * 0.12
+    local spread = GAITS.swarm.read2(r)
+    local base_gap = (1 / math.max(GAITS.swarm.read(r), 0.01)) * 0.12 * spread
     local w, t = weight, 0
     for _ = 1, n do
       w = w * (0.55 + math.random() * 0.25)
@@ -287,6 +381,26 @@ local function reset_gait_state(r)
   r.cycle = 0
   r.drift = 0
   r.abs = nil
+  -- and the lane with it: the scope draws what THIS gait has played, and
+  -- twelve bars of the gait you just scrolled past is a drawing of something
+  -- that is no longer running.
+  if r.hist then
+    for i = 1, #r.hist do r.hist[i] = nil end
+    r.hi = 0
+  end
+end
+
+-- §5.2c the scope draws what this cell has just played, so it has to be kept.
+-- a fixed ring, written in place: at eight cells firing several times a second
+-- for as long as the script is up, anything that allocates per pulse is a
+-- garbage collection the audio thread pays for. HIST_N * 8 tables, allocated
+-- once, and never another one.
+rambler.HIST_N = 24
+
+local function hist_push(r, t, w)
+  r.hi = (r.hi % rambler.HIST_N) + 1
+  local e = r.hist[r.hi]
+  if e then e.t, e.w = t, w else r.hist[r.hi] = {t = t, w = w} end
 end
 
 for id, cell in topology.each() do
@@ -295,7 +409,8 @@ for id, cell in topology.each() do
       id = id,
       cell = cell,
       gait = state.get_gait(id, cell.gait),
-      rooted = state.get_rooted(id, cell.rooted or false),
+      rooted = state.get_rooted(id,
+        cell.rooted or (GAITS[state.get_gait(id, cell.gait)] or {}).rooted_default or false),
       -- spread the starting phases: identical starts make every coupling
       -- experiment look like it locked instantly when it never moved at all.
       phase = math.random(),
@@ -305,6 +420,8 @@ for id, cell in topology.each() do
       last_weight = 0,
       energy = 0,
       d_links = {},
+      hist = {},
+      hi = 0,
     }
     reset_gait_state(r)
     ramblers[id] = r
@@ -498,6 +615,7 @@ function rambler.emit_now(r, weight)
   weight = util.clamp(weight or 1, 0, 1)
   r.flash = util.time()
   r.last_weight = weight
+  hist_push(r, r.flash, weight)
   local sent = rambler.emit_from(r.id, weight)
   if sent and sent > 0 then
     local first = rambler.out_links(r.id)[1]
@@ -547,7 +665,11 @@ end
 local function advance_rooted(r, gait)
   local cpb = gait.cycles_per_beat(r)
   if cpb <= 0 then return end
-  local pos = clock.get_beats() * cpb
+  -- §4.2b Phase, where the gait has one: an offset in cycles, so two rooted
+  -- cells on the same division can sit a fraction of a cycle apart instead of
+  -- landing on top of each other.
+  local off = gait.read2 and gait.label2 == "Phase" and (gait.read2(r)) or 0
+  local pos = clock.get_beats() * cpb + off
   local cyc = math.floor(pos)
   r.phase = pos - cyc
   -- first tick, or the division just changed under us: resync silently.
@@ -578,14 +700,15 @@ local function advance_wild(r, gait, K, chaos)
 
   -- §2.3: dphi = rate*dt + K * sum_j( g_ij * sin(2pi*(phi_j - phi_i)) )
   local pull = 0
-  if gait.coupling > 0 and #r.d_links > 0 then
+  local coupling = gait.coupling_of and gait.coupling_of(r) or gait.coupling
+  if coupling > 0 and #r.d_links > 0 then
     local mine = r.snap
     local sum = 0
     for _, link in ipairs(r.d_links) do
       local op = snapshot[link.id]
       if op then sum = sum + link.edge.gain * math.sin(2 * math.pi * (op - mine)) end
     end
-    pull = K * gait.coupling * sum
+    pull = K * coupling * sum
   end
 
   -- clamped forward-only: a big negative pull must slow an oscillator, never
@@ -708,9 +831,14 @@ function rambler.info(id)
   if not r then return nil end
   local gait = GAITS[r.gait]
   local _, text = gait.read(r)
+  local v2, text2 = gait.read2(r)
   return {
     gait = r.gait,
     param = text,
+    label = gait.label,
+    label2 = gait.label2,
+    param2 = text2,
+    value2 = v2,
     rooted = r.rooted,
     rooted_ok = gait.rooted_ok,
     phased = true,
@@ -720,13 +848,71 @@ function rambler.info(id)
   }
 end
 
+-- §4.2b E1 on a T cell's page. the two knobs mean something different under
+-- every gait, so arriving on one puts them where that gait wants them --
+-- otherwise scrolling the list leaves you holding euclidean's Rotate as
+-- burst's Count, and the cell plays something nobody chose. rootedness comes
+-- with the gait for the same reason: `metric` IS the clock-locked one.
 function rambler.set_gait(id, key)
   local r = ramblers[id]
   if not r or not GAITS[key] then return nil end
+  local g = GAITS[key]
   r.gait = key
   state.gait[id] = key
+  state.character[id] = g.d1 or 0.5
+  state.character_b[id] = g.d2 or 0.5
+  r.rooted = g.rooted_default and true or false
+  state.rooted[id] = r.rooted
   reset_gait_state(r)
+  state.notify_character_change(id)
   return key
+end
+
+-- the two knobs, read back for the page and the scope.
+function rambler.knobs(id)
+  local r = ramblers[id]
+  if not r then return nil end
+  local g = GAITS[r.gait]
+  local v1, t1 = g.read(r)
+  local v2, t2 = g.read2(r)
+  return v1, t1, v2, t2, g.label, g.label2
+end
+
+-- the phases of the other D cells this one is cabled to, which is the whole
+-- of the Kuramoto term made visible (§2.3). the drifter scope draws them as
+-- dim dots either side of this cell's own -- the coupling was in the maths
+-- from the first build and has never once been on the screen.
+--
+-- writes into a table it owns rather than returning a fresh one: this is read
+-- at frame rate.
+local nb_buf = {}
+function rambler.neighbour_phases(id, limit)
+  local r = ramblers[id]
+  for i = #nb_buf, 1, -1 do nb_buf[i] = nil end
+  if not r then return nb_buf end
+  for _, link in ipairs(r.d_links) do
+    if #nb_buf >= (limit or 3) then break end
+    local o = ramblers[link.id]
+    if o then nb_buf[#nb_buf + 1] = o.phase end
+  end
+  return nb_buf
+end
+
+-- the sixteen-step string behind the `figure` gait, so the scope can draw the
+-- figure rather than a number that stands for one. nil on every other gait.
+function rambler.pattern(id)
+  local r = ramblers[id]
+  if not r or r.gait ~= "figure" then return nil end
+  local i = GAITS.figure.read(r)
+  return FIGURES[i][2], FIGURES[i][1]
+end
+
+-- what this cell has played lately: the ring itself, plus where the newest
+-- entry is. handed out rather than copied -- the scope reads it every frame.
+function rambler.history(id)
+  local r = ramblers[id]
+  if not r then return nil end
+  return r.hist, r.hi
 end
 
 -- K1+E2 while holding a D cell (§4.2)

@@ -30,6 +30,13 @@ local cells = {}    -- r_id -> record
 local order = {}    -- r_ids, stable iteration order
 local pending = {}  -- {t=, id=, w=, only=} taps this cell placed in the future
 
+-- §5.2c three fixed rings per cell -- what arrived, what left, and what was
+-- swallowed -- so the scope can draw the rule as the difference between its
+-- two lanes rather than as a number. same discipline as rambler's: written in
+-- place, never reallocated, and short enough that a window of a few seconds
+-- always fits inside one.
+weave.HIST_N = 24
+
 local function char(r)
   return state.get_character(r.id, r.cell, 0, 1)
 end
@@ -56,6 +63,13 @@ function weave.out(r, w, only, src)
   if w < 0.03 then return end
   r.flash = util.time()
   r.last_weight = w
+  r.oi = (r.oi % weave.HIST_N) + 1
+  local e = r.outs[r.oi]
+  -- `only` is the cable this one left by, and it is the whole of what hocket
+  -- does -- so the ring keeps it. without it the scope would have to guess
+  -- which lane a pulse took, and a guess drawn at level 14 is a lie.
+  if e then e.t, e.w, e.lane = r.flash, w, only
+  else r.outs[r.oi] = {t = r.flash, w = w, lane = only} end
   wl("rambler").emit_from(r.id, w, only, src or r.src)
 end
 
@@ -71,9 +85,16 @@ function weave.later(r, delay, w, only)
 end
 
 -- rules -----------------------------------------------------------------------
--- each declares:
---   read(r)                   -> value, display text  (E2)
---   pulse_in(r, w, src, now)  what to do with an arrival
+-- §4.2b each declares TWO knobs, not one:
+--   label  / read(r)                   E2, the rule's own amount
+--   label2 / read2(r)                  E3, new -- an offset, a decay, a count
+--   d1 / d2                            where both sit when you scroll onto it
+--   pulse_in(r, w, src, now)           what to do with an arrival
+--
+-- every d2 is the constant that used to be hard-coded in the line below it:
+-- mult's 0.82, echo's 0.62, flam's 0.4, ghost's 0.32, roll's six taps,
+-- swell's 0.3 floor, latch's symmetrical duty. a rule left at its defaults
+-- does exactly what it did before it had a second knob.
 
 local RULES = {}
 
@@ -83,33 +104,65 @@ weave.RULE_ORDER = {
   "roll", "swell", "mask", "shift",
 }
 
+local function char2(r)
+  local R = RULES[r.rule]
+  return state.base_character_b(r.id, R and R.d2 or 0.5)
+end
+weave.char2 = char2
+
+-- a pulse this rule decided not to pass. the scope draws the hole (§5.2c) --
+-- "a hole in a part is as much a part of the part as a hit is" is a claim the
+-- panel could not previously show, because a swallowed pulse left no trace
+-- anywhere. costs one ring slot and no allocation after the first lap.
+local function drop(r, t, w)
+  r.di = (r.di % weave.HIST_N) + 1
+  local e = r.drops[r.di]
+  if e then e.t, e.w = t, w else r.drops[r.di] = {t = t, w = w} end
+end
+
 -- divide: every Nth pulse gets through. the oldest trick there is and still
--- the fastest way to get a second, slower part out of one source.
+-- the fastest way to get a second, slower part out of one source. Offset is
+-- WHICH of the N -- two dividers on one source, offset against each other,
+-- is an interlock rather than a doubling.
 RULES.divide = {
+  label = "Every", d1 = 0.29, label2 = "Offset", d2 = 0,
   read = function(r)
     local n = 1 + math.floor(char(r) * 7 + 0.5)
     return n, "every " .. n
   end,
-  pulse_in = function(r, w)
+  read2 = function(r)
     local n = RULES.divide.read(r)
+    local o = util.clamp(math.floor(char2(r) * (n - 1) + 0.5), 0, math.max(0, n - 1))
+    return o, tostring(o)
+  end,
+  pulse_in = function(r, w, src, now)
+    local n = RULES.divide.read(r)
+    local o = RULES.divide.read2(r)
     r.count = r.count + 1
-    if r.count % n == 0 then weave.out(r, w) end
+    if r.count % n == o % n then weave.out(r, w) else drop(r, now, w) end
   end,
 }
 
 -- mult: one in, a ratchet out, laid across half a beat so it always finishes
--- before the next one arrives at any sane tempo.
+-- before the next one arrives at any sane tempo. Decay is how hard the
+-- ratchet falls away -- flat is a machine gun, steep is a drag.
 RULES.mult = {
+  label = "Count", d1 = 0.4, label2 = "Decay", d2 = 0.7,
   read = function(r)
     local n = 2 + math.floor(char(r) * 5 + 0.5)
     return n, "x" .. n
   end,
+  read2 = function(r)
+    local d = 0.4 + char2(r) * 0.6
+    return d, string.format("%.2f", d)
+  end,
   pulse_in = function(r, w)
     local n = RULES.mult.read(r)
+    local dec = RULES.mult.read2(r)
     local gap = spb() * 0.5 / n
     weave.out(r, w)
     for i = 1, n - 1 do
-      w = w * 0.82
+      w = w * dec
       weave.later(r, i * gap, w)
     end
   end,
@@ -117,92 +170,150 @@ RULES.mult = {
 
 -- delay: one copy, late by a musical interval rather than by milliseconds --
 -- so it stays in time when the tempo moves, which a millisecond delay does
--- not, and which is the whole reason to have both this and Blur.
+-- not, and which is the whole reason to have both this and Blur. Level is how
+-- loud the copy is, so it can be an answer rather than a repeat.
 local DELAYS = {
   {1/4, "1/16"}, {1/3, "1/12"}, {1/2, "1/8"}, {2/3, "1/6"}, {3/4, "3/16"},
   {1, "1/4"}, {4/3, "1/3"}, {3/2, "3/8"}, {2, "1/2"}, {3, "3/4"},
 }
 RULES.delay = {
+  label = "Time", d1 = 5/9, label2 = "Level", d2 = 1,
   read = function(r)
     local i = util.clamp(math.floor(char(r) * (#DELAYS - 1) + 0.5), 0, #DELAYS - 1) + 1
     return DELAYS[i][1], DELAYS[i][2]
   end,
+  read2 = function(r)
+    local l = 0.2 + char2(r) * 0.8
+    return l, string.format("%.2f", l)
+  end,
   pulse_in = function(r, w)
-    weave.later(r, (RULES.delay.read(r)) * spb(), w)
+    weave.later(r, (RULES.delay.read(r)) * spb(), w * (RULES.delay.read2(r)))
   end,
 }
 
 -- echo: a decaying tail. in milliseconds, not beats -- this is the one that
--- is supposed to smear across the grid rather than sit on it.
+-- is supposed to smear across the grid rather than sit on it. Decay is how
+-- many of the six taps you actually hear before it falls under the floor.
 RULES.echo = {
+  label = "Time", d1 = 0.26, label2 = "Decay", d2 = 0.53,
   read = function(r)
     local iv = 0.04 + char(r) * 0.46
     return iv, string.format("%.0f ms", iv * 1000)
   end,
+  read2 = function(r)
+    local d = 0.3 + char2(r) * 0.6
+    return d, string.format("%.2f", d)
+  end,
   pulse_in = function(r, w)
     local iv = RULES.echo.read(r)
+    local dec = RULES.echo.read2(r)
     for i = 1, 6 do
-      w = w * 0.62
+      w = w * dec
       weave.later(r, i * iv, w)
     end
   end,
 }
 
--- chance: a coin at the gate.
+-- chance: a coin at the gate. Hold makes the coin sticky -- one that comes up
+-- heads carries the next few arrivals with it, so the part comes out in
+-- clusters rather than as an even sprinkle, which is what a person playing
+-- "sometimes" actually sounds like.
 RULES.chance = {
+  label = "Chance", d1 = 0.55, label2 = "Hold", d2 = 0,
   read = function(r)
     local p = char(r)
     return p, string.format("p %.2f", p)
   end,
-  pulse_in = function(r, w)
-    if math.random() < (RULES.chance.read(r)) then weave.out(r, w) end
+  read2 = function(r)
+    local n = 1 + math.floor(char2(r) * 3 + 0.5)
+    return n, (n == 1) and "off" or (n .. " in a row")
+  end,
+  pulse_in = function(r, w, src, now)
+    if r.hold and r.hold > 0 then
+      r.hold = r.hold - 1
+      weave.out(r, w)
+      return
+    end
+    if math.random() < (RULES.chance.read(r)) then
+      r.hold = (RULES.chance.read2(r)) - 1
+      weave.out(r, w)
+    else
+      drop(r, now, w)
+    end
   end,
 }
 
--- accent: everything gets through, but not at the weight it arrived with. an
--- eight-step contour cycles under the incoming stream, so a flat line comes
--- out with a shape on it. the knob is how much of the contour is applied, so
--- 0 is a straight wire.
+-- accent: everything gets through, but not at the weight it arrived with. a
+-- contour cycles under the incoming stream, so a flat line comes out with a
+-- shape on it. E2 is how much of the contour is applied, so 0 is a straight
+-- wire; Length is how long the contour is, which is the difference between an
+-- accent in four and an accent in seven.
 local CONTOUR = {1.0, 0.42, 0.68, 0.5, 0.86, 0.42, 0.62, 0.55}
 RULES.accent = {
+  label = "Depth", d1 = 0.8, label2 = "Length", d2 = 1,
   read = function(r)
     local d = char(r)
     return d, string.format("depth %.2f", d)
   end,
+  read2 = function(r)
+    local n = 2 + math.floor(char2(r) * 6 + 0.5)
+    return n, "over " .. n
+  end,
   pulse_in = function(r, w)
     local d = RULES.accent.read(r)
+    local n = RULES.accent.read2(r)
     r.count = r.count + 1
-    local c = CONTOUR[(r.count % #CONTOUR) + 1]
+    local c = CONTOUR[(r.count % n) + 1]
     weave.out(r, w * (1 + (c - 1) * d))
   end,
 }
 
 -- sift: a weight gate. put it after Accent or Swell and you get a part that
 -- only plays the loud hits of another part -- the cheapest way there is to
--- pull one line out of a busy patch.
+-- pull one line out of a busy patch. Boost puts what survived back up to
+-- full, so the line you pulled out arrives level rather than quiet.
 RULES.sift = {
+  label = "Above", d1 = 0.55, label2 = "Boost", d2 = 0,
   read = function(r)
     local t = char(r)
     return t, string.format(">= %.2f", t)
   end,
-  pulse_in = function(r, w)
-    if w >= (RULES.sift.read(r)) then weave.out(r, w) end
+  read2 = function(r)
+    local b = char2(r)
+    return b, string.format("%.0f%%", b * 100)
+  end,
+  pulse_in = function(r, w, src, now)
+    if w >= (RULES.sift.read(r)) then
+      local b = RULES.sift.read2(r)
+      weave.out(r, w + (1 - w) * b)
+    else
+      drop(r, now, w)
+    end
   end,
 }
 
 -- meet: fires when two *different* inputs land inside a window. a genuine
--- AND, and the only rule in here that needs more than one cable in.
+-- AND, and the only rule in here that needs more than one cable in. Hold is
+-- how long it stays shut afterwards, which used to be the window itself --
+-- one number doing two jobs, so widening the window to catch a loose player
+-- also silently slowed the whole rule down.
 RULES.meet = {
+  label = "Window", d1 = 1/3, label2 = "Hold", d2 = 0.18,
   read = function(r)
     local win = 0.01 + char(r) * 0.24
     return win, string.format("%.0f ms", win * 1000)
   end,
+  read2 = function(r)
+    local hold = char2(r) * 0.5
+    return hold, string.format("%.0f ms", hold * 1000)
+  end,
   pulse_in = function(r, w, src, now)
     local win = RULES.meet.read(r)
+    local hold = RULES.meet.read2(r)
     r.recent[src] = {t = now, w = w}
     for other, e in pairs(r.recent) do
       if other ~= src and (now - e.t) <= win then
-        if now - r.last_fire > win then
+        if now - r.last_fire > hold then
           weave.out(r, (w + e.w) * 0.5)
           r.last_fire = now
         end
@@ -210,20 +321,31 @@ RULES.meet = {
         return
       end
     end
+    drop(r, now, w)
   end,
 }
 
 -- hocket: successive pulses go down different cables. one line in, N lines
 -- out, none of them playing the same beat -- medieval, and the single most
 -- useful thing on this row for making four voices sound like a kit rather
--- than like four voices.
+-- than like four voices. Lanes caps how many of the cables it uses, so three
+-- voices can hocket while the fourth stays on the whole part.
 RULES.hocket = {
+  label = "Step", d1 = 0, label2 = "Lanes", d2 = 1,
   read = function(r)
     local stride = 1 + math.floor(char(r) * 3 + 0.5)
     return stride, (stride == 1) and "round" or ("step " .. stride)
   end,
+  -- capped at six because six is what the scope can draw as six rows, and a
+  -- hocket you cannot see the shape of is a hocket you cannot set.
+  read2 = function(r)
+    local want = 2 + math.floor(char2(r) * 4 + 0.5)
+    local have = wl("rambler").out_degree(r.id, r.src)
+    local n = (have > 0) and math.min(want, have) or want
+    return n, (have > 0 and want >= have) and ("all " .. have) or tostring(n)
+  end,
   pulse_in = function(r, w)
-    local n = wl("rambler").out_degree(r.id, r.src)
+    local n = RULES.hocket.read2(r)
     if n == 0 then return end
     local stride = RULES.hocket.read(r)
     r.count = r.count + 1
@@ -233,15 +355,23 @@ RULES.hocket = {
 
 -- swing: holds every other arrival back. the panel already has a global
 -- swing on the Weather knob; this one is local, so one part can be swung
--- against a straight one instead of all of them moving together.
+-- against a straight one instead of all of them moving together. Every is
+-- which arrivals get held -- every second is a shuffle, every third or fourth
+-- is a limp, and neither of those was reachable before.
 RULES.swing = {
+  label = "Amount", d1 = 0.6, label2 = "Every", d2 = 0,
   read = function(r)
     local amt = char(r)
     return amt, string.format("%.0f%%", amt * 100)
   end,
+  read2 = function(r)
+    local n = 2 + math.floor(char2(r) * 2 + 0.5)
+    return n, "every " .. n
+  end,
   pulse_in = function(r, w)
+    local n = RULES.swing.read2(r)
     r.count = r.count + 1
-    if r.count % 2 == 1 then
+    if r.count % n ~= 0 then
       weave.out(r, w)
     else
       weave.later(r, (RULES.swing.read(r)) * spb() * 0.25, w)
@@ -251,65 +381,98 @@ RULES.swing = {
 
 -- blur: a human amount of lateness. always late, never early -- there is no
 -- scheduling into the past, and a drummer who is early is a different
--- problem from a drummer who is loose.
+-- problem from a drummer who is loose. Wobble is the other half of playing
+-- loose: a hand that is late is usually also uneven.
 RULES.blur = {
+  label = "Late", d1 = 0.75, label2 = "Wobble", d2 = 0,
   read = function(r)
     local ms = char(r) * 60
     return ms / 1000, string.format("%.0f ms", ms)
   end,
+  read2 = function(r)
+    local wob = char2(r) * 0.6
+    return wob, string.format("%.0f%%", wob * 100)
+  end,
   pulse_in = function(r, w)
     local j = RULES.blur.read(r)
+    local wob = RULES.blur.read2(r)
+    if wob > 0 then w = util.clamp(w * (1 - wob * math.random()), 0, 1) end
     if j <= 0 then weave.out(r, w) else weave.later(r, math.random() * j, w) end
   end,
 }
 
 -- latch: a gate that flips every N arrivals, so a steady stream comes out in
 -- blocks of N on and N off. the bar-length variation nobody has to program.
+-- Duty is how much of that is the on half: at the centre it is the even
+-- N-on-N-off it always was, and either side of centre it is a long phrase
+-- with a short hole or a short phrase with a long one.
 RULES.latch = {
+  label = "Length", d1 = 0.29, label2 = "Duty", d2 = 0.5,
   read = function(r)
     local n = 1 + math.floor(char(r) * 7 + 0.5)
-    return n, n .. " on, " .. n .. " off"
+    return n, tostring(n)
   end,
-  pulse_in = function(r, w)
+  read2 = function(r)
+    local d = 0.2 + char2(r) * 0.6
+    return d, string.format("%.0f%%", d * 100)
+  end,
+  pulse_in = function(r, w, src, now)
     local n = RULES.latch.read(r)
+    local duty = RULES.latch.read2(r)
+    local on = math.max(1, math.floor(n * 2 * duty + 0.5))
+    local span = n * 2
+    local i = r.count % span
     r.count = r.count + 1
-    if (r.count - 1) % (n * 2) == 0 then r.gate = not r.gate end
-    if r.gate then weave.out(r, w) end
+    if i < on then weave.out(r, w) else drop(r, now, w) end
   end,
 }
 
 -- fill: passes everything, and every Nth arrival answers with a flurry
--- instead. this is the turnaround.
+-- instead. this is the turnaround. Hits is how big the turnaround is.
 RULES.fill = {
+  label = "Every", d1 = 1/7, label2 = "Hits", d2 = 0.4,
   read = function(r)
     local n = 4 + math.floor(char(r) * 28 + 0.5)
     return n, "every " .. n
   end,
+  read2 = function(r)
+    local n = 1 + math.floor(char2(r) * 5 + 0.5)
+    return n, "x" .. n
+  end,
   pulse_in = function(r, w)
     local n = RULES.fill.read(r)
+    local hits = RULES.fill.read2(r)
     r.count = r.count + 1
     weave.out(r, w)
     if r.count % n == 0 then
       local gap = spb() * 0.25
-      for i = 1, 3 do weave.later(r, i * gap, w * (0.9 - i * 0.12)) end
+      for i = 1, hits do weave.later(r, i * gap, w * (0.9 - i * 0.12)) end
     end
   end,
 }
 
 -- rest: now and then it stops for a moment. a hole in a part is as much a
--- part of the part as a hit is, and nothing else on this row makes one.
+-- part of the part as a hit is, and nothing else on this row makes one. Run
+-- is how long the hole is allowed to get.
 RULES.rest = {
+  label = "Chance", d1 = 0.625, label2 = "Run", d2 = 3/7,
   read = function(r)
     local p = char(r) * 0.4
     return p, string.format("p %.2f", p)
   end,
-  pulse_in = function(r, w)
+  read2 = function(r)
+    local n = 1 + math.floor(char2(r) * 7 + 0.5)
+    return n, "1-" .. n
+  end,
+  pulse_in = function(r, w, src, now)
     if r.skip > 0 then
       r.skip = r.skip - 1
+      drop(r, now, w)
       return
     end
     if math.random() < (RULES.rest.read(r)) then
-      r.skip = 1 + math.random(4)
+      r.skip = math.random((RULES.rest.read2(r)))
+      drop(r, now, w)
       return
     end
     weave.out(r, w)
@@ -319,44 +482,61 @@ RULES.rest = {
 -- flam: two hits where there was one, a few milliseconds apart. the grace
 -- note has to come first and there is no scheduling into the past, so the
 -- quiet one goes out now and the loud one is the one that is late -- which
--- is also how a real flam is played.
+-- is also how a real flam is played. Grace is how quiet the quiet one is;
+-- take it up and the flam becomes a double rather than an ornament.
 RULES.flam = {
+  label = "Gap", d1 = 0.545, label2 = "Grace", d2 = 0.375,
   read = function(r)
     local ms = 8 + char(r) * 55
     return ms / 1000, string.format("%.0f ms", ms)
   end,
+  read2 = function(r)
+    local g = 0.1 + char2(r) * 0.8
+    return g, string.format("%.2f", g)
+  end,
   pulse_in = function(r, w)
-    weave.out(r, w * 0.4)
+    weave.out(r, w * (RULES.flam.read2(r)))
     weave.later(r, RULES.flam.read(r), w)
   end,
 }
 
 -- ghost: the shadow behind the beat. same idea as Flam pointing the other
--- way, and the two of them either side of one cable is a drag.
+-- way, and the two of them either side of one cable is a drag. Level is how
+-- far behind the beat the shadow sits in the mix.
 RULES.ghost = {
+  label = "Gap", d1 = 0.5, label2 = "Level", d2 = 0.44,
   read = function(r)
     local ms = 20 + char(r) * 200
     return ms / 1000, string.format("%.0f ms", ms)
   end,
+  read2 = function(r)
+    local l = 0.1 + char2(r) * 0.5
+    return l, string.format("%.2f", l)
+  end,
   pulse_in = function(r, w)
     weave.out(r, w)
-    weave.later(r, RULES.ghost.read(r), w * 0.32)
+    weave.later(r, RULES.ghost.read(r), w * (RULES.ghost.read2(r)))
   end,
 }
 
--- roll: one pulse becomes a run that gathers speed. six taps over the knob's
--- worth of time, each gap shorter than the last.
-local ROLL_TAPS = 6
+-- roll: one pulse becomes a run that gathers speed. Taps is how many, which
+-- with Time is the difference between a drag, a four-stroke and a buzz.
 RULES.roll = {
+  label = "Time", d1 = 0.486, label2 = "Taps", d2 = 0.5,
   read = function(r)
     local total = 0.08 + char(r) * 0.7
     return total, string.format("%.0f ms", total * 1000)
   end,
+  read2 = function(r)
+    local n = 2 + math.floor(char2(r) * 8 + 0.5)
+    return n, "x" .. n
+  end,
   pulse_in = function(r, w)
     local total = RULES.roll.read(r)
+    local taps = RULES.roll.read2(r)
     weave.out(r, w)
     local t = 0
-    for i = 1, ROLL_TAPS do
+    for i = 1, taps do
       -- geometric: each gap is 0.72 of the one before, normalised so the run
       -- takes `total` however many taps it has.
       t = t + total * 0.28 * (0.72 ^ (i - 1))
@@ -366,52 +546,75 @@ RULES.roll = {
 }
 
 -- swell: a crescendo across successive hits, then back to the bottom. the
--- long-form dynamic a pattern cannot give you.
+-- long-form dynamic a pattern cannot give you. Floor is where it comes back
+-- to -- at zero the part disappears between swells, high up it only breathes.
 RULES.swell = {
+  label = "Over", d1 = 0.2, label2 = "Floor", d2 = 0.375,
   read = function(r)
     local n = 4 + math.floor(char(r) * 20 + 0.5)
     return n, "over " .. n
   end,
+  read2 = function(r)
+    local f = char2(r) * 0.8
+    return f, string.format("%.2f", f)
+  end,
   pulse_in = function(r, w)
     local n = RULES.swell.read(r)
+    local f = RULES.swell.read2(r)
     r.count = (r.count + 1) % n
-    weave.out(r, w * (0.3 + 0.7 * (r.count / (n - 1))))
+    weave.out(r, w * (f + (1 - f) * (r.count / (n - 1))))
   end,
 }
 
 -- mask: a euclidean stencil laid over whatever arrives. the same maths as the
 -- euclidean gait, except it does not make the pulses -- it decides which of
 -- somebody else's get through, which is a different and much more useful
--- thing to be able to do to a busy source.
+-- thing to be able to do to a busy source. Rotate slides the stencil, exactly
+-- as it does on the gait.
 local MASK_N = 16
 RULES.mask = {
+  label = "Steps", d1 = 0.4375, label2 = "Rotate", d2 = 0,
   read = function(r)
     local k = util.clamp(math.floor(char(r) * MASK_N + 0.5), 0, MASK_N)
     return k, k .. ":" .. MASK_N
   end,
-  pulse_in = function(r, w)
+  read2 = function(r)
+    local rot = util.clamp(math.floor(char2(r) * (MASK_N - 1) + 0.5), 0, MASK_N - 1)
+    return rot, (rot == 0) and "none" or ("+" .. rot)
+  end,
+  pulse_in = function(r, w, src, now)
     local k = RULES.mask.read(r)
-    local i = r.count
+    local rot = RULES.mask.read2(r)
+    local i = r.count + rot
     r.count = r.count + 1
-    if ((i % MASK_N) * k) % MASK_N < k then weave.out(r, w) end
+    if ((i % MASK_N) * k) % MASK_N < k then weave.out(r, w) else drop(r, now, w) end
   end,
 }
 
 -- shift: a skip pattern that rotates one step every time it comes round, so
 -- the part is never quite the bar it was last time and never random either.
+-- Turn is how far it rotates each lap: one step takes eight bars to come
+-- back, three takes eight the other way round, and four turns it inside out
+-- every other bar.
 local SHIFT_N = 8
 RULES.shift = {
+  label = "Steps", d1 = 1/3, label2 = "Turn", d2 = 0,
   read = function(r)
     local k = 1 + math.floor(char(r) * (SHIFT_N - 2) + 0.5)
     return k, k .. " of " .. SHIFT_N
   end,
-  pulse_in = function(r, w)
+  read2 = function(r)
+    local t = 1 + math.floor(char2(r) * 3 + 0.5)
+    return t, "+" .. t
+  end,
+  pulse_in = function(r, w, src, now)
     local k = RULES.shift.read(r)
+    local turn = RULES.shift.read2(r)
     local i = r.count % SHIFT_N
-    if i == 0 and r.count > 0 then r.rot = (r.rot + 1) % SHIFT_N end
+    if i == 0 and r.count > 0 then r.rot = (r.rot + turn) % SHIFT_N end
     r.count = r.count + 1
     local j = (i + r.rot) % SHIFT_N
-    if (j * k) % SHIFT_N < k then weave.out(r, w) end
+    if (j * k) % SHIFT_N < k then weave.out(r, w) else drop(r, now, w) end
   end,
 }
 
@@ -420,9 +623,16 @@ weave.RULES = RULES
 -- construction -----------------------------------------------------------------
 
 local function reset_rule_state(r)
+  -- the three lanes belong to the rule that drew them, so scrolling E1 starts
+  -- them again rather than leaving the previous rule's part on screen.
+  for _, ring in ipairs({r.ins, r.outs, r.drops}) do
+    if ring then for i = 1, #ring do ring[i] = nil end end
+  end
+  r.ii, r.oi, r.di = 0, 0, 0
   r.count = 0
   r.rot = 0
   r.skip = 0
+  r.hold = 0
   r.gate = true
   r.recent = {}
   r.last_fire = 0
@@ -438,6 +648,9 @@ for id, cell in topology.each() do
       flash = -1,
       in_flash = -1,
       last_weight = 0,
+      ins = {}, ii = 0,
+      outs = {}, oi = 0,
+      drops = {}, di = 0,
     }
     reset_rule_state(r)
     cells[id] = r
@@ -451,8 +664,12 @@ end
 function weave.pulse_in(id, w, src, now)
   local r = cells[id]
   if not r then return end
-  r.in_flash = now or util.time()
+  now = now or util.time()
+  r.in_flash = now
   r.src = src
+  r.ii = (r.ii % weave.HIST_N) + 1
+  local e = r.ins[r.ii]
+  if e then e.t, e.w = now, w else r.ins[r.ii] = {t = now, w = w} end
   RULES[r.rule].pulse_in(r, util.clamp(w or 1, 0, 1), src, now or util.time())
 end
 
@@ -506,21 +723,53 @@ end
 function weave.info(id)
   local r = cells[id]
   if not r then return nil end
-  local _, text = RULES[r.rule].read(r)
+  local R = RULES[r.rule]
+  local _, text = R.read(r)
+  local v2, text2 = R.read2(r)
   return {
     rule = r.rule,
     param = text,
+    label = R.label,
+    label2 = R.label2,
+    param2 = text2,
+    value2 = v2,
     ins = patch.degree(id),
     outs = wl("rambler").out_degree(id),
     open = r.gate,
   }
 end
 
+-- the two knobs, read back for the page and the scope.
+function weave.knobs(id)
+  local r = cells[id]
+  if not r then return nil end
+  local R = RULES[r.rule]
+  local v1, t1 = R.read(r)
+  local v2, t2 = R.read2(r)
+  return v1, t1, v2, t2, R.label, R.label2
+end
+
+-- what went in, what came out and what did not, for the scope. the rings
+-- themselves plus their write heads; nothing is copied.
+function weave.history(id)
+  local r = cells[id]
+  if not r then return nil end
+  return r.ins, r.ii, r.outs, r.oi, r.drops, r.di
+end
+
+-- §4.2b E1 on an R cell's page. both knobs are re-seeded to the incoming
+-- rule's own defaults, same as a gait -- Ghost's Level is not Mask's Rotate,
+-- and carrying the number across would land the new rule somewhere nobody
+-- chose. every default below is the constant the rule used to hard-code, so
+-- scrolling onto a rule gives you the rule as it always behaved.
 function weave.set_rule(id, key)
   local r = cells[id]
   if not r or not RULES[key] then return nil end
+  local R = RULES[key]
   r.rule = key
   state.rule[id] = key
+  state.character[id] = R.d1 or 0.5
+  state.character_b[id] = R.d2 or 0.5
   reset_rule_state(r)
   return key
 end

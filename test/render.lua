@@ -216,12 +216,52 @@ shot("06-voice-p2")
 M.state.cell_edit = cell_of("TM"); M.state.vparam_focus = 7
 shot("07-turing")
 
--- the two scopes
-M.state.cell_edit = cell_of("D"); M.state.vparam_focus = 2
-T = 2.4
-shot("08-pulse-scope")
+-- §5.2c the scopes. these draw a HISTORY, so an idle rasteriser shows nine
+-- empty lanes and proves nothing -- the patch has to have been playing. cable
+-- a trigger into a voice and an R cell into another, run the scheduler for a
+-- few seconds, and then walk the two lists a page at a time.
+local D1, R1 = cell_of("D"), cell_of("R")
+local V1 = cell_of("voice")
+M.patch.add(D1, R1, 0.9)
+M.patch.add(R1, V1, 0.9)
+-- hocket needs somewhere to hocket TO: four cables out, or its four rows are
+-- a drawing of a cable that does not exist.
+do
+  local n = 0
+  for id, c in M.topology.each() do
+    if c.type == "voice" and id ~= V1 and n < 3 then
+      M.patch.add(R1, id, 0.9); n = n + 1
+    end
+  end
+end
+local D2
+for id, c in M.topology.each() do
+  if c.type == "D" and id ~= D1 then D2 = id break end
+end
+if D2 then
+  M.patch.add(D2, R1, 0.9)   -- `meet` needs two cables in
+  M.patch.add(D1, D2, 0.7)   -- and `drifter` needs a neighbour to be pulled by
+end
+run(M, 10)
+
+M.state.cell_edit = D1
+for i, key in ipairs(M.rambler.GAIT_ORDER) do
+  M.rambler.set_gait(D1, key)
+  run(M, 14)
+  shot(string.format("20-gait-%d-%s", i, key))
+end
+M.rambler.set_gait(D1, "euclidean")
+run(M, 6)
+
+M.state.cell_edit = R1
+for i, key in ipairs(M.weave.RULE_ORDER) do
+  M.weave.set_rule(R1, key)
+  run(M, 9)
+  shot(string.format("30-rule-%02d-%s", i, key))
+end
+
 M.state.cell_edit = cell_of("LFO"); M.state.vparam_focus = 1
-T = 3.1
+T = T + 3.1
 shot("09-lfo-scope")
 
 -- a page that still gets its sentence

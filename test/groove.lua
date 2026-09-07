@@ -183,12 +183,17 @@ do
   M.state.global.scatter = 0
   M.rambler.set_gait(BOGGART, "burst")
   M.state.character[BOGGART] = 0.3
+  -- §4.2b the ratchet length is burst's own Count knob now, not the global
+  -- Scatter. this block is about where the taps LAND, so it asks for the
+  -- shortest ratchet there is and checks the grid; the block below it is
+  -- about Count itself.
+  M.state.character_b[BOGGART] = 0
   M.patch.add(BOGGART, KNOCK, 1.0)
   run(M, 20)
   check("the burst fires", #CALLS.strike > 10, "#" .. #CALLS.strike)
 
-  -- Scatter=0 means a ratchet of 2 on 16ths, so a burst is a beat-aligned pair:
-  -- the trigger on the beat, the tap a 16th later.
+  -- a ratchet of 2 on 16ths, so a burst is a beat-aligned pair: the trigger
+  -- on the beat, the tap a 16th later.
   local on_beat, on_tap, stray = 0, 0, 0
   for _, s in ipairs(CALLS.strike) do
     local pos = beats_of(s) % 1
@@ -199,6 +204,32 @@ do
   check("every trigger lands on a beat", on_beat > 5, "#" .. on_beat)
   check("and its ratchet on the subdivision", on_tap > 5, "#" .. on_tap)
   check("with nothing off the grid at all", stray == 0, "#" .. stray)
+end
+
+-- §4.2b Count is E3 on the burst gait. it used to be read off the global
+-- Scatter macro, so loosening the timing of the whole panel also lengthened
+-- every ratchet on it -- and the one number that decides what a burst IS
+-- could not be set on the cell doing the bursting.
+print("\n-- burst's ratchet length is its own knob --")
+do
+  local function hits(count_knob)
+    local M = fresh(17)
+    M.state.global.swing = 0
+    M.state.global.scatter = 0
+    M.rambler.set_gait(BOGGART, "burst")
+    M.state.character[BOGGART] = 0.3
+    M.state.character_b[BOGGART] = count_knob
+    M.patch.add(BOGGART, KNOCK, 1.0)
+    run(M, 20)
+    return #CALLS.strike
+  end
+  local short, long = hits(0), hits(1)
+  check("Count 2 and Count 7 are different parts", long > short * 1.5,
+        short .. " vs " .. long)
+  local M = fresh(17)
+  M.rambler.set_gait(BOGGART, "burst")
+  local info = M.rambler.info(BOGGART)
+  check("and the page names it", info.label2 == "Count", tostring(info.label2))
 end
 
 print("\n-- Scatter lets go, independently of Swing --")

@@ -194,4 +194,125 @@ do
         string.format("%s %d/%d", info.rule, info.ins, info.outs))
 end
 
+-- §4.2b the second knob ------------------------------------------------------
+-- the R page is one page, two knobs and a list on E1, exactly like the T
+-- page. every d2 below was a constant hard-coded in the rule before it was a
+-- knob, so a rule left alone still does what it always did -- which is what
+-- these check, alongside the knobs themselves actually doing something.
+
+print("\n-- every rule declares two knobs --")
+do
+  local M = fresh(11)
+  local missing, bad = {}, {}
+  for _, key in ipairs(M.weave.RULE_ORDER) do
+    local R = M.weave.RULES[key]
+    if not (R.label and R.label2 and R.read2 and R.d1 and R.d2) then
+      table.insert(missing, key)
+    end
+    M.weave.set_rule(TROD, key)
+    local v1, t1, v2, t2, l1, l2 = M.weave.knobs(TROD)
+    if not (type(v1) == "number" and type(v2) == "number"
+            and t1 and t2 and l1 and l2) then
+      table.insert(bad, key)
+    end
+  end
+  check("all twenty have a label, a reading and a default for both",
+        #missing == 0, table.concat(missing, " "))
+  check("and knobs() reads both back on every one of them",
+        #bad == 0, table.concat(bad, " "))
+end
+
+print("\n-- scrolling the rule list re-seeds both knobs --")
+do
+  local M = fresh(12)
+  M.weave.set_rule(TROD, "ghost")
+  M.state.character[TROD] = 0.9
+  M.state.character_b[TROD] = 0.9
+  M.weave.set_rule(TROD, "mask")
+  check("E2 lands on mask's own default",
+        M.state.character[TROD] == M.weave.RULES.mask.d1)
+  check("E3 does too, not on ghost's Level",
+        M.state.character_b[TROD] == M.weave.RULES.mask.d2)
+  local info = M.weave.info(TROD)
+  check("and the page renames both rows",
+        info.label == "Steps" and info.label2 == "Rotate",
+        tostring(info.label) .. "/" .. tostring(info.label2))
+end
+
+print("\n-- E3 changes what the rule does --")
+do
+  -- divide's Offset: the same one-in-three, a different one of the three.
+  local function when(offset)
+    local M = rig(13, "divide", 1 / 7)
+    M.state.character_b[TROD] = offset
+    run(M, 12)
+    local first = CALLS.exciter_gate[1]
+    return first and first.t or -1, gates()
+  end
+  local t0, n0 = when(0)
+  local t1, n1 = when(1)
+  check("Offset keeps the count", math.abs(n0 - n1) <= 1, n0 .. " vs " .. n1)
+  check("and moves which pulse gets through", math.abs(t0 - t1) > 0.2,
+        string.format("%.2f vs %.2f", t0, t1))
+
+  -- mult's Decay: a flat ratchet reaches the floor later than a steep one, so
+  -- more of it survives weave.out's 0.03 cutoff.
+  local function taps(dec)
+    local M = rig(14, "mult", 1.0)
+    M.state.character_b[TROD] = dec
+    run(M, 10)
+    return gates()
+  end
+  check("mult's Decay changes how much of the ratchet survives",
+        taps(1) > taps(0), taps(0) .. " -> " .. taps(1))
+
+  -- latch's Duty: at the top of the range the gate is open far more than shut.
+  local function through(duty)
+    local M = rig(15, "latch", 0.29)
+    M.state.character_b[TROD] = duty
+    run(M, 20)
+    return gates()
+  end
+  check("latch's Duty opens the gate wider", through(1) > through(0),
+        through(0) .. " -> " .. through(1))
+
+  -- rest's Run: longer holes, fewer hits.
+  local function played(runlen)
+    local M = rig(16, "rest", 1.0)
+    M.state.character_b[TROD] = runlen
+    run(M, 30)
+    return gates()
+  end
+  check("rest's Run digs a longer hole", played(1) < played(0),
+        played(0) .. " -> " .. played(1))
+end
+
+print("\n-- the rings the scope draws --")
+do
+  local M = rig(17, "divide", 1 / 7)
+  run(M, 8)
+  local ins, ii, outs, oi, drops, di = M.weave.history(TROD)
+  check("arrivals are recorded", ii > 0 and ins[ii] and ins[ii].t > 0)
+  check("emissions are recorded", oi > 0 and outs[oi] and outs[oi].w > 0)
+  check("and so are the two out of three it swallowed",
+        di > 0 and drops[di] ~= nil, tostring(di))
+  check("the rings are bounded", #ins <= M.weave.HIST_N and #outs <= M.weave.HIST_N,
+        #ins .. "/" .. #outs)
+
+  -- hocket is the one rule whose scope needs to know WHICH cable, so the ring
+  -- keeps the lane; without it the four rows would be a guess.
+  local M2 = rig(18, "hocket", 0)
+  M2.patch.add(TROD, WISP, 1.0)
+  run(M2, 8)
+  local _, _, o2, oi2 = M2.weave.history(TROD)
+  check("hocket records the cable each pulse left by",
+        oi2 > 0 and o2[oi2] and o2[oi2].lane ~= nil,
+        tostring(o2[oi2] and o2[oi2].lane))
+
+  -- and swapping the rule clears them, so one rule never draws another's part
+  M.weave.set_rule(TROD, "mult")
+  local i3, ii3 = M.weave.history(TROD)
+  check("swapping the rule empties the lanes", ii3 == 0 and #i3 == 0)
+end
+
 report()

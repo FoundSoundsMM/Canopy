@@ -446,7 +446,7 @@ local function draw_param_grid(params, focus, text_fn, frac_fn, data_fn)
       local x, top = widget_x(slot), widget_top(slot)
       glyph.draw(p.glyph, x, top, GLYPH_W, GLYPH_H, frac_fn(p), on, text,
                  data_fn and data_fn(p) or nil)
-      shown[#shown + 1] = {p = p, text = text, on = on,
+      shown[#shown + 1] = {p = p, text = text, on = on, label = p.label,
                            cx = x + GLYPH_W / 2, top = top}
     end
   end
@@ -458,14 +458,14 @@ local function draw_param_grid(params, focus, text_fn, frac_fn, data_fn)
 
   screen.level(6)
   for _, w in ipairs(shown) do
-    if not w.on then centred(w.cx, w.top + LABEL_DY, clip(w.p.label, TEXT_W)) end
+    if not w.on then centred(w.cx, w.top + LABEL_DY, clip(w.label, TEXT_W)) end
   end
 
   screen.level(15)
   for _, w in ipairs(shown) do
     if w.on then
       centred(w.cx, w.top + VALUE_DY, value_of(w))
-      centred(w.cx, w.top + LABEL_DY, clip(w.p.label, TEXT_W))
+      centred(w.cx, w.top + LABEL_DY, clip(w.label, TEXT_W))
     end
   end
 
@@ -733,40 +733,564 @@ SCOPES.LFO = function(id)
   screen.stroke()
 end
 
--- a D cell's phase, which is the gait. a metric gait sweeps evenly and a
--- swung or euclidean one does not, so the bar itself tells you which you are
--- on without reading the word -- and the reset is the pulse.
-SCOPES.D = function(id)
-  local info = wl("rambler").info(id)
-  if not info then return end
-  local phase = util.clamp(info.phase or 0, 0, 1)
-  local base = SCOPE_Y + SCOPE_H - 6
-  local L, R = 4, 123
+-- §5.2c the trigger scopes ---------------------------------------------------
+-- what replaced the phase bar. that bar drew one number -- how far through its
+-- cycle a D cell was -- full width, at level 15, and drew it identically for
+-- all nine gaits: a euclidean cell and a swarm cell were the same picture. it
+-- was also the fourth widget on the page saying the same thing twice.
+--
+-- these draw the gait instead, and every one of them is the same two halves:
+--
+--   x 2..48    the mechanism. the thing that decides -- a ring of eight
+--              steps, a sixteen-step strip, a comb, a dice against a bar, a
+--              ramp, a line with this cell's phase on it and its neighbours'
+--              either side.
+--   x 54..126  what came out of it, newest at the right edge, bar height for
+--              weight. the same direction the LFO scope scrolls, and the same
+--              lane the R scopes use for their two rows, so it is learned
+--              once for the whole panel.
+--
+-- the faint ticks under the lane are the transport's beats: a rooted gait
+-- sits on them and a wild one does not, which is a thing the panel could not
+-- previously say at all.
+--
+-- cost: a lane is one screen.level, a run of rects and one fill. the whole
+-- block runs about the same as the bar it replaced plus twenty rects, which
+-- is what test/soak.lua's 150-command cell budget was holding room for.
 
-  -- the cycle, with its quarters ticked
+local MX0, MX1 = 2, 48                 -- the mechanism pane
+local TX0, TX1 = 54, 126               -- the history lane
+local LANE_BASE = SCOPE_Y + 22
+local LANE_H = 16
+
+-- how many seconds of history each gait shows. a slow gait needs a long
+-- window to have anything in it; a drifter at eight hertz needs a short one
+-- or the lane is a solid block.
+local T_WIN = {
+  metric = 5, euclidean = 4, figure = 4, slow = 24, burst = 4,
+  stochastic = 5, drifter = 2.5, accelerando = 5, swarm = 4,
+}
+
+local function ring_lane(hist, now, win, x0, x1, base, hmax, lvl)
+  if not hist then return end
+  local pps = (x1 - x0) / win
+  screen.level(lvl)
+  local n = 0
+  for i = 1, #hist do
+    local e = hist[i]
+    if e then
+      local age = now - e.t
+      if age >= 0 and age <= win then
+        local h = 2 + e.w * (hmax - 2)
+        screen.rect(x1 - age * pps, base - h, 1, h)
+        n = n + 1
+      end
+    end
+  end
+  if n > 0 then screen.fill() end
+end
+
+-- the transport, under the lane. one tick a beat, two pixels tall: enough to
+-- read a gait as locked or free and not enough to compete with the pulses.
+local function beat_ticks(now, win, x0, x1, y)
+  local sb = wl("quantise").spb()
+  if not sb or sb <= 0 then return end
+  local pps = (x1 - x0) / win
+  -- a tick every beat is the point of the row; a tick every two pixels is a
+  -- grey line that says nothing. thin them to bars, then to fours, rather
+  -- than drawing a smear -- a long window is a slow gait, and a slow gait is
+  -- read against bars anyway.
+  local every = 1
+  while sb * every * pps < 5 and every < 16 do every = every * 4 end
+  local step = sb * every
+  screen.level(4)
+  local t = math.floor(now / step) * step
+  local n = 0
+  while n < 20 do
+    local x = x1 - (now - t) * pps
+    if x < x0 then break end
+    screen.rect(x, y, 1, 2)
+    t = t - step
+    n = n + 1
+  end
+  if n > 0 then screen.fill() end
+end
+
+-- the nine mechanisms. each draws inside MX0..MX1 and SCOPE_Y+2..SCOPE_Y+24,
+-- and each is handed the cell's own record so it can read the phase and the
+-- cycle count the gait is actually running on.
+local MECH = {}
+
+function MECH.metric(r, v1, v2)
   screen.level(3)
-  for i = 0, 4 do
-    local px = L + (R - L) * i / 4
-    screen.rect(px, base - 2, 1, 3)
+  for i = 0, 4 do screen.rect(MX0 + (MX1 - MX0) * i / 4, SCOPE_Y + 9, 1, 8) end
+  screen.fill()
+  -- Phase, as the offset of the whole ladder from the beat
+  if v2 ~= 0 then
+    screen.level(6)
+    screen.rect(MX0 + (MX1 - MX0) * ((v2 + 1) % 1), SCOPE_Y + 6, 1, 3)
+    screen.fill()
   end
-  screen.rect(L, base, R - L, 1)
+  screen.level(12)
+  screen.rect(MX0 + (MX1 - MX0) * r.phase, SCOPE_Y + 7, 1, 12)
+  screen.fill()
+end
+
+function MECH.euclidean(r, k, rot)
+  local cx, cy, rad = 24, SCOPE_Y + 13, 10
+  local on_x, on_y, n_on = {}, {}, 0
+  screen.level(4)
+  for i = 0, 7 do
+    local a = -math.pi / 2 + i * math.pi / 4
+    local x, y = cx + math.cos(a) * rad, cy + math.sin(a) * rad
+    if (((i + rot) % 8) * k) % 8 < k then
+      n_on = n_on + 1; on_x[n_on], on_y[n_on] = x, y
+    else
+      screen.rect(x, y, 1, 1)
+    end
+  end
+  screen.fill()
+  if n_on > 0 then
+    screen.level(12)
+    for i = 1, n_on do screen.rect(on_x[i] - 1, on_y[i] - 1, 3, 3) end
+    screen.fill()
+  end
+  -- the hand, from the middle out to wherever in the ring we are
+  local a = -math.pi / 2 + ((r.cycle % 8) + r.phase) * math.pi / 4
+  screen.level(13)
+  screen.move(cx, cy)
+  screen.line(cx + math.cos(a) * (rad - 2), cy + math.sin(a) * (rad - 2))
+  screen.stroke()
+end
+
+function MECH.figure(r, _, rot, id)
+  local pat = wl("rambler").pattern(id)
+  if not pat then return end
+  local pos = r.cycle % 16
+  screen.level(3)
+  for i = 0, 15 do
+    local step = ((i + rot) % 16) + 1
+    if pat:sub(step, step) ~= "1" then
+      screen.rect(MX0 + 2 + (i % 8) * 5.5, SCOPE_Y + 7 + math.floor(i / 8) * 7, 1, 1)
+    end
+  end
+  screen.fill()
+  screen.level(9)
+  for i = 0, 15 do
+    local step = ((i + rot) % 16) + 1
+    if pat:sub(step, step) == "1" then
+      screen.rect(MX0 + 1 + (i % 8) * 5.5, SCOPE_Y + 6 + math.floor(i / 8) * 7,
+                  3, (i % 4 == 0) and 4 or 3)
+    end
+  end
+  screen.fill()
+  screen.level(14)
+  screen.rect(MX0 + 1 + (pos % 8) * 5.5, SCOPE_Y + 11 + math.floor(pos / 8) * 7, 3, 1)
+  screen.fill()
+end
+
+function MECH.slow(r, _, w)
+  screen.level(3)
+  screen.rect(6, SCOPE_Y + 4, 36, 1)
+  screen.rect(6, SCOPE_Y + 20, 36, 1)
+  screen.rect(6, SCOPE_Y + 4, 1, 17)
+  screen.rect(41, SCOPE_Y + 4, 1, 17)
+  screen.fill()
+  -- the box fills over the whole cycle, then everything happens at once
+  local fh = math.floor(r.phase * 14 + 0.5)
+  if fh > 0 then
+    screen.level(9)
+    screen.rect(8, SCOPE_Y + 19 - fh, 32, fh)
+    screen.fill()
+  end
+  -- and how hard the hit will be when it comes
+  screen.level(13)
+  screen.rect(8, SCOPE_Y + 19 - math.floor(w * 14 + 0.5), 32, 1)
+  screen.fill()
+end
+
+function MECH.burst(r, _, n)
+  screen.level(7)
+  for i = 1, n do
+    local hh = math.max(4, 16 - (i - 1) * 2)
+    screen.rect(4 + (i - 1) * 6, SCOPE_Y + 19 - hh, 2, hh)
+  end
+  screen.fill()
+  screen.level(3)
+  screen.rect(MX0 + 2, SCOPE_Y + 20, 44, 1)
+  screen.fill()
+  screen.level(12)
+  screen.rect(MX0 + 2 + 44 * r.phase, SCOPE_Y + 21, 1, 3)
+  screen.fill()
+end
+
+function MECH.stochastic(r, p)
+  local x0, y0, y1 = 16, SCOPE_Y + 4, SCOPE_Y + 21
+  screen.level(3)
+  screen.rect(x0, y0, 1, y1 - y0)
+  screen.rect(x0 + 18, y0, 1, y1 - y0)
+  screen.fill()
+  -- the bar the dice is thrown against
+  screen.level(8)
+  screen.rect(x0, y1 - p * (y1 - y0), 19, 1)
+  screen.fill()
+  -- and where the last one that got through actually landed
+  if r.last_weight > 0 then
+    screen.level(14)
+    screen.rect(x0 + 2, y1 - r.last_weight * (y1 - y0), 15, 2)
+    screen.fill()
+  end
+end
+
+function MECH.drifter(r, _, couple, id)
+  local y = SCOPE_Y + 14
+  screen.level(3)
+  screen.rect(MX0 + 2, y + 4, 44, 1)
+  screen.fill()
+  local nb = wl("rambler").neighbour_phases(id, 3)
+  if #nb > 0 then
+    screen.level(6)
+    for i = 1, #nb do screen.rect(MX0 + 2 + 44 * nb[i], y, 2, 2) end
+    screen.fill()
+  end
+  screen.level(14)
+  screen.rect(MX0 + 1 + 44 * r.phase, y - 2, 3, 5)
+  screen.fill()
+  -- how hard they pull, as the width of the bracket under it
+  local w = math.floor(couple * 9 + 0.5)
+  if w > 0 then
+    screen.level(7)
+    screen.rect(MX0 + 2 + 44 * r.phase - w, y + 6, w * 2 + 1, 1)
+    screen.fill()
+  end
+end
+
+function MECH.accelerando(r, _, top)
+  local at = r.cycle % 8
+  screen.level(4)
+  for i = 0, 7 do
+    if i ~= at then
+      local hh = 3 + i * (1 + top * 0.4)
+      screen.rect(MX0 + 3 + i * 5, SCOPE_Y + 19 - hh, 3, hh)
+    end
+  end
+  screen.fill()
+  screen.level(13)
+  local hh = 3 + at * (1 + top * 0.4)
+  screen.rect(MX0 + 3 + at * 5, SCOPE_Y + 19 - hh, 3, hh)
+  screen.fill()
+  screen.level(3)
+  screen.rect(MX0 + 3, SCOPE_Y + 19, 42, 1)
+  screen.fill()
+end
+
+function MECH.swarm(r, _, spread)
+  -- a picture of the setting: four hits, the gaps between them scaled by
+  -- Spread, over the run the cluster will actually occupy.
+  local x, gaps = MX0 + 3, {1.0, 0.55, 1.35, 0.8}
+  screen.level(9)
+  for i = 1, 4 do
+    screen.rect(x, SCOPE_Y + 16 - (5 - i) * 2, 2, (5 - i) * 2 + 3)
+    x = x + 3 + gaps[i] * spread * 3.2
+    if x > MX1 - 2 then break end
+  end
+  screen.fill()
+  screen.level(3)
+  screen.rect(MX0 + 2, SCOPE_Y + 20, 44, 1)
+  screen.fill()
+  screen.level(12)
+  screen.rect(MX0 + 2 + 44 * r.phase, SCOPE_Y + 21, 1, 3)
+  screen.fill()
+end
+
+SCOPES.D = function(id)
+  local rambler = wl("rambler")
+  local r = rambler.get(id)
+  if not r then return end
+  local v1, _, v2 = rambler.knobs(id)
+  local now = util.time()
+  local win = T_WIN[r.gait] or 6
+
+  local m = MECH[r.gait]
+  if m then m(r, v1, v2, id) end
+
+  -- the divider, so the two halves read as two halves
+  screen.level(2)
+  for y = SCOPE_Y + 4, SCOPE_Y + 22, 4 do screen.rect(51, y, 1, 2) end
   screen.fill()
 
-  -- how far through it we are
+  screen.level(3)
+  screen.rect(TX0, LANE_BASE, TX1 - TX0, 1)
+  screen.fill()
+  beat_ticks(now, win, TX0, TX1, LANE_BASE + 2)
+  local hist = rambler.history(id)
+  ring_lane(hist, now, win, TX0, TX1, LANE_BASE, LANE_H, 13)
+end
+
+-- §5.2c the weave scopes -----------------------------------------------------
+-- an R cell had no scope at all: its page fell through to the lexicon's
+-- sentence, which is the one page on the panel where a sentence is least
+-- use -- "sends each pulse out of a different cable, in turn" is a thing you
+-- have to imagine, and this is a thing you can watch.
+--
+-- one layout for all twenty, and it is the rule's own definition: what
+-- arrived on the top row, what left on the bottom, and the difference between
+-- them IS the rule. a pulse the rule swallowed leaves a short stub on the
+-- bottom row rather than nothing at all, because a hole in a part is a part
+-- of the part and the panel has never been able to show one.
+--
+-- two rules break the layout, and they are exactly the two that are not
+-- one-in-one-out: `meet` needs two input rows and `hocket` needs four output
+-- rows. the break is the information.
+
+-- the block is 27 rows. seven of them are what arrived, five are the rule's
+-- own working, ten are what left, and the two spare are the gaps that keep
+-- the three from touching -- a stencil drawn through the tops of the output
+-- bars is two drawings on top of each other, not one drawing.
+local RX0, RX1 = 2, 126
+local IN_BASE = SCOPE_Y + 7            -- rows 0..7   what arrived
+local IN_H = 7
+local BAND_Y = SCOPE_Y + 9             -- rows 9..13  the rule
+local OUT_BASE = SCOPE_Y + 25          -- rows 15..25 what left
+local OUT_H = 10
+
+-- seconds of history per rule. the millisecond rules -- flam at eight to
+-- sixty-three, ghost, roll, blur -- are simply invisible on a lane scaled to
+-- bars, so each rule carries the window that shows what it does.
+local R_WIN = {
+  divide = 5, mult = 1.8, delay = 4, echo = 2.2, chance = 4,
+  accent = 6, sift = 5, meet = 4, hocket = 4, swing = 4,
+  blur = 2.6, latch = 7, fill = 8, rest = 6, flam = 1.1,
+  ghost = 1.8, roll = 2.4, swell = 6, mask = 8, shift = 8,
+}
+
+-- the bands: the rule's own working, drawn between the two rows. only the
+-- rules where there is something to see -- a counter, a gate, a stencil, a
+-- threshold. the rest are legible from the two rows alone.
+local BAND = {}
+
+function BAND.divide(v1, v2, r)
+  local at = r.count % v1
+  screen.level(3)
+  for i = 0, v1 - 1 do
+    if i ~= at then screen.rect(50 + i * 4, BAND_Y + 2, 3, 2) end
+  end
+  screen.fill()
   screen.level(11)
-  screen.rect(L, base - 6, (R - L) * phase, 5)
+  screen.rect(50 + at * 4, BAND_Y + 1, 3, 4)
   screen.fill()
+end
 
-  -- and the head, which is where the next pulse comes from
-  screen.level(15)
-  screen.rect(L + (R - L) * phase - 1, base - 9, 2, 11)
+function BAND.chance(v1)
+  screen.level(3)
+  screen.rect(50, BAND_Y + 3, 28, 1)
   screen.fill()
+  screen.level(10)
+  screen.rect(50, BAND_Y + 2, math.floor(28 * v1 + 0.5), 3)
+  screen.fill()
+end
 
-  if info.grid then
-    screen.level(5)
-    screen.move(L, SCOPE_Y + 8)
-    screen.text(fit(info.grid, 120))
+function BAND.latch(v1, duty, r)
+  local on = math.max(1, math.floor(v1 * 2 * duty + 0.5))
+  local span = v1 * 2
+  local w = math.floor(48 / span)
+  if w < 1 then w = 1 end
+  local i = r.count % span
+  screen.level(4)
+  screen.rect(40, BAND_Y + 4, on * w, 1)
+  screen.rect(40 + on * w, BAND_Y + 1, (span - on) * w, 1)
+  screen.fill()
+  screen.level(12)
+  screen.rect(40 + i * w, BAND_Y + 1, 1, 4)
+  screen.fill()
+end
+
+local function stencil(n, k, rot, at, span)
+  local w = math.max(1, math.floor(span / n))
+  local x0 = 64 - math.floor(n * w / 2)
+  screen.level(3)
+  for i = 0, n - 1 do
+    if not ((((i + rot) % n) * k) % n < k) then
+      screen.rect(x0 + i * w, BAND_Y + 2, 1, 1)
+    end
   end
+  screen.fill()
+  screen.level(9)
+  for i = 0, n - 1 do
+    if (((i + rot) % n) * k) % n < k then
+      screen.rect(x0 + i * w, BAND_Y + 1, w, 3)
+    end
+  end
+  screen.fill()
+  screen.level(14)
+  screen.rect(x0 + (at % n) * w, BAND_Y + 5, w, 1)
+  screen.fill()
+end
+
+function BAND.mask(k, rot, r) stencil(16, k, rot, r.count, 64) end
+function BAND.shift(k, _, r)  stencil(8, k, r.rot, r.count, 48) end
+
+function BAND.sift(thr)
+  -- the bar, drawn across the row it is judging
+  screen.level(6)
+  for x = RX0, RX1, 4 do screen.rect(x, IN_BASE - thr * IN_H, 1, 1) end
+  screen.fill()
+end
+
+-- accent and swell get no band. their contour IS the height of the output
+-- bars, and drawing it a second time as a dotted line through them is the
+-- same fact twice -- which is exactly what the phase bar was doing.
+
+function BAND.blur(late, _, _, win)
+  -- the window a pulse can land anywhere inside, over the row it lands on
+  local pps = (RX1 - RX0) / win
+  local w = math.max(2, math.floor(late * pps + 0.5))
+  screen.level(3)
+  for x = RX0, RX1 - w, 26 do screen.rect(x, OUT_BASE - 1, w, 1) end
+  screen.fill()
+end
+
+-- the two that are not one in, one out --------------------------------------
+
+local function draw_hocket(id, now, win, lanes)
+  local weave = wl("weave")
+  local ins, _, outs = weave.history(id)
+  local pps = (RX1 - RX0) / win
+  -- one row per cable, up to six -- Lanes is capped at six for exactly this
+  -- reason, so the rows are the cables rather than the cables folded onto the
+  -- rows that happened to fit.
+  local ys = {SCOPE_Y + 15, SCOPE_Y + 17, SCOPE_Y + 19,
+              SCOPE_Y + 21, SCOPE_Y + 23, SCOPE_Y + 25}
+  local n = math.min(6, math.max(2, lanes))
+  screen.level(3)
+  for i = 1, n do screen.rect(RX0 + 4, ys[i], RX1 - RX0 - 4, 1) end
+  screen.fill()
+  screen.level(9)
+  for i = 1, #ins do
+    local e = ins[i]
+    if e and now - e.t >= 0 and now - e.t <= win then
+      screen.rect(RX1 - (now - e.t) * pps, SCOPE_Y + 3, 1, 8)
+    end
+  end
+  screen.fill()
+  -- each pulse drops onto the cable it actually left by (weave.out records
+  -- it), so the four rows are the four cables and the staircase down them is
+  -- the hocket. a stride of two skips a row each time and shows as one.
+  screen.level(13)
+  local k = 0
+  for i = 1, #outs do
+    local e = outs[i]
+    if e and now - e.t >= 0 and now - e.t <= win then
+      local x = RX1 - (now - e.t) * pps
+      local y = ys[(((e.lane or 1) - 1) % n) + 1]
+      screen.rect(x, y - 2, 1, 2)
+      k = k + 1
+    end
+  end
+  if k > 0 then screen.fill() end
+end
+
+local function draw_meet(id, now, win)
+  local weave = wl("weave")
+  local ins, _, outs, _, drops = weave.history(id)
+  local pps = (RX1 - RX0) / win
+  screen.level(3)
+  screen.rect(RX0, SCOPE_Y + 7, RX1 - RX0, 1)
+  screen.rect(RX0, SCOPE_Y + 14, RX1 - RX0, 1)
+  screen.rect(RX0, OUT_BASE, RX1 - RX0, 1)
+  screen.fill()
+  -- arrivals alternate rows: two cables in is the whole point of this rule,
+  -- and which row a pulse lands on is which cable it came down.
+  screen.level(9)
+  local j = 0
+  for i = 1, #ins do
+    local e = ins[i]
+    if e and now - e.t >= 0 and now - e.t <= win then
+      j = j + 1
+      local x = RX1 - (now - e.t) * pps
+      if j % 2 == 1 then screen.rect(x, SCOPE_Y + 2, 1, 5)
+      else screen.rect(x, SCOPE_Y + 10, 1, 4) end
+    end
+  end
+  screen.fill()
+  screen.level(4)
+  local d = 0
+  for i = 1, #drops do
+    local e = drops[i]
+    if e and now - e.t >= 0 and now - e.t <= win then
+      screen.rect(RX1 - (now - e.t) * pps, OUT_BASE - 2, 1, 2)
+      d = d + 1
+    end
+  end
+  if d > 0 then screen.fill() end
+  screen.level(14)
+  local o = 0
+  for i = 1, #outs do
+    local e = outs[i]
+    if e and now - e.t >= 0 and now - e.t <= win then
+      local hh = 2 + e.w * (OUT_H - 2)
+      screen.rect(RX1 - (now - e.t) * pps, OUT_BASE - hh, 1, hh)
+      o = o + 1
+    end
+  end
+  if o > 0 then screen.fill() end
+end
+
+SCOPES.R = function(id)
+  local weave = wl("weave")
+  local r = weave.get(id)
+  if not r then return end
+  local v1, _, v2 = weave.knobs(id)
+  local now = util.time()
+  local win = R_WIN[r.rule] or 4
+
+  if r.rule == "hocket" then return draw_hocket(id, now, win, v2) end
+  if r.rule == "meet" then return draw_meet(id, now, win) end
+
+  local ins, _, outs, _, drops = weave.history(id)
+  local pps = (RX1 - RX0) / win
+
+  -- what arrived
+  screen.level(3)
+  screen.rect(RX0, IN_BASE, RX1 - RX0, 1)
+  screen.rect(RX0, OUT_BASE, RX1 - RX0, 1)
+  screen.fill()
+
+  local b = BAND[r.rule]
+  if b then b(v1, v2, r, win) end
+
+  screen.level(9)
+  local n = 0
+  for i = 1, #ins do
+    local e = ins[i]
+    if e then
+      local age = now - e.t
+      if age >= 0 and age <= win then
+        local hh = 1 + e.w * (IN_H - 1)
+        screen.rect(RX1 - age * pps, IN_BASE - hh, 1, hh)
+        n = n + 1
+      end
+    end
+  end
+  if n > 0 then screen.fill() end
+
+  -- and the holes, which are as much the part as the hits are
+  screen.level(4)
+  n = 0
+  for i = 1, #drops do
+    local e = drops[i]
+    if e then
+      local age = now - e.t
+      if age >= 0 and age <= win then
+        screen.rect(RX1 - age * pps, OUT_BASE - 2, 1, 2)
+        n = n + 1
+      end
+    end
+  end
+  if n > 0 then screen.fill() end
+
+  -- what left
+  ring_lane(outs, now, win, RX0, RX1, OUT_BASE, OUT_H, 14)
 end
 
 -- the block under a cell page: a scope if this type has one and the page
@@ -788,10 +1312,105 @@ screenui.SCOPES = SCOPES
 -- letter and nothing else, and the panel now says which it is far more
 -- plainly than a word could -- an open page dims the whole grid (§5.1b), a
 -- held one lights up the cell you are holding.
+-- §4.2b the header of a page whose E1 is a list rather than a cursor. it
+-- carries the one thing E1 moves -- which gait, which rule -- because the two
+-- widgets under it are only that entry's two knobs, and without it the page
+-- would show "Steps" and "Rotate" without ever saying euclidean.
+--
+-- the tag ("Trigger:", "Process:") gives way to make room for it, and it is
+-- the right thing to give: `Hob euclidean` says both what the cell is and
+-- what it is set to, where `Trigger: Hob` said the first twice.
+local CYC_BAR_W = 26
+
+local function draw_cycle_header(name, entry, at, total)
+  draw_transport(1)
+
+  local right = 127
+  local tempo = tempo_text()
+  screen.level(9)
+  screen.move(right, HDR_BASE)
+  screen.text_right(tempo)
+  right = right - text_w(tempo) - 5
+
+  -- where in the list this entry is: a track with a block on it. nine gaits
+  -- would fit as dots and twenty rules would not, and one shape for both is
+  -- worth more than dots for one of them.
+  local bx = right - CYC_BAR_W
+  screen.level(3)
+  screen.rect(bx, 4, CYC_BAR_W, 1)
+  screen.fill()
+  screen.level(11)
+  screen.rect(bx + math.floor((at - 1) / math.max(1, total - 1) * (CYC_BAR_W - 3) + 0.5),
+              2, 3, 4)
+  screen.fill()
+  right = bx - 4
+
+  -- the cell's name first, dim: you already know which cell you are on --
+  -- it is lit on the grid and you are holding it. the entry is what E1 moves
+  -- and what both knobs under it belong to, so it is the bright one.
+  local x = 7
+  screen.level(7)
+  screen.move(x, HDR_BASE)
+  screen.text(name)
+  x = x + text_w(name) + 4
+
+  screen.level(15)
+  screen.move(x, HDR_BASE)
+  screen.text(fit(entry or "", right - x))
+
+  screen.level(3)
+  screen.move(0, HDR_H - 0.5)
+  screen.line(128, HDR_H - 0.5)
+  screen.stroke()
+end
+
+-- two knobs, side by side, both live. there is no cursor on this page -- E2
+-- is the left one and E3 is the right one, always -- so neither is drawn as
+-- "the focused one": they are both focused, which is the whole point of
+-- having exactly two.
+local CYC_X = {19, 83}
+
+local function draw_two_knobs(id, page_mod)
+  local top = BLOCK_TOP[1]
+  for i = 1, 2 do
+    local p = page_mod.PARAMS[i]
+    if p then
+      glyph.draw(p.glyph, CYC_X[i], top, GLYPH_W, GLYPH_H, p.get(id), true,
+                 p.text(id), p.glyph_data and p.glyph_data(id) or nil)
+    end
+  end
+  screen.level(13)
+  for i = 1, 2 do
+    local p = page_mod.PARAMS[i]
+    if p and not glyph.reads_own_value(p.glyph) then
+      centred(CYC_X[i] + GLYPH_W / 2, top + VALUE_DY, shorten(p.text(id), TEXT_W + 8))
+    end
+  end
+  screen.level(6)
+  for i = 1, 2 do
+    local p = page_mod.PARAMS[i]
+    if p then
+      centred(CYC_X[i] + GLYPH_W / 2, top + LABEL_DY,
+              clip(cellparam.label_of(p, id), TEXT_W + 8))
+    end
+  end
+end
+
 function screenui.draw_cell(id)
   local cell = topology.get(id)
   if not cell then return end
   local page_mod = cellparam.page(id)
+
+  -- §4.2b the one-page cells: T and R. one page, two knobs, and a list on E1.
+  if page_mod and page_mod.CYCLE then
+    local at, total, key = page_mod.cycle_pos(id)
+    draw_cycle_header(cell.name, key, at, total)
+    draw_two_knobs(id, page_mod)
+    scope_corners()
+    local f = SCOPES[cell.type]
+    if f then f(id) else draw_cell_desc(id) end
+    return
+  end
 
   local count = page_mod and page_mod.PARAM_COUNT or 0
   local focus = util.clamp(state.vparam_focus or 1, 1, math.max(1, count))

@@ -38,6 +38,16 @@ local function step_scale(n)
   return 80 / ((n - 1) * DETENTS_PER_STEP)
 end
 
+-- §4.2b a row's label is not always a constant any more. on a T or R cell the
+-- two knobs are the *gait's* or the *rule's* two knobs, so what E2 is called
+-- changes as E1 scrolls: "Steps" under euclidean, "Chance" under stochastic,
+-- "Rate" under four others. every caller that prints a label goes through
+-- here so none of them has to know that.
+function cellparam.label_of(p, id)
+  if p and p.label_fn then return p.label_fn(id) or p.label end
+  return p and p.label
+end
+
 -- how far `delta` (already in knob units) should actually move this row.
 -- `steps_fn` exists for banks whose size is only known once the module that
 -- owns them has loaded (rambler's gaits, weave's rules, grove's modes).
@@ -135,6 +145,60 @@ local function decay_row(text_fn)
   }
 end
 
+-- §4.2b the two knobs a T or R cell's page is made of ------------------------
+--
+-- these two rows replaced four (Rate / Gait / Clock / Grid) and three
+-- (Amount / Rule / Gate). the list they used to hold -- which gait, which
+-- rule -- is E1 now rather than a row, because it is the one choice on the
+-- page that changes what the other two mean; and Grid and Gate were readouts,
+-- which is what the scope underneath is for (§5.2c). Clock went with the
+-- gait: `metric` is the rooted one, and rootedness on the other eight was a
+-- switch that read `n/a` on six of them.
+--
+-- both rows are plain 0..1 knobs. `info_fn` is the owning module's info()
+-- and carries the label and the reading for whichever entry E1 has landed on.
+local function knob_row(key, glyph, fallback, info_fn, second)
+  return {
+    key = key, label = fallback, glyph = glyph,
+    label_fn = function(id)
+      local i = info_fn(id)
+      if not i then return fallback end
+      return (second and i.label2 or i.label) or fallback
+    end,
+    get = function(id)
+      if second then return state.base_character_b(id, 0.5) end
+      return state.base_character(id, 0, 1)
+    end,
+    set = function(id, v)
+      if second then state.character_b[id] = util.clamp(v, 0, 1)
+      else state.character[id] = util.clamp(v, 0, 1) end
+    end,
+    text = function(id)
+      local i = info_fn(id)
+      if not i then return "-" end
+      return (second and i.param2 or i.param) or "-"
+    end,
+    push = function(id) state.notify_character_change(id) end,
+  }
+end
+
+-- what E1 scrolls on a page that has a list rather than a cursor. one entry
+-- per type that has one; `build` turns it into page.cycle().
+local CYCLES = {
+  D = {
+    label = "Gait",
+    order   = function() return wl("rambler").GAIT_ORDER end,
+    current = function(id) local r = wl("rambler").get(id); return r and r.gait end,
+    apply   = function(id, key) wl("rambler").set_gait(id, key) end,
+  },
+  R = {
+    label = "Rule",
+    order   = function() return wl("weave").RULE_ORDER end,
+    current = function(id) local r = wl("weave").get(id); return r and r.rule end,
+    apply   = function(id, key) wl("weave").set_rule(id, key) end,
+  },
+}
+
 -- the pages, one per type ----------------------------------------------------
 
 local PAGES = {}
@@ -143,64 +207,18 @@ local PAGES = {}
 -- the transport. `Couple` is the Kuramoto energy the cell is currently
 -- sitting in -- a readout, not a setting, so it has no set of its own.
 PAGES.D = {
-  character_row("Rate", function(id)
-    local info = wl("rambler").info(id)
-    return info and info.param or "-"
-  end, "fader"),
-  bank_row("Gait",
-           function() return wl("rambler").GAIT_ORDER end,
-           function(id) local r = wl("rambler").get(id); return r and r.gait end,
-           function(id, key) wl("rambler").set_gait(id, key) end),
-  flag_row("Clock", "rooted", "wild",
-           function(id)
-             local info = wl("rambler").info(id)
-             if not info or not info.rooted_ok then return nil end
-             return info.rooted
-           end,
-           function(id, on) wl("rambler").set_rooted(id, on) end),
-  {
-    -- read-only: the grid the current gait actually landed on. no bank to
-    -- show a position in, so `word` gets no ticks -- and its `get` is the
-    -- rambler's phase, which the D scope now draws full width underneath.
-    key = "grid", label = "Grid", glyph = "word",
-    get = function(id)
-      local info = wl("rambler").info(id)
-      return info and util.clamp(info.phase or 0, 0, 1) or 0
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("rambler").info(id)
-      return info and (info.grid or "free") or "-"
-    end,
-    push = function() end,
-  },
+  knob_row("character",   "fader", "Rate",
+           function(id) return wl("rambler").info(id) end, false),
+  knob_row("character_b", "tilt",  "Shape",
+           function(id) return wl("rambler").info(id) end, true),
 }
 
--- R cells: the transform's own amount, and which transform.
+-- R cells: the same two knobs, belonging to whichever rule E1 is on.
 PAGES.R = {
-  character_row("Amount", function(id)
-    local info = wl("weave").info(id)
-    return info and info.param or "-"
-  end, "fader"),
-  bank_row("Rule",
-           function() return wl("weave").RULE_ORDER end,
-           function(id) local r = wl("weave").get(id); return r and r.rule end,
-           function(id, key) wl("weave").set_rule(id, key) end),
-  {
-    key = "gate", label = "Gate", glyph = "flag",
-    get = function(id)
-      local info = wl("weave").info(id)
-      return (info and info.open) and 1 or 0
-    end,
-    set = function() end,
-    text = function(id)
-      local info = wl("weave").info(id)
-      if not info then return "-" end
-      return (info.open and "open" or "shut")
-             .. " " .. info.ins .. "/" .. info.outs
-    end,
-    push = function() end,
-  },
+  knob_row("character",   "fader", "Amount",
+           function(id) return wl("weave").info(id) end, false),
+  knob_row("character_b", "tilt",  "Shape",
+           function(id) return wl("weave").info(id) end, true),
 }
 
 -- F cells (the grove's pitch fields): how far it roams, which shape it roams
@@ -302,6 +320,33 @@ local function build(kind)
   local params = PAGES[kind]
   if not params then return nil end
   local page = {PARAMS = params, PARAM_COUNT = #params}
+
+  -- §4.2b a page with a CYCLE is driven differently: E1 walks the list, and
+  -- E2/E3 are rows one and two rather than coarse and fine on one row. there
+  -- is no cursor on such a page, so nothing to focus and nothing to scroll --
+  -- which is exactly what makes it one page.
+  local cyc = CYCLES[kind]
+  if cyc then
+    page.CYCLE = cyc.label
+
+    function page.cycle_pos(id)
+      local order = cyc.order()
+      local cur = cyc.current(id)
+      for i, key in ipairs(order) do
+        if key == cur then return i, #order, key end
+      end
+      return 1, #order, order[1]
+    end
+
+    function page.cycle(id, d)
+      local order = cyc.order()
+      local at = page.cycle_pos(id)
+      local nxt = ((at - 1 + d) % #order) + 1
+      cyc.apply(id, order[nxt])
+      return order[nxt]
+    end
+  end
+
   function page.param(i)
     return params[util.clamp(i, 1, #params)]
   end

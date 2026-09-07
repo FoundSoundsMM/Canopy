@@ -202,6 +202,37 @@ coordinates moved, and Knocker's old job changed hands.
 | (9,5)  | Hunt     | accelerando — rate ramps across a cycle then resets | Skriker |
 | (10,5) | Skriker  | swarm — a short, unpredictable cluster of 2-4 hits | Hunt |
 
+**Every gait has two knobs** (§4.2b). E2 is the character it always had; E3 is
+new, and is in every case the number the gait was previously hard-coding or
+borrowing from a global macro:
+
+| Gait | E2 | E3 | E3 was |
+|------|----|----|--------|
+| metric      | Div — 1/4 .. 4 × beat | **Phase** — ±50% of a cycle | nothing; the gait is rooted, so an offset holds |
+| euclidean   | Steps — k:8 | **Rotate** — 0..7 | nothing; the spread had no start |
+| figure      | Figure — eight patterns | **Rotate** — 0..15 | nothing |
+| slow        | Rate — 0.03 .. 0.5 Hz | **Weight** — 0.3 .. 1.0 | fixed at 1.0 |
+| burst       | Rate — 0.3 .. 3 Hz | **Count** — 2..7 | the *global* Scatter macro |
+| stochastic  | Chance — p | **Rate** — 0.5 .. 6 Hz | the *global* Scatter macro |
+| drifter     | Rate — 0.5 .. 8 Hz | **Couple** — ×0 .. ×2 | fixed at ×1 |
+| accelerando | Rate — 0.5 .. 4 Hz | **Ramp** — ×1 .. ×5 | fixed at ×2.5 |
+| swarm       | Rate — 0.4 .. 4 Hz | **Spread** — ×0.3 .. ×3 | fixed at ×1 |
+
+Two of those were live bugs rather than missing knobs. **Burst's Count** and
+**Stochastic's Rate** were read off the global Scatter, so the one number that
+decides what a burst *is* could not be set on the cell doing the bursting —
+and reaching for Scatter to loosen the timing of the whole panel also
+silently lengthened every ratchet on it. Both are local now, and Scatter is
+back to being only about the grid.
+
+**Rootedness follows the gait.** The Clock row is gone with the rest of the T
+page (§4.2b), and `metric` — whose whole definition is "locks to the norns
+clock, integer division" — is the gait that is rooted. The other eight run
+free and couple, which is what all eight of them were already doing: no cell
+defaulted to rooted, so nothing that was playing changes. `rooted_ok` and
+`rambler.set_rooted` survive in the module for the three gaits that could
+take it, so re-exposing it later costs a row and no mechanism.
+
 **Knocker is gone.** Its `metric` gait — locking to the norns clock, integer
 division — is still in the gait bank (still reachable by `K1 + E2` on any T
 cell), but no cell defaults to it any more: that job, "flash with the master
@@ -351,6 +382,37 @@ rule itself, the same pattern the panel used the first time it was trimmed.
 | (14,8) | Sneck   | sift — only pulses over a weight threshold |
 | (15,8) | Lych    | meet — fires when two inputs land together |
 | (16,8) | Drove   | accent — a cycling weight contour |
+
+**Every rule has two knobs** as well (§4.2b), and every one of the new ones
+is a constant the rule used to hard-code — so a rule left alone behaves
+exactly as it did before the knob existed:
+
+| Rule | E2 | E3 | E3 was |
+|------|----|----|--------|
+| divide | Every 1..8 | **Offset** — which of the N | always the last |
+| mult   | Count 2..7 | **Decay** 0.4..1.0 | 0.82 |
+| delay  | Time — ten musical intervals | **Level** 0.2..1.0 | 1.0 |
+| echo   | Time 40..500 ms | **Decay** 0.3..0.9 | 0.62 |
+| chance | Chance p | **Hold** 1..4 in a row | 1 |
+| accent | Depth | **Length** 2..8 steps | 8 |
+| sift   | Above | **Boost** 0..100% | 0 |
+| meet   | Window 10..250 ms | **Hold** 0..500 ms | the window itself |
+| hocket | Step 1..4 | **Lanes** 2..6 | all of them |
+| swing  | Amount | **Every** 2..4 | 2 |
+| blur   | Late 0..60 ms | **Wobble** 0..60% | 0 |
+| latch  | Length 1..8 | **Duty** 20..80% | 50% |
+| fill   | Every 4..32 | **Hits** 1..6 | 3 |
+| rest   | Chance | **Run** 1..8 | 1-5 |
+| flam   | Gap 8..63 ms | **Grace** 0.1..0.9 | 0.4 |
+| ghost  | Gap 20..220 ms | **Level** 0.1..0.6 | 0.32 |
+| roll   | Time 80..780 ms | **Taps** 2..10 | 6 |
+| swell  | Over 4..24 | **Floor** 0..0.8 | 0.3 |
+| mask   | Steps k:16 | **Rotate** 0..15 | 0 |
+| shift  | Steps k of 8 | **Turn** 1..4 steps a lap | 1 |
+
+**Meet's Hold** is the one that was doing two jobs: the refractory period was
+the coincidence window, so widening the window to catch a loose player also
+slowed the whole rule down. They are two numbers now.
 
 **Hocket** turns four voices into a kit rather than four voices; **Sift**
 placed after **Accent** pulls one line out of a busy patch; **Meet** is the
@@ -1154,6 +1216,8 @@ one page per press.
 | K1 + E2 | swap the rule this cell runs on (T: gait, R: rule, F: mode) |
 | K2 + K3 | sever all cables at this cell |
 
+T and R cells are the exception, and §4.2b is the whole of it.
+
 **E2 per cell type:**
 
 | Cell type | E2 = | Range |
@@ -1186,6 +1250,58 @@ default is; the knob is symmetrical around it.
 | GUST | the fall half of its envelope | 0.05 .. 30 s |
 | SMP | the fall half of its envelope | 0.1 .. 40 s |
 | T / R / F / C / TM / LFO / O | nothing — no sound of their own | — |
+
+### 4.2b One page, two knobs — T and R cells
+
+A T cell's page used to be four rows (Rate, Gait, Clock, Grid) and an R
+cell's three (Amount, Rule, Gate), driven the way every page on the panel is:
+E1 walks a cursor down the list, E2 and E3 are coarse and fine on the row
+under it. That is the right shape for a voice, which has eleven genuinely
+independent numbers. It is the wrong shape here, for three reasons that only
+became obvious once §5.2c gave the block underneath a drawing:
+
+- **two of the seven rows were readouts.** `Grid` returned the cell's phase as
+  its fraction and `Gate` returned open/shut — facts, not settings, and facts
+  the scope now draws far better than a word can.
+- **`Clock` read `n/a` on six of the nine gaits.** A row that is inapplicable
+  two thirds of the time is a property of the gait wearing a row's clothes.
+- **the one row that mattered most was the hardest to reach.** Gait and Rule
+  are the choice the whole page hangs off — every other row means something
+  different underneath each of them — and both sat *second*, behind a cursor.
+
+So: **E1 is the list, E2 is the first knob, E3 is the second, and there is no
+cursor and no second page.**
+
+| Control | T cell | R cell |
+|---------|--------|--------|
+| E1 | which **gait** (nine, wrapping) | which **rule** (twenty, wrapping) |
+| E2 | that gait's first knob | that rule's first knob |
+| E3 | that gait's second knob | that rule's second knob |
+
+Both knobs are re-labelled and re-read as E1 moves, and the scope underneath
+redraws as whatever the new entry is — so scrolling the list is how you audit
+the row, not a thing you do before you can start.
+
+**Scrolling re-seeds both knobs.** The two knobs mean something different
+under every entry: euclidean's Rotate is not burst's Count, and Ghost's Level
+is not Mask's Rotate. Carrying the raw number across would land the new entry
+on a setting nobody chose, so arriving on one puts both knobs at that entry's
+own defaults — and every one of those defaults is what the entry did before it
+had a second knob (§2.3, §2.7). Scrolling the list is therefore always
+non-destructive to *how the thing sounds as itself*; it is destructive to the
+two numbers you had set, which is the trade, and is why the list wraps rather
+than paginating: nine and twenty are both short enough to walk.
+
+**What this does not change.** Every other cell type keeps the cursor it
+always had, unchanged — a voice's eleven rows, a Turing machine's eight, the
+gusts' six. This is not a new vocabulary; it is the one page shape that a
+two-knob-and-a-list cell wanted all along, and there are exactly two of them.
+
+**The header carries the list.** With no cursor there are no page dots, so
+that space is where in the list you are — a track with a block on it, which
+reads the same for nine gaits and twenty rules where dots would only have fit
+the nine. The cell's own name goes dim and the entry goes bright: you know
+which cell you are on, because it is lit under your finger.
 
 ### 4.4 The Colour page — one K3 past the mixer
 
@@ -1460,12 +1576,72 @@ already exists and is already read at frame rate for the grid LEDs:
 
 - **LFO** — the sine, scrolling. The right edge is now, and the current value
   is carried out to the margin. `lfo.phase(id)` (§5.1).
-- **D** — the gait's phase as a sweeping bar with its cycle ticked. A metric
-  gait sweeps evenly and a swung or euclidean one does not, so the bar says
-  which you are on without reading the word. `rambler.info(id).phase`.
+- **D** — the gait itself, one drawing per gait (nine).
+- **R** — the rule itself, one layout for all twenty.
 
 A type with no scope keeps its sentence, which is what lets the rest land one
 family at a time.
+
+**The phase bar is gone.** The first D scope drew one number — how far through
+its cycle the cell was — full width, at level 15, and drew it *identically for
+all nine gaits*: a euclidean cell and a swarm cell were the same picture. It
+was also the fourth widget on the page saying the same thing twice, because
+the `Grid` row's fraction was the phase. A drawing that is the same under
+every setting is a drawing of the frame, not of the thing.
+
+**The T scope: mechanism, then history.** Two halves, in every one of the
+nine:
+
+- `x 2..48` — the thing that decides. A ring of eight steps with the hand on
+  the one sounding (euclidean), a sixteen-step strip with the figure on it
+  (figure), a comb of the ratchet (burst), a bar the dice is thrown against
+  (stochastic), a ramp that climbs and resets (accelerando), a charge box
+  that fills and empties (slow), a line with this cell's phase on it and its
+  cabled neighbours' either side (drifter).
+- `x 54..126` — what came out, newest at the right edge, bar height for
+  weight, over faint ticks of the transport's beats. Same direction the LFO
+  scope scrolls.
+
+The drifter drawing is the one worth calling out: §2.3's Kuramoto coupling
+has been in the maths since the first build and had never once been on the
+screen. The dim dots are the cells this one is cabled to and the bright one
+is this cell being pulled between them.
+
+**The R scope: in above, out below.** An R cell had no scope at all — its page
+fell through to the lexicon's sentence, which is the one page where a sentence
+is least use, because "sends each pulse out of a different cable, in turn" is
+a thing you have to imagine. One layout for all twenty:
+
+- rows 0..7, what arrived;
+- rows 9..13, the rule's own working where there is something to see — a
+  counter, a coin, a square-wave gate, a euclidean stencil, a threshold bar;
+- rows 15..25, what left.
+
+The rule is the difference between the two rows. A pulse the rule **swallowed**
+leaves a short stub on the bottom row rather than nothing at all: a hole in a
+part is as much a part of the part as a hit is (§2.7), and the panel has never
+been able to draw one. `weave` keeps three small fixed rings per cell — in,
+out, dropped — written in place so a pulse costs no allocation.
+
+**Two rules break the layout, and they are the right two.** `meet` draws two
+input rows and `hocket` draws up to six output rows, because those are the two
+rules that are not one-in-one-out. The break is the information. Hocket's
+Lanes knob is capped at six for exactly this reason — the rows are the cables,
+rather than the cables folded onto however many rows happened to fit — and
+`weave.out` records which cable each pulse left by so the staircase is read
+rather than guessed.
+
+**Each rule carries its own time window.** The millisecond rules — flam at
+8-63 ms, ghost, roll, blur — are simply invisible on a lane scaled to bars, so
+the window is per rule (1.1 s for flam, 8 s for mask) rather than one constant
+that suits neither end. This is a real decision, not a detail: a scope with
+one time base would have been legible for about half the row.
+
+**Cost.** `test/soak.lua` walks all nine gaits and all twenty rules and asserts
+the worst of each stays under the 150-command cell budget — measured on a
+saturated patch that has been *playing*, since a lane is one rect per pulse
+still inside its window and an idle page proves nothing. Worst observed: 113
+(figure) and 110 (sift).
 
 `test/screen.lua` is the authority on the geometry: two words may never share
 pixels; a word may sit inside a box but never inside a shape, and never
@@ -1473,7 +1649,8 @@ half-clipped by anything. It also asserts that every row names a shape, that
 the shape exists, and that **no page shows the same shape twice** — the two
 exceptions are named there, the mixer (five faders in a row is what a mixer
 looks like; the repetition is the reading) and a D cell's Gait and Grid,
-which are both words and have no other shape to be.
+which are both words and have no other shape to be. (§4.2b retired that pair
+along with the rest of the D page; a T or R page is a fader and a tilt.)
 
 `test/render.lua` is the other half: it rasterises the real `screenui.lua`
 into a PGM per view, so the drawing can be looked at without a norns on the
@@ -1558,7 +1735,10 @@ tightest on the panel — at 187 of its 200 with the value line on it.
 
 The same widget grid as §5.2c, for whichever page that cell's type has
 (`lib/cellparam.lua`, or `voice`/`gvoice`/`tm`'s own). The header's tag
-carries the panel letter and its dots the page number. Holding is a glance —
+carries the panel letter and its dots the page number. T and R cells are laid
+out differently — two knobs side by side under a header carrying the gait or
+rule and its position in the list, and no page dots because there is one page
+(§4.2b). Holding is a glance —
 the encoders are on the page for as long as you hold, and the patch gesture
 is live underneath; tapping latches it open, and dims the panel to that cell
 (§5.1b).
@@ -1897,10 +2077,17 @@ audio does flickers rather than reads. Both poll at 20 Hz.
 ### 7.5 Persistence
 
 Unchanged mechanism. Graph format: a flat list of `{a_id, b_id, gain,
-oneway}` plus per-cell character values, per-cell rule choices (gait / rule
-/ mode, and the rooted / snap flags), each LFO's Target and Param, the mixer's
-per-output levels, and the sound-page parameters per voice, GVOICE cell, TM
-cell, gust and sample cell.
+oneway}` plus per-cell character values — **both of them** now, the primary
+and §4.2b's second knob — per-cell rule choices (gait / rule / mode, and the
+rooted / snap flags), each LFO's Target and Param, the mixer's per-output
+levels, and the sound-page parameters per voice, GVOICE cell, TM cell, gust
+and sample cell.
+
+The second knob is one more plain 0..1 per cell in the same shape as the
+first (`state.character_b`), and it defaults per-gait and per-rule rather than
+to a constant — so a patch saved before it existed loads with every T and R
+cell doing exactly what it did, because every default is the number the gait
+or rule used to hard-code.
 Cell ids are stable strings (`"oak"`, `"d.skriker"`, `"r.drove"`, `"h.ley"`,
 `"f.cuckoo"`, `"clk.toll"`, `"q4.4"`) — never coordinates — which is what let
 the whole panel be re-cut twice now without the format changing. A saved

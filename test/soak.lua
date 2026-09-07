@@ -356,6 +356,38 @@ do
   check("the cell view: under 150 commands", calls < 150, calls .. " calls")
   print("      cell   " .. calls .. " commands, " .. paint .. " paint")
   M.state.held = {}
+
+  -- §5.2c the scopes. these are the drawings that replaced the phase bar, and
+  -- they are the only thing on the panel whose cost depends on how much the
+  -- patch is PLAYING rather than on what is on screen: a lane is one rect per
+  -- pulse still inside its window. so measure them full rather than idle --
+  -- eight more seconds of a saturated patch, then every gait and every rule
+  -- in turn, and report the worst one rather than an average that hides it.
+  tick(500 * 8)
+
+  local worst, worst_key = 0, "-"
+  M.state.held = {"d.hob"}
+  for _, key in ipairs(M.rambler.GAIT_ORDER) do
+    M.rambler.set_gait("d.hob", key)
+    local c = frame()
+    if c > worst then worst, worst_key = c, key end
+  end
+  check("every gait's scope: under 150 commands", worst < 150,
+        worst_key .. " " .. worst .. " calls")
+  print("      gaits  worst " .. worst .. " commands (" .. worst_key .. ")")
+
+  worst, worst_key = 0, "-"
+  M.state.held = {"r.stile"}
+  for _, key in ipairs(M.weave.RULE_ORDER) do
+    M.weave.set_rule("r.stile", key)
+    tick(500 * 2)
+    local c = frame()
+    if c > worst then worst, worst_key = c, key end
+  end
+  check("every rule's scope: under 150 commands", worst < 150,
+        worst_key .. " " .. worst .. " calls")
+  print("      rules  worst " .. worst .. " commands (" .. worst_key .. ")")
+  M.state.held = {}
 end
 
 if #failures > 0 then

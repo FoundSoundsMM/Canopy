@@ -248,6 +248,26 @@ end
 function gridui.page_enc(id, n, d)
   local page = cellparam.page(id)
   if not page then return false end
+
+  -- §4.2b a T or R cell's page is one page, two knobs and a list. E1 walks
+  -- the list -- the gait, the rule -- and the whole page follows it: both
+  -- knobs are re-labelled, re-seeded and re-read, and the scope underneath
+  -- redraws as whatever the new entry is. E2 and E3 are then row one and row
+  -- two, not coarse and fine on one row, because there is no cursor to be
+  -- coarse or fine ABOUT. every other page keeps the cursor it always had.
+  if page.CYCLE then
+    if n == 1 then
+      local key = page.cycle(id, d)
+      if key then state.set_event(page.CYCLE .. " " .. key, 0.6) end
+      return true
+    end
+    local p = page.nudge(id, (n == 2) and 1 or 2, d * gridui.COARSE)
+    if p then
+      state.set_event(cellparam.label_of(p, id) .. " " .. p.text(id), 0.5)
+    end
+    return true
+  end
+
   if n == 1 then
     state.vparam_focus =
       util.clamp((state.vparam_focus or 1) + d, 1, page.PARAM_COUNT)
@@ -256,7 +276,7 @@ function gridui.page_enc(id, n, d)
   local i = util.clamp(state.vparam_focus or 1, 1, page.PARAM_COUNT)
   local p = page.nudge(id, i, d * ((n == 2) and gridui.COARSE or gridui.FINE))
   if p then
-    state.set_event(p.label .. " " .. p.text(id), 0.5)
+    state.set_event(cellparam.label_of(p, id) .. " " .. p.text(id), 0.5)
   end
   return true
 end

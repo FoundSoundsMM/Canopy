@@ -178,4 +178,110 @@ do
   check("info reports the gait", info.gait == "drifter" and info.phased == true)
 end
 
+-- §4.2b the second knob ------------------------------------------------------
+-- one page, two knobs, and E1 walks the gait list. so every gait has to
+-- declare both knobs, and arriving on one has to put both of them somewhere
+-- that gait can use -- a Rotate carried over from euclidean is not a Count.
+
+print("\n-- every gait declares two knobs --")
+do
+  local M = fresh(5)
+  local missing, bad = {}, {}
+  for _, key in ipairs(M.rambler.GAIT_ORDER) do
+    local g = M.rambler.GAITS[key]
+    if not (g.label and g.label2 and g.read2 and g.d1 and g.d2) then
+      table.insert(missing, key)
+    end
+    M.rambler.set_gait(HOB, key)
+    local v1, t1, v2, t2, l1, l2 = M.rambler.knobs(HOB)
+    if not (type(v1) == "number" and type(v2) == "number"
+            and t1 and t2 and l1 and l2) then
+      table.insert(bad, key)
+    end
+  end
+  check("all nine have a label, a reading and a default for both",
+        #missing == 0, table.concat(missing, " "))
+  check("and knobs() reads both back on every one of them",
+        #bad == 0, table.concat(bad, " "))
+  check("the two labels are never the same word",
+        M.rambler.GAITS.euclidean.label ~= M.rambler.GAITS.euclidean.label2)
+end
+
+print("\n-- scrolling the gait list re-seeds both knobs --")
+do
+  local M = fresh(6)
+  M.rambler.set_gait(HOB, "euclidean")
+  M.state.character[HOB] = 0.9
+  M.state.character_b[HOB] = 0.9
+  M.rambler.set_gait(HOB, "burst")
+  check("E2 lands on the new gait's default",
+        M.state.character[HOB] == M.rambler.GAITS.burst.d1,
+        tostring(M.state.character[HOB]))
+  check("E3 does too, not on what euclidean left behind",
+        M.state.character_b[HOB] == M.rambler.GAITS.burst.d2,
+        tostring(M.state.character_b[HOB]))
+  local info = M.rambler.info(HOB)
+  check("and the page renames both rows",
+        info.label == "Rate" and info.label2 == "Count",
+        tostring(info.label) .. "/" .. tostring(info.label2))
+end
+
+print("\n-- metric is the rooted one, and the only one --")
+do
+  local M = fresh(7)
+  M.rambler.set_gait(HOB, "metric")
+  check("arriving on metric roots the cell", M.rambler.get(HOB).rooted == true)
+  M.rambler.set_gait(HOB, "euclidean")
+  check("and leaving it lets go again", M.rambler.get(HOB).rooted == false)
+end
+
+print("\n-- euclidean's Rotate turns the pattern --")
+do
+  local function fires(rot)
+    local M = fresh(8)
+    M.state.global.scatter = 0
+    M.rambler.set_gait(HOB, "euclidean")
+    M.state.character[HOB] = 0.625          -- k = 5
+    M.state.character_b[HOB] = rot
+    M.rambler.set_rooted(HOB, true)
+    M.patch.add(HOB, KNOCK, 1.0)
+    run(M, 8)
+    local out = {}
+    -- where in the bar each hit landed. rooted euclidean runs eight steps to
+    -- the bar at two a beat, so a rotation shows up as the same count of hits
+    -- in different places rather than as more or fewer of them.
+    for _, s in ipairs(CALLS.strike) do out[#out + 1] = (s.t * 2) % 4 end
+    return out, #CALLS.strike
+  end
+  local a, na = fires(0)
+  local b, nb = fires(2 / 7)                -- two steps round
+  check("the same number of hits either way", math.abs(na - nb) <= 2,
+        na .. " vs " .. nb)
+  local same = 0
+  for i = 1, math.min(#a, #b) do
+    if math.abs(a[i] - b[i]) < 0.02 then same = same + 1 end
+  end
+  check("but not in the same places",
+        same < math.min(#a, #b) * 0.8, same .. "/" .. math.min(#a, #b))
+end
+
+print("\n-- drifter's Couple is the Kuramoto constant, on a knob --")
+do
+  local function spread(couple)
+    local M = fresh(9)
+    for _, id in ipairs({HOB, GABRIEL}) do
+      M.rambler.set_gait(id, "drifter")
+      M.state.character[id] = 0.5
+      M.state.character_b[id] = couple
+    end
+    M.patch.add(HOB, GABRIEL, 1.0)
+    run(M, 20)
+    return math.abs(M.rambler.get(HOB).phase - M.rambler.get(GABRIEL).phase)
+  end
+  local loose, tight = spread(0), spread(1)
+  check("uncoupled cells drift apart, coupled ones do not",
+        tight < loose or tight < 0.08,
+        string.format("%.3f vs %.3f", loose, tight))
+end
+
 report()

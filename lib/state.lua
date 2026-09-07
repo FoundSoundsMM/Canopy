@@ -115,6 +115,17 @@ state.held_t = {}   -- id -> util.time() at press
 -- some cell type's settings page now (lib/cellparam.lua) rather than a
 -- modifier gesture, but what they hold and who reads them is unchanged.
 state.character = {}   -- id -> primary character value, player-set
+-- §4.2b the second knob. a T or R cell's page is now two knobs and a list --
+-- E1 picks the gait or the rule, E2 and E3 are that gait's or that rule's own
+-- two parameters -- so every one of them needs somewhere to keep a second
+-- number. it is one plain 0..1 like the first: what it MEANS is the gait's or
+-- the rule's business, exactly as the first one's meaning already was.
+--
+-- it is deliberately re-seeded rather than carried when E1 moves (see
+-- rambler.set_gait / weave.set_rule): the two knobs mean different things
+-- under every entry in the list, so scrolling to `burst` with a value left
+-- over from `euclidean`'s Rotate would land you on a count nobody chose.
+state.character_b = {}  -- id -> secondary character value, 0..1
 state.decay = {}       -- id -> that sound's decay
 state.gait = {}        -- D id -> gait key (the Gait row)
 state.rooted = {}      -- D id -> locked to the norns clock? (the Clock row)
@@ -176,6 +187,16 @@ end
 -- what the cell actually runs on. every consumer reads through here.
 function state.get_character(id, cell, lo, hi)
   return state.base_character(id, lo, hi)
+end
+
+-- the second knob (§4.2b). `default` is the current gait's or rule's own,
+-- passed in for the same reason the first one's lo/hi are: state.lua does not
+-- know what any of these numbers mean.
+function state.base_character_b(id, default)
+  if state.character_b[id] == nil then
+    state.character_b[id] = default or 0.5
+  end
+  return state.character_b[id]
 end
 
 -- gait/rooted default to topology's per-cell value on first read; the caller

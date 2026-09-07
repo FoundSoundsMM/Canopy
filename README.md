@@ -3,7 +3,46 @@
 A monome norns script for grid (128). Full design in
 [`docs/canopy-spec.md`](docs/canopy-spec.md).
 
-## Status: the instrument row, re-cut
+## Status: one page, two knobs
+
+The trigger row and the weave row have new pages, and a drawing each. In
+short:
+
+- **a T or R cell's page is one page now, and three encoders drive all of
+  it**: `E1` walks the list — nine gaits, twenty rules, wrapping — and `E2`
+  and `E3` are that entry's own two knobs. No cursor, no second page, and no
+  rows that were only ever readouts;
+- **every gait and every rule has a second knob**, and in almost every case it
+  is a number that was previously hard-coded: euclidean and mask get
+  **Rotate**, mult and echo get **Decay**, flam gets **Grace**, roll gets
+  **Taps**, latch gets **Duty**, hocket gets **Lanes**. Every default is the
+  old constant, so nothing that was playing changes;
+- **two of those were bugs.** Burst's ratchet length and Stochastic's rate
+  were read off the *global* Scatter macro — so the number that decides what
+  a burst is could not be set on the cell doing the bursting, and loosening
+  the panel's timing silently lengthened every ratchet on it. Both are local
+  knobs now;
+- **the phase bar is gone.** It drew one number, full width, at level 15, and
+  drew it identically for all nine gaits — a euclidean cell and a swarm cell
+  were the same picture. In its place, one drawing per gait: the ring of eight
+  steps with the hand on the one sounding, the sixteen-step figure, the
+  dice against its bar, the ramp that climbs and resets, and the coupling
+  finally on screen as your neighbours' phases either side of your own;
+- **R cells have a scope at all now.** One layout for all twenty: what
+  arrived on the top row, what left on the bottom, and the rule is the
+  difference. A pulse the rule swallowed leaves a stub rather than nothing,
+  so a hole in a part draws as a hole. `meet` and `hocket` break the layout,
+  because they are the only two rules that are not one in, one out;
+- **rootedness follows the gait.** The `Clock` row read `n/a` on six of the
+  nine, so `metric` — the one whose definition is "locks to the clock" — is
+  the rooted one and the rest run free, which is what all eight cells were
+  already doing.
+
+`test/soak.lua` walks every gait and every rule and holds the whole page under
+the 150-command frame budget; `test/render.lua` rasterises all twenty-nine
+into PGMs so they can be looked at without a norns on the desk.
+
+## Previously: the instrument row, re-cut
 
 Seven changes, and the biggest of them is that row 2 — the instrument row —
 is regrouped and has four new voices on it. In short:
