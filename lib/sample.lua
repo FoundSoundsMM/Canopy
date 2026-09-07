@@ -108,6 +108,20 @@ function sample.level(id)
   return state.get_vparam(id, "level", 0.7)
 end
 
+-- §8.6 the level with this cell's own trim folded in -- voice.amp's copy for
+-- the field recordings, with one wrinkle those two do not have.
+--
+-- the engine SQUARES `level` (it is the fader law for these cells: it keeps
+-- the bottom of the travel usable rather than jumping straight to loud). so a
+-- trim that is to come out the far side as a plain gain has to go in as its
+-- square root, or a 0.22 would land as a 0.05. topology.lua guarantees every
+-- trim is at most 1, which is what keeps this inside the engine's own
+-- `level.clip(0, 1)` at every position of the knob.
+function sample.amp(id)
+  local cell = topology.get(id)
+  return sample.level(id) * math.sqrt((cell and cell.trim) or 1)
+end
+
 -- sounding --------------------------------------------------------------------
 
 -- play this cell's sample from the top. `force` is how hard -- K1+tap is
@@ -180,7 +194,7 @@ sample.PARAMS = {
     get = vp_get("level", 0.7), set = vp_set("level"),
     text = function(id) return string.format("%.2f", sample.level(id)) end,
     push = function(id)
-      bridge.smp_level(topology.get(id).index, sample.level(id))
+      bridge.smp_level(topology.get(id).index, sample.amp(id))
     end,
   },
   -- §2.11c how much of this recording goes to the shared send effect.

@@ -52,12 +52,12 @@ do
 
   local page = M.cellparam.page(id)
   check("cellparam hands out the lfo page", page == M.lfo)
-  check("it has six rows: Speed, Shape, Slot, Target, Param, Depth",
-        page.PARAM_COUNT == 6, tostring(page.PARAM_COUNT))
+  check("it has seven rows: Speed, Sync, Shape, Slot, Target, Param, Depth",
+        page.PARAM_COUNT == 7, tostring(page.PARAM_COUNT))
   local keys = {}
   for i, p in ipairs(page.PARAMS) do keys[i] = p.key end
   check("in that order",
-        table.concat(keys, ",") == "rate,shape,slot,target,param,depth",
+        table.concat(keys, ",") == "rate,sync,shape,slot,target,param,depth",
         table.concat(keys, ","))
 
   local before = #CALLS.lfo_rate
@@ -67,6 +67,141 @@ do
         CALLS.lfo_rate[#CALLS.lfo_rate].index == M.topology.get(id).index,
         tostring(CALLS.lfo_rate[#CALLS.lfo_rate].index))
   check("and the rate it actually pushed", p.key == "rate")
+end
+
+print("\n-- §2.12b Sync: the same knob, measured against the transport --")
+do
+  local M = fresh(20)
+  local id = "lfo.flood"
+  local page = M.cellparam.page(id)
+  local row = page.PARAMS[1]
+
+  check("a fresh cell is free-running", M.lfo.synced(id) == false)
+
+  -- free and synced keep separate knobs, so flipping back and forth is
+  -- lossless.
+  M.state.set_vparam(id, "rate", 0.9)
+  local free_hz = M.lfo.rate_hz(id)
+  M.lfo.set_synced(id, true)
+  check("Sync flips", M.lfo.synced(id) == true)
+  M.state.set_vparam(id, "ratio", 0.0)
+  M.lfo.set_synced(id, false)
+  check("the free Speed survived the trip",
+        math.abs(M.lfo.rate_hz(id) - free_hz) < 1e-9, tostring(M.lfo.rate_hz(id)))
+  M.lfo.set_synced(id, true)
+  local r = select(1, M.lfo.ratio(id))
+  check("and so did the ratio", math.abs(r - M.clockcell.RATIOS[1][1]) < 1e-9,
+        tostring(r))
+
+  -- the ladder is the Clock cell's own, ends and centre.
+  M.state.set_vparam(id, "ratio", 0.5)
+  local rr, name = M.lfo.ratio(id)
+  check("the middle detent is 1 x", rr == 1 and name == "1 x", name)
+  M.state.set_vparam(id, "ratio", 1.0)
+  rr, name = M.lfo.ratio(id)
+  check("the top is the fastest multiple",
+        rr == M.clockcell.RATIOS[#M.clockcell.RATIOS][1], name)
+  M.state.set_vparam(id, "ratio", 0.0)
+  rr, name = M.lfo.ratio(id)
+  check("the bottom is the deepest division",
+        rr == M.clockcell.RATIOS[1][1], name)
+
+  -- a rate in the transport's terms, not the wall clock's.
+  M.state.set_vparam(id, "ratio", 0.5)          -- 1 x
+  check("1 x at 120 BPM is 2 Hz", math.abs(M.lfo.rate_hz(id) - 2.0) < 1e-9,
+        tostring(M.lfo.rate_hz(id)))
+  params:set("clock_tempo", 60)
+  check("and 1 Hz at 60", math.abs(M.lfo.rate_hz(id) - 1.0) < 1e-9,
+        tostring(M.lfo.rate_hz(id)))
+  params:set("clock_tempo", 120)
+  M.state.set_vparam(id, "ratio", M.clockcell.char_for_ratio(1/4))
+  check("a ratio of 1/4 is one cycle every four beats",
+        math.abs(M.lfo.rate_hz(id) - 0.5) < 1e-9, tostring(M.lfo.rate_hz(id)))
+  M.state.set_vparam(id, "ratio", 0.5)
+
+  -- the row prints the unit it is actually in.
+  check("synced, the row names the ratio", row.text(id) == "1 x", row.text(id))
+  check("and its label says so",
+        M.cellparam.label_of(row, id) == "Ratio", M.cellparam.label_of(row, id))
+  M.lfo.set_synced(id, false)
+  check("free, it prints hertz", row.text(id):match("Hz") ~= nil, row.text(id))
+  check("and is called Speed",
+        M.cellparam.label_of(row, id) == "Speed", M.cellparam.label_of(row, id))
+end
+
+print("\n-- a synced LFO reads its phase off the transport --")
+do
+  local M = fresh(21)
+  local a, b = "lfo.flood", "lfo.ebb"
+  for _, id in ipairs({a, b}) do
+    M.lfo.set_synced(id, true)
+    M.state.set_vparam(id, "ratio", 0.5)      -- 1 x: one cycle a beat
+  end
+
+  -- exactly on a beat, exactly at the start of the cycle. wall time never
+  -- enters into it, so this holds at any point in the run rather than only
+  -- at the first call.
+  T = 60 / TEMPO * 8                          -- eight beats in
+  check("on the beat, the cycle is at zero", math.abs(M.lfo.phase(a)) < 1e-9,
+        tostring(M.lfo.phase(a)))
+  T = T + (60 / TEMPO) * 0.25
+  check("a quarter beat later, a quarter through",
+        math.abs(M.lfo.phase(a) - 0.25) < 1e-9, tostring(M.lfo.phase(a)))
+
+  -- two cells at the same ratio are in step with each other, which is the
+  -- thing a matched Hz cannot promise.
+  check("and the other cell is exactly with it",
+        math.abs(M.lfo.phase(a) - M.lfo.phase(b)) < 1e-9)
+
+  -- a division is slower by exactly that much: at 1/4 the cycle is a bar.
+  M.state.set_vparam(b, "ratio", M.clockcell.char_for_ratio(1/4))
+  T = 60 / TEMPO * 2                          -- two beats: half a bar
+  check("at 1/4, two beats is half a cycle",
+        math.abs(M.lfo.phase(b) - 0.5) < 1e-9, tostring(M.lfo.phase(b)))
+
+  -- a free cell is unaffected by any of this: it still integrates wall time.
+  local c = "lfo.eddy"
+  M.state.set_vparam(c, "rate", 0.5)
+  local p0 = M.lfo.phase(c)
+  T = T + 0.5
+  local p1 = M.lfo.phase(c)
+  check("a free cell still runs off the wall clock", p1 ~= p0)
+end
+
+print("\n-- a tempo change moves the engine's rate with nothing touched --")
+do
+  local M = fresh(22)
+  local id = "lfo.flood"
+  M.lfo.set_synced(id, true)
+  M.state.set_vparam(id, "ratio", 0.5)        -- 1 x
+  -- lfo.apply reconciles all four cells, so pick this one's out of the batch
+  -- rather than trusting whichever happened to go last.
+  local idx = M.topology.get(id).index
+  local function last_for(i)
+    for k = #CALLS.lfo_rate, 1, -1 do
+      if CALLS.lfo_rate[k].index == i then return CALLS.lfo_rate[k] end
+    end
+  end
+
+  M.lfo.apply()
+  local first = last_for(idx)
+  check("the synced rate went out", first and math.abs(first.hz - 2.0) < 1e-9,
+        first and tostring(first.hz))
+
+  local n = #CALLS.lfo_rate
+  M.lfo.apply()
+  check("and is not sent again while nothing moves", #CALLS.lfo_rate == n,
+        tostring(#CALLS.lfo_rate))
+
+  params:set("clock_tempo", 90)
+  M.lfo.apply()
+  local last = last_for(idx)
+  check("a tempo change alone re-sends it",
+        #CALLS.lfo_rate > n and math.abs(last.hz - 1.5) < 1e-9,
+        last and tostring(last.hz))
+  check("and a free cell's rate did not move with it",
+        math.abs(last_for(M.topology.get("lfo.ebb").index).hz
+                 - M.lfo.rate_hz("lfo.ebb")) < 1e-9)
 end
 
 print("\n-- init pushes every cell once --")
@@ -225,7 +360,7 @@ do
   end
 
   local before = #CALLS.lfo_shape
-  M.lfo.param(2).push(L)
+  M.lfo.param(3).push(L)
   check("pushing Shape reaches the engine", #CALLS.lfo_shape > before)
   local c = CALLS.lfo_shape[#CALLS.lfo_shape]
   check("0-based, at this cell's index",

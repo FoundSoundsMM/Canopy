@@ -85,17 +85,37 @@ end
 -- two-and-two either side of the drum block, which read as two separate
 -- families of two and left the four new synths (§2.13) nowhere to go; the row
 -- is one family per run now, modal voices first.
+-- §8.6 `trim` is the per-cell half of the level match. every source on the
+-- panel was rendered offline and measured -- K-weighted loudness (BS.1770,
+-- the peak of a 100 ms window) and sample peak, one cell at a time at its own
+-- defaults -- because "some voices are louder than others" was true across a
+-- 42 dB spread and no amount of mixer work fixes that; a fader spent undoing
+-- a family's own imbalance is a fader you cannot use to balance a piece.
+--
+-- the family's share of the correction lives in Engine_Canopy.sc, on each
+-- SynthDef's output constant. what is left over is per CELL -- a 55 Hz voice
+-- and a 330 Hz one are the same SynthDef and eleven decibels apart -- and
+-- that is this number, folded into the level Lua pushes for the cell.
+--
+-- always <= 1, by construction: the engine constant is set by whichever cell
+-- of the family needs the most gain, and every other cell is trimmed down
+-- from it. so a trim only ever turns a cell down relative to its siblings,
+-- and can never push a level past a clip at the far end.
+--
+-- for the four modal voices the spread is almost all Damp: Rowan's 0.6 lets
+-- its high modes ring where Hazel's 1.3 kills them, and a bank that rings for
+-- half a second is far louder than one that does not, at the same peak.
 local VOICES = {
-  {id = "oak",   name = "Oak",   index = 1, root = 55,  decay = 1.2,  struct = 0.55, damp = 1.1, x = 1, y = 2},
-  {id = "hazel", name = "Hazel", index = 2, root = 220, decay = 0.28, struct = 0.95, damp = 1.3, x = 2, y = 2},
-  {id = "alder", name = "Alder", index = 3, root = 98,  decay = 1.6,  struct = 0.50, damp = 0.8, x = 3, y = 2},
-  {id = "rowan", name = "Rowan", index = 4, root = 330, decay = 1.8,  struct = 0.75, damp = 0.6, x = 4, y = 2},
+  {id = "oak",   name = "Oak",   index = 1, root = 55,  decay = 1.2,  struct = 0.55, damp = 1.1, x = 1, y = 2, trim = 1.00},
+  {id = "hazel", name = "Hazel", index = 2, root = 220, decay = 0.28, struct = 0.95, damp = 1.3, x = 2, y = 2, trim = 0.89},
+  {id = "alder", name = "Alder", index = 3, root = 98,  decay = 1.6,  struct = 0.50, damp = 0.8, x = 3, y = 2, trim = 0.65},
+  {id = "rowan", name = "Rowan", index = 4, root = 330, decay = 1.8,  struct = 0.75, damp = 0.6, x = 4, y = 2, trim = 0.19},
 }
 
 for _, v in ipairs(VOICES) do
   reg("voice", v.id, v.name, {{v.x, v.y}},
       {index = v.index, root = v.root, decay = v.decay,
-       struct = v.struct, damp = v.damp})
+       struct = v.struct, damp = v.damp, trim = v.trim})
 end
 
 -- 2.3 trigger sources -- T (8, internally type "D") --------------------------
@@ -185,11 +205,18 @@ end
 --
 -- `file` is a name under audio/ and `index` is the engine's own sample slot
 -- (0-based), which is also the buffer amb_load fills.
+--
+-- §8.6 `trim`, as on the voices above, and here it is not the synthesis that
+-- differs but the recordings: Rain peaks at -1.4 dBFS and Cicada at about
+-- -30, so at one shared constant they were thirteen decibels apart before
+-- anything on the panel had been touched. the engine's own constant is set by
+-- Cicada -- the quietest of the four -- and these bring the other three back
+-- down to it.
 local SMP_CELLS = {
-  {id = "rain",    name = "Rain",    file = "Rain.wav",    x = 16, y = 4, attack = 1.2, decay = 6.0},
-  {id = "cicada",  name = "Cicada",  file = "Cicada.wav",  x = 15, y = 5, attack = 2.0, decay = 8.0},
-  {id = "thunder", name = "Thunder", file = "Thunder.wav", x = 14, y = 6, attack = 0.8, decay = 10.0},
-  {id = "sea",     name = "Sea",     file = "Sea.wav",     x = 13, y = 7, attack = 2.5, decay = 9.0},
+  {id = "rain",    name = "Rain",    file = "Rain.wav",    x = 16, y = 4, attack = 1.2, decay = 6.0,  trim = 0.21},
+  {id = "cicada",  name = "Cicada",  file = "Cicada.wav",  x = 15, y = 5, attack = 2.0, decay = 8.0,  trim = 1.00},
+  {id = "thunder", name = "Thunder", file = "Thunder.wav", x = 14, y = 6, attack = 0.8, decay = 10.0, trim = 0.25},
+  {id = "sea",     name = "Sea",     file = "Sea.wav",     x = 13, y = 7, attack = 2.5, decay = 9.0,  trim = 0.36},
 }
 
 -- these four sit on a diagonal from the right edge inward. they used to
@@ -203,6 +230,7 @@ for i, sm in ipairs(SMP_CELLS) do
     file = sm.file,
     attack = sm.attack,
     decay = sm.decay,
+    trim = sm.trim,
   })
 end
 
@@ -258,13 +286,18 @@ end
 -- "N"; a `letter` field carries the display override since the true grove
 -- pitch fields already own the bare type string "F".
 
+-- §8.6 `trim`, as on the modal voices above: the two kinds carry their own
+-- output constant in the engine and this is the difference between cells of
+-- the same kind. Knap is the quietest ping (620 Hz, a 90 ms decay -- barely
+-- there before it is gone) and Chaff the quietest noise cell, so those two
+-- set their kind's constant and the rest come down to meet them.
 local GVOICE_CELLS = {
-  {id = "yaffle",  x = 6,  y = 2, kind = "ping",  letter = "F", root = 180,  decay = 0.28},
-  {id = "knap",    x = 7,  y = 2, kind = "ping",  letter = "F", root = 620,  decay = 0.09},
-  {id = "clapper", x = 8,  y = 2, kind = "ping",  letter = "F", root = 95,   decay = 0.40},
-  {id = "scree",   x = 9,  y = 2, kind = "noise", letter = "N", root = 4200, decay = 0.06},
-  {id = "chaff",   x = 10, y = 2, kind = "noise", letter = "N", root = 1500, decay = 0.16},
-  {id = "rattle",  x = 11, y = 2, kind = "noise", letter = "N", root = 750,  decay = 0.22},
+  {id = "yaffle",  x = 6,  y = 2, kind = "ping",  letter = "F", root = 180,  decay = 0.28, trim = 0.50},
+  {id = "knap",    x = 7,  y = 2, kind = "ping",  letter = "F", root = 620,  decay = 0.09, trim = 1.00},
+  {id = "clapper", x = 8,  y = 2, kind = "ping",  letter = "F", root = 95,   decay = 0.40, trim = 0.48},
+  {id = "scree",   x = 9,  y = 2, kind = "noise", letter = "N", root = 4200, decay = 0.06, trim = 0.65},
+  {id = "chaff",   x = 10, y = 2, kind = "noise", letter = "N", root = 1500, decay = 0.16, trim = 0.82},
+  {id = "rattle",  x = 11, y = 2, kind = "noise", letter = "N", root = 750,  decay = 0.22, trim = 1.00},
 }
 
 for i, gc in ipairs(GVOICE_CELLS) do
@@ -272,6 +305,7 @@ for i, gc in ipairs(GVOICE_CELLS) do
   local name = gc.id:sub(1, 1):upper() .. gc.id:sub(2)
   reg("GVOICE", id, name, {{gc.x, gc.y}}, {
     letter = gc.letter, kind = gc.kind, index = i, root = gc.root, decay = gc.decay,
+    trim = gc.trim,
   })
 end
 

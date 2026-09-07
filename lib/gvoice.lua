@@ -182,7 +182,7 @@ gvoice.PARAMS = {
     text = function(id) return string.format("%.2f", gvoice.level(id)) end,
     push = function(id)
       local cell = topology.get(id)
-      bridge.g_amp(cell.index - 1, gvoice.level(id))
+      bridge.g_amp(cell.index - 1, gvoice.amp(id))
     end,
   },
   -- §2.11c how much of this drum goes to the shared send effect. this is the
@@ -196,6 +196,15 @@ gvoice.PARAM_COUNT = #gvoice.PARAMS
 
 function gvoice.level(id)
   return state.get_vparam(id, "level", 0.7) * 1.4
+end
+
+-- §8.6 the level with this cell's own trim folded in -- see voice.amp, which
+-- this is the drum row's copy of. the six percussion cells span two SynthDefs
+-- and, within each, a decay from 60 ms to 400 ms; the trim is what makes
+-- Clapper and Knap the same loudness at the same fader.
+function gvoice.amp(id)
+  local cell = topology.get(id)
+  return gvoice.level(id) * ((cell and cell.trim) or 1)
 end
 
 function gvoice.param(i)

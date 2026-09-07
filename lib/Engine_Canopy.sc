@@ -375,7 +375,35 @@ Engine_Canopy : CroneEngine {
 			var driven = (modeSig * (1 + (drive * 0.8))).tanh;
 			var toned = LPF.ar(driven, 400 + ((bright + brightMod).clip(0, 1) * 9000));
 
-			var sig = Limiter.ar(LeakDC.ar(toned), 0.95) * amp * 0.35;
+			// §8.6 the family's output constant. these are LEVELLED numbers
+			// now, not one shared headroom factor: every source on the panel
+			// was rendered offline, one cell at a time, at its own defaults
+			// and a full-force strike, and measured for K-weighted loudness
+			// (BS.1770, peak of a 100 ms window) and for sample peak. the
+			// spread was 42 dB -- a percussion cell was ten times the
+			// loudness of a modal voice and four hundred times a field
+			// recording -- so "cable a cell to an Out and turn it up" meant
+			// something different for every family, and the mixer's faders
+			// were spent undoing that rather than balancing a piece.
+			//
+			// every constant below is set so its family lands at -22 LUFS,
+			// which is where the gusts and the FM/VA voices already sat and
+			// so is the number that moves the fewest things. per-cell
+			// differences within a family (a 55 Hz voice against a 330 Hz
+			// one) are trimmed on the Lua side -- topology.lua's own tables,
+			// next to the pitch and decay defaults they belong with.
+			//
+			// the Limiter moved INSIDE the scaling with that change, and had
+			// to. a mode bank struck by a 5 ms noise burst has a crest factor
+			// of about 24 dB -- three or four times a drone's -- so levelling
+			// it by loudness necessarily puts its rare peaks above where they
+			// used to sit. a safety net on the far side of a x1.62 is not a
+			// safety net; on this side it caps the whole voice at 0.95
+			// whatever Level, Drive and a feedback cable between two voices
+			// are doing, which is what §6 asked it for in the first place. it
+			// costs a decibel or two off the very top of the hardest strike
+			// on the deepest voice, and nothing anywhere else.
+			var sig = Limiter.ar(LeakDC.ar(toned) * amp * 1.17, 0.95);
 
 			// the collapsed point's only destination: its own patchBus tap.
 			// there is no separate output-level knob any more -- how loud
@@ -415,7 +443,13 @@ Engine_Canopy : CroneEngine {
 			var ring = Ringz.ar(burst, freq.clip(20, 12000), d)
 				+ (Ringz.ar(burst, (freq * 2.756).clip(20, 18000), d * 0.4) * t * 0.5);
 			var driven = (ring * (1 + (drive.clip(0, 1) * 1.5))).tanh;
-			var sig = Limiter.ar(LeakDC.ar(driven), 0.95) * amp * 0.6;
+			// §8.6: a pinged resonator was the loudest thing on the panel by
+			// some way -- Clapper measured -12.5 LUFS against a gust's -21.7,
+			// nine decibels, which is the difference between a drum and a
+			// drum that is too loud. down 3 dB here and the rest per cell.
+			// the Limiter moved inside the scaling for the reason
+			// \woodland_voice's own comment gives.
+			var sig = Limiter.ar(LeakDC.ar(driven) * amp * 0.252, 0.95);
 			Out.ar(out, sig);
 		}).add;
 
@@ -436,7 +470,13 @@ Engine_Canopy : CroneEngine {
 			var holdAmt = Lag.kr(hold.clip(0, 1), 0.15);
 			var burst = band * (env + (holdAmt * 0.5));
 			var driven = (burst * (1 + (drive.clip(0, 1) * 1.5))).tanh;
-			var sig = Limiter.ar(LeakDC.ar(driven), 0.95) * amp * 0.6;
+			// §8.6 and the other half of the same story: the noise cells
+			// shared the ping cells' constant and were fifteen decibels
+			// quieter than them, because a short band of noise carries far
+			// less energy than a ringing filter at the same peak. the two
+			// halves of the percussion row read as one instrument now. the
+			// Limiter moved inside the scaling, as in \wl_g_ping above.
+			var sig = Limiter.ar(LeakDC.ar(driven) * amp * 1.62, 0.95);
 			Out.ar(out, sig);
 		}).add;
 
@@ -719,7 +759,13 @@ Engine_Canopy : CroneEngine {
 			var rq = (1 - (res.clip(0, 1) * 0.92)).max(0.06);
 			var filtered = RLPF.ar(folded, co, rq);
 
-			var sig = LeakDC.ar(filtered.tanh) * gateEnv * amp.clip(0, 1) * 0.3;
+			// §8.6 0.35 rather than the 0.3 its three siblings carry: measured, a
+			// VA cell came out about 1.4 dB under a gust or an FM voice, which
+			// is the whole of the correction this family needed. the fold's
+			// own makeup division is why -- it holds the peak steady as the
+			// harmonics come up, and steady peak at more harmonics is less
+			// energy than the others end up with.
+			var sig = LeakDC.ar(filtered.tanh) * gateEnv * amp.clip(0, 1) * 0.35;
 			Out.ar(out, sig);
 		}).add;
 
@@ -888,9 +934,12 @@ Engine_Canopy : CroneEngine {
 			}));
 			// §2.11 the gusts, already panned by cell position and already
 			// through their shared delay line -- the one thing here that
-			// arrives without a cable. it carries the same 0.35 headroom
-			// factor as everything else so a gust at Level 1 sits alongside
-			// a voice at Level 1 rather than over it.
+			// arrives without a cable. this 0.35 is the bed's own level and
+			// is no longer "the same headroom factor as everything else":
+			// §8.6 gave every family its own measured constant, and a gust's
+			// is 0.3 at its tap. what this number now says is how loud the
+			// automatic route is against the cabled one, which is what it was
+			// always really doing.
 			var gustDry = In.ar(gustIn, 2) * 0.35;
 			var sig = dry + gustDry;
 			var kTape = Lag.kr(tape.clip(0, 1), 0.08);
@@ -1045,6 +1094,16 @@ Engine_Canopy : CroneEngine {
 		// natural "frequency" parameter gets an audio-rate
 		// `* (1 + SinOsc.ar(base * fmRatio) * fmDepth)` on top of what Colour
 		// already does to it.
+		//
+		// §8.6 the trailing constant on each Out is that recipe's own output
+		// level, and it is the one number here that is NOT a sound-design
+		// call. all six shared 0.3 and measured across fourteen decibels of
+		// each other -- Mistle a chirp with a peak, Windfall a sparse
+		// scatter of grains -- so each is now set individually to land on the
+		// panel's -22 LUFS. an exciter has no Level row of its own, so this
+		// is the only place its balance can live; it is also what a cable out
+		// of one carries as modulation, so the six now modulate about as hard
+		// as each other too.
 
 		SynthDef(\wl_exc_bracken, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
@@ -1055,7 +1114,7 @@ Engine_Canopy : CroneEngine {
 			var bp = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.5);
 			var crackle = Decay2.ar(Dust.ar(15 + (c * 45)), 0.001, 0.02 * decay) * WhiteNoise.ar(1);
 			var sig = (bp * 0.6) + (crackle * 0.5);
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.39);
 		}).add;
 
 		SynthDef(\wl_exc_gorse, { arg out=0, colour=0.5, colourModIn=0,
@@ -1065,7 +1124,7 @@ Engine_Canopy : CroneEngine {
 			var base = 3500 + (c * 5000);
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var sig = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.06);
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.44);
 		}).add;
 
 		SynthDef(\wl_exc_ember, { arg out=0, colour=0.5, colourModIn=0,
@@ -1076,7 +1135,7 @@ Engine_Canopy : CroneEngine {
 			var fm = SinOsc.ar(base.max(0.1) * fmRatio) * fmDepth;
 			var trig = Dust.ar((base * (1 + fm)).max(0.1));
 			var sig = Decay2.ar(trig, 0.0005, (0.03 + (c * 0.05)) * decay) * WhiteNoise.ar(1);
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.25);
 		}).add;
 
 		SynthDef(\wl_exc_windfall, { arg out=0, colour=0.5, colourModIn=0,
@@ -1088,7 +1147,7 @@ Engine_Canopy : CroneEngine {
 			var base = 900 + (c * 3000);
 			var fm = SinOsc.ar(base * fmRatio) * fmDepth;
 			var sig = BPF.ar(WhiteNoise.ar(1), base * (1 + fm), 0.3) * genv;
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.92);
 		}).add;
 
 		SynthDef(\wl_exc_mistle, { arg out=0, colour=0.5, colourModIn=0,
@@ -1100,12 +1159,20 @@ Engine_Canopy : CroneEngine {
 			var aenv = EnvGen.ar(Env.perc(0.005, 0.09 * decay), trig);
 			var fm = SinOsc.ar(fenv * fmRatio) * fmDepth;
 			var sig = SinOsc.ar(fenv * (1 + fm)) * aenv;
-			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.3);
+			Out.ar(out, sig * gateMul.value(t_gate, gated, gateDur, gateAmp, decay) * 0.147);
 		}).add;
 
 		// control-rate by spec ("slow wandering random walk, control-rate");
 		// K2A.ar upsamples it onto the shared audio-rate exciter bus so it
 		// can sum and gate the same way as the others.
+		//
+		// §8.6 the one exciter left at 0.3, deliberately. it runs at 0.3-2.3
+		// Hz: there is no tone in it to be loud, and its measured loudness
+		// (-36 LUFS) is an artefact of a K-weighting curve that discards
+		// everything below about 40 Hz. levelling it to match the others
+		// would mean tripling a signal that is used as a slow control
+		// voltage, which is the opposite of what its cables are for. its
+		// PEAK already sits in the same range as the rest of the family.
 		SynthDef(\wl_exc_wisp, { arg out=0, colour=0.5, colourModIn=0,
 				gated=0, t_gate=0, gateDur=0.15, gateAmp=0.8, fmRatio=2.0, fmDepth=0,
 				decay=1.0;
@@ -1224,11 +1291,22 @@ Engine_Canopy : CroneEngine {
 			var amp = Lag.kr(level.clip(0, 1).squared, 0.1);
 			// mono-summed: these are field recordings, so the two channels
 			// are near enough the same thing, and the Out cell this is cabled
-			// to is what decides where in the image it lands. 0.35 is the
-			// same headroom factor every voice's own output carries, so a
-			// full-level field recording does not sit hotter in the mix than
-			// a voice at the same knob position.
-			Out.ar(out, Mix.ar(sig) * 0.5 * 0.35
+			// to is what decides where in the image it lands.
+			//
+			// §8.6 the constant was 0.5 * 0.35 -- the same headroom factor
+			// every synthesised voice carries, on the reasoning that a
+			// full-level recording should not sit hotter than a voice at the
+			// same knob position. the flaw in that is the premise: these
+			// recordings are not full-level. measured, the four ran from -42
+			// to -55 LUFS against a gust's -22, so the quietest of them
+			// (Cicada) was thirty-three decibels down and effectively
+			// inaudible however far its fader went up.
+			//
+			// this constant is set by the quietest of the four; the other
+			// three are trimmed back down per cell (topology.lua's SMP_CELLS)
+			// so that every trim is at most 1 and none can push `level` past
+			// the clip below.
+			Out.ar(out, Mix.ar(sig) * 8.6
 			            * ((env * (1 - holdAmt)) + (sust * holdAmt)) * amp);
 		}).add;
 

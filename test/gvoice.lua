@@ -127,4 +127,26 @@ do
         tostring(M.rambler.out_degree(SCREE, KNOCKER)))
 end
 
+print("\n-- §8.6 the level match: each cell's own trim reaches the engine --")
+do
+  local M = fresh(40)
+  M.gvoice.init()
+  local ids = {"gv.yaffle", "gv.knap", "gv.clapper",
+               "gv.scree", "gv.chaff", "gv.rattle"}
+  for _, id in ipairs(ids) do
+    local cell = M.topology.get(id)
+    local want = M.gvoice.level(id) * cell.trim
+    local got
+    for k = #CALLS.g_amp, 1, -1 do
+      if CALLS.g_amp[k].index == cell.index - 1 then got = CALLS.g_amp[k].v break end
+    end
+    check(id .. " goes out trimmed", got and math.abs(got - want) < 1e-9,
+          got and string.format("%.4f vs %.4f", got, want))
+    check(id .. "'s trim is a cut, never a boost",
+          cell.trim and cell.trim > 0 and cell.trim <= 1, tostring(cell.trim))
+  end
+  check("and the Level row still reads the knob on all six",
+        math.abs(M.gvoice.level("gv.yaffle") - M.gvoice.level("gv.rattle")) < 1e-9)
+end
+
 report()

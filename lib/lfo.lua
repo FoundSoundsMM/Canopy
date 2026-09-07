@@ -24,6 +24,19 @@
 -- which of the four the three rows under it are describing. an empty slot
 -- costs nothing and shows "-".
 --
+-- IN TIME, or not. an LFO has a Sync row now, and with it on the cell stops
+-- keeping its own time and reads its phase straight off the transport, at a
+-- division or multiple of the beat taken from the same ladder a Clock cell
+-- walks. that is a different thing from setting the Hz so that it happens to
+-- come out at one cycle per beat: a rate is not a phase, and two modulators
+-- at exactly the right rate still land wherever they were started. synced,
+-- the cycle begins on the beat and is still beginning on the beat an hour
+-- later. a square on the beat is a gate, a ramp over a bar is a sweep that
+-- ends where the bar does, and a sample-and-hold at 1/2 is a sequence in
+-- time with the drums. free is still there and still the default: a
+-- modulator whose job is to be at odds with the beat wants nothing to do
+-- with this.
+--
 -- EIGHT SHAPES, not one sine. a sine is a good default and a poor bank: a
 -- square is a switch, a ramp is a sweep, a sample-and-hold is a stepped
 -- sequence you did not have to program, and none of those is a sine at a
@@ -51,7 +64,7 @@
 -- the page is the same shape voice.lua/gvoice.lua/gust.lua expose -- PARAMS
 -- with get/set/text/push, plus nudge/param/PARAM_COUNT -- so cellparam.lua
 -- hands it to screenui and gridui through the one code path they already
--- have.
+-- have. seven rows now: Speed, Sync, Shape, Slot, Target, Param, Depth.
 
 local topology = wl("topology")
 local state    = wl("state")
@@ -74,9 +87,67 @@ local function vp_set(key)
   return function(id, v) return state.set_vparam(id, key, v) end
 end
 
+-- clock sync -----------------------------------------------------------------
+-- §2.12b an LFO has two ways of knowing how fast it is going, and the Sync
+-- row picks between them.
+--
+-- FREE is what it always was: a Speed knob in Hz, running off wall time,
+-- answering to nothing. that is the right thing for a modulator whose whole
+-- job is to be at odds with the beat -- a slow drift under a rhythm, or a
+-- cell fast enough to be heard as a tone.
+--
+-- CLOCK is the other half, and it is not the same thing as "set the Hz so
+-- that it happens to come out at one cycle per beat". a rate is not a phase:
+-- two modulators at exactly the right Hz still land wherever they were
+-- started, and drift apart over a piece however carefully they were tuned.
+-- so a synced LFO does not integrate a rate at all -- it READS its phase off
+-- the transport (see lfo.phase), which means the cycle starts on the beat,
+-- stays on the beat for as long as the piece runs, and is in the same place
+-- as every other synced LFO and every Clock cell at the same ratio. a square
+-- wave on the beat is a gate; a ramp over a bar is a sweep that ends where
+-- the bar does.
+--
+-- the ladder is clockcell.lua's own RATIOS, borrowed rather than copied: a
+-- Clock cell at 1/4 and an LFO at 1/4 mean the same thing, print the same
+-- word and sit at the same detent, so the ratio is learned once for the whole
+-- panel. `ratio` is cycles per beat -- 1x is one cycle every beat, 1/4 one
+-- cycle every four (a bar, in four), 8x eight cycles a beat.
+--
+-- stored as its own vparam rather than sharing the Speed knob's: switching to
+-- clock and back leaves the free Speed exactly where the player left it,
+-- which is the same reason a Clock cell keeps `high` apart from `character`.
+function lfo.synced(id)
+  return state.get_vparam(id, "sync", 0) >= 0.5
+end
+
+function lfo.set_synced(id, on)
+  state.set_vparam(id, "sync", on and 1 or 0)
+end
+
+-- the chosen ratio, as a number and as its printed name. the knob is a plain
+-- continuous 0..1 and the position is derived from it rather than stored --
+-- so, unlike Target and Param, this row round-trips through its own getter
+-- and needs none of the unrounded-accumulator machinery below.
+function lfo.ratio(id)
+  local cc = wl("clockcell")
+  local entry = cc.RATIOS[cc.index_for(state.get_vparam(id, "ratio", 0.5))]
+  return entry[1], entry[2]
+end
+
 -- log-mapped across the whole range: most of a slow modulator's useful travel
 -- is in its bottom octave or two, same reasoning as gust's attack/decay.
+--
+-- a synced cell answers this in the transport's terms instead. deliberately
+-- NOT clamped to RATE_MIN/RATE_MAX: this is the true rate, and it is what the
+-- Speed row prints and what the engine is told. \wl_lfo does its own clip, so
+-- one pulse a minute at 1/128 shows honestly on the page and the audio-rate
+-- copy simply runs as slow as it can -- which is the right way round. the
+-- knob-modulation path, which is what a synced LFO is nearly always for, has
+-- no such floor at all.
 function lfo.rate_hz(id)
+  if lfo.synced(id) then
+    return lfo.ratio(id) * (clock.get_tempo() / 60)
+  end
   local v = state.get_vparam(id, "rate", 0.5)
   return lfo.RATE_MIN * ((lfo.RATE_MAX / lfo.RATE_MIN) ^ v)
 end
@@ -418,8 +489,30 @@ end
 -- LFO are four wires out of one modulator, so they have to be reading the same
 -- number at the same instant -- and with a sample-and-hold or a follower,
 -- asking twice can genuinely give two answers.
+-- §2.12b what a synced LFO's rate is depends on the tempo, and the tempo is
+-- not ours to be told about -- it moves from the norns PARAMS menu, from a
+-- MIDI clock, from a link peer, none of which call anything here. so the
+-- engine-side rate is reconciled on the modulation metro instead of pushed
+-- from a row: read what it should be, compare, send only on a change.
+--
+-- four float comparisons forty times a second, and an OSC message only when
+-- the number actually moves -- which is a tempo change, a Sync flip or a
+-- turn of the Ratio knob, and nothing else. this also makes the row's own
+-- push redundant rather than wrong: whichever gets there first, the other
+-- sees no change and says nothing.
+local pushed_hz = {}
+
+local function reconcile_rate(id)
+  local hz = lfo.rate_hz(id)
+  if pushed_hz[id] ~= hz then
+    pushed_hz[id] = hz
+    bridge.lfo_rate(topology.get(id).index, hz)
+  end
+end
+
 function lfo.apply()
   for _, id in ipairs(lfo.each()) do
+    reconcile_rate(id)
     -- the cell's cables, resolved once for all four slots: a set to check a
     -- stored target against, and the first in registration order for slot 1's
     -- fallback. sixteen rebuilds a frame was where the cost of four slots
@@ -496,19 +589,54 @@ end
 
 lfo.PARAMS = {
   {
+    -- one knob, two things behind it (§2.12b). free, it is a continuous Hz
+    -- sweep and stores `rate`; synced, it walks clockcell's ratio ladder and
+    -- stores `ratio`. two vparams rather than one, so flipping Sync and
+    -- flipping back finds both knobs where they were left.
+    --
+    -- it stays a plain continuous row in both modes. the ratio is derived
+    -- from the stored 0..1 rather than snapped into it, so this getter
+    -- round-trips exactly and the accumulator the genuinely stepped rows
+    -- below need is not needed here -- and nineteen ratios across eighty
+    -- detents is already about four detents apiece.
     key = "rate", label = "Speed", glyph = "fader", default = 0.5,
-    get = vp_get("rate", 0.5), set = vp_set("rate"),
+    label_fn = function(id) return lfo.synced(id) and "Ratio" or "Speed" end,
+    get = function(id)
+      return state.get_vparam(id, lfo.synced(id) and "ratio" or "rate", 0.5)
+    end,
+    set = function(id, v)
+      return state.set_vparam(id, lfo.synced(id) and "ratio" or "rate", v)
+    end,
     text = function(id)
       -- a follower has no rate: it is reading the mix, not running a cycle.
       -- the knob still stores whatever it was left on, so switching back to
       -- an oscillator shape lands where it did before.
       if lfo.shape(id) == lfo.FOLLOW then return "follows" end
+      if lfo.synced(id) then
+        local _, name = lfo.ratio(id)
+        return name
+      end
       return string.format("%.2f Hz", lfo.rate_hz(id))
     end,
     push = function(id)
       local cell = topology.get(id)
       bridge.lfo_rate(cell.index, lfo.rate_hz(id))
     end,
+  },
+  {
+    -- what the Speed knob above is measured against. a switch and not a
+    -- value, so it draws as a flag and takes two detents to flip -- the same
+    -- shape and the same feel as a Clock cell's own Mode row.
+    key = "sync", label = "Sync", glyph = "flag", default = 0,
+    stepped = true, steps_fn = function() return 2 end,
+    get = function(id) return lfo.synced(id) and 1 or 0 end,
+    set = function(id, v) lfo.set_synced(id, v >= 0.5) end,
+    text = function(id) return lfo.synced(id) and "clock" or "free" end,
+    -- nothing to send: flipping this changes the rate, and the rate has one
+    -- owner (reconcile_rate, on the modulation metro) precisely because the
+    -- tempo can move without any row being touched at all. it picks the
+    -- change up on the next pass, a fortieth of a second later.
+    push = function() end,
   },
   {
     -- which of the eight. `stack` rather than `word` because these are an
@@ -634,25 +762,42 @@ local phase = {}
 
 function lfo.phase(id)
   local now = util.time()
-  local t0 = last_t[id]
-  if t0 == nil then
-    phase[id] = 0
+  local was = phase[id]
+  local ph
+
+  if lfo.synced(id) then
+    -- §2.12b the whole of what "synced" means, and the reason it is a
+    -- different line rather than a different rate: the phase is READ off the
+    -- transport, not integrated from one. an integrated phase at the right Hz
+    -- is only ever as accurate as the last frame's dt and lands wherever it
+    -- was started; this one is a pure function of the beat, so at 1x the
+    -- cycle begins on the beat and is still beginning on the beat an hour
+    -- later, and two cells at the same ratio are in step with each other and
+    -- with every Clock cell without anything having to be reset.
+    ph = (clock.get_beats() * lfo.ratio(id)) % 1.0
+    if ph < 0 then ph = ph + 1 end     -- a transport counting below zero
+  elseif last_t[id] == nil then
+    ph = 0
   else
     -- a clock that has gone backwards (a reload, the test harness rewinding
     -- its virtual time) reads as "no time passed" rather than winding the
     -- phase back through a negative turn.
-    local dt = math.max(now - t0, 0)
-    local was = phase[id]
-    phase[id] = (was + lfo.rate_hz(id) * dt) % 1.0
-    -- the wrap is where sample-and-hold draws its next value. done here
-    -- rather than in lfo.value because this is the one function that knows
-    -- time has passed -- value() is asked several times a frame (the grid,
-    -- the modulation metro, the screen) and a fresh draw per ask would be
-    -- noise at frame rate rather than a held step.
-    if phase[id] < was then sh_step(id) end
+    local dt = math.max(now - last_t[id], 0)
+    ph = ((was or 0) + lfo.rate_hz(id) * dt) % 1.0
   end
+
+  phase[id] = ph
+  -- the wrap is where sample-and-hold draws its next value. done here rather
+  -- than in lfo.value because this is the one function that knows time has
+  -- passed -- value() is asked several times a frame (the grid, the
+  -- modulation metro, the screen) and a fresh draw per ask would be noise at
+  -- frame rate rather than a held step. it reads the same either way round:
+  -- a synced cell's phase falls at its wrap exactly as a free one's does.
+  if was ~= nil and ph < was then sh_step(id) end
+  -- kept up to date even while synced, so switching back to free does not
+  -- see the whole synced stretch as one enormous dt.
   last_t[id] = now
-  return phase[id]
+  return ph
 end
 
 -- three non-overlapping bands (idle / cabled / open) so "cabled reads

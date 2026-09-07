@@ -271,4 +271,26 @@ do
   check("but one a moment later does", M.sample.play(RAIN, 1) == true)
 end
 
+print("\n-- §8.6 the level match: the trim reaches the engine, square-rooted --")
+do
+  local M = fresh(41)
+  M.sample.init("/tmp/audio/")
+  for _, id in ipairs(M.sample.each()) do
+    local cell = M.topology.get(id)
+    -- the engine squares `level`, so the trim goes in as its square root and
+    -- comes out the far side as a plain gain.
+    local want = M.sample.level(id) * math.sqrt(cell.trim)
+    local got
+    for k = #CALLS.smp_level, 1, -1 do
+      if CALLS.smp_level[k].index == cell.index then got = CALLS.smp_level[k].v break end
+    end
+    check(id .. " goes out trimmed", got and math.abs(got - want) < 1e-9,
+          got and string.format("%.4f vs %.4f", got, want))
+    -- what that square root buys: the knob cannot be pushed past the engine's
+    -- own clip at any position, all the way to the top of the fader.
+    check(id .. " stays inside the engine's clip at full fader",
+          1.0 * math.sqrt(cell.trim) <= 1.0)
+  end
+end
+
 report()

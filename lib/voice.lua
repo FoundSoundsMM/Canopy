@@ -157,7 +157,7 @@ voice.PARAMS = {
     get = vp_get("level", 0.7), set = vp_set("level"),
     text = function(id) return string.format("%.2f", voice.level(id)) end,
     push = function(id)
-      bridge.voice_amp(topology.get(id).index - 1, voice.level(id))
+      bridge.voice_amp(topology.get(id).index - 1, voice.amp(id))
     end,
   },
   {
@@ -228,6 +228,18 @@ end
 
 function voice.level(id)
   return state.get_vparam(id, "level", 0.7) * 1.4
+end
+
+-- §8.6 what actually goes to the engine, which is not what the row prints.
+-- `trim` is this cell's share of the panel-wide level match (topology.lua's
+-- VOICES table, and the long note above it): the four modal voices are one
+-- SynthDef and were eleven decibels apart, almost all of it Damp. it belongs
+-- here rather than on the knob because it is not a knob -- the Level row
+-- still reads 0.98 on a fresh cell whichever voice it is, and two voices set
+-- to the same number now actually sound the same.
+function voice.amp(id)
+  local cell = topology.get(id)
+  return voice.level(id) * ((cell and cell.trim) or 1)
 end
 
 function voice.param(i)

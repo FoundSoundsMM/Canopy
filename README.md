@@ -62,7 +62,10 @@ is regrouped and has four new voices on it. In short:
   it already was;
 - **the LFOs carry four destinations each and eight shapes**, including
   sample-and-hold and an **envelope follower** that reads the instrument's own
-  output;
+  output — and a **Sync** row that locks one to the transport at a division or
+  multiple of the beat;
+- **every voice is levelled against every other.** Measured offline, family by
+  family, the panel used to span 42 dB; it spans about one and a half now;
 - **the gusts' delay line is a send every voice can reach.** Every sounding
   cell has a **Send** row at the bottom of its page, and the effect's knobs
   (plus a new **Tone**) are on a page of their own past the mixer;
@@ -229,7 +232,8 @@ reach. The shape of what is left is what makes the panel readable.
   they FM each other, as deeply as **Cross** on each is turned up.
 - **Four LFOs sit on the row above them.** Eight shapes and four destinations
   each — see **Slot**, **Target**, **Param** and **Depth** on the cell's own
-  page.
+  page — and a **Sync** row that puts one in time with the transport at a
+  division or multiple of the beat.
 - **The weave, grove and exciters are all trimmed**, not changed: 6 weave
   rules (was 14), 4 pitch fields (was 8), 6 exciters (was 20). Every weave
   rule and grove mode not given a dedicated seat is still reachable from the
@@ -351,6 +355,22 @@ panel has a gesture that only it responds to any more.
   the LFO runs. Param's first entry is **signal**, the old behaviour: no knob
   is modulated and the cable stays the plain audio-rate one, which is what an
   LFO cabled to an Output cell (a sine tone) wants.
+- **An LFO can run in time.** Turn its **Sync** row to `clock` and the Speed
+  knob becomes a **Ratio** — the same `1/128` … `1 x` … `8 x` ladder a Clock
+  cell walks, in cycles per beat — and the cell reads its phase off the
+  transport instead of keeping its own time. That is not the same as setting
+  the Hz to match: a synced LFO's cycle *starts* on the beat and is still
+  starting on the beat an hour later, so a square is a gate, a ramp over a bar
+  is a sweep that ends where the bar does, and two cells at the same ratio are
+  in step with each other. Free and synced keep separate knobs, and free is
+  still the default.
+- **The voices are levelled against each other.** Every source was rendered
+  offline and measured for K-weighted loudness and peak, one cell at a time.
+  A percussion cell used to be ten times the loudness of a modal voice and
+  four hundred times the quietest field recording; the whole panel now sits
+  inside about one and a half decibels, so the mixer's faders are free to
+  balance a piece rather than undo the instrument. The Level rows read the
+  same as they always did — the correction is behind them.
 - **One source, one Output slot.** Position along the Output row *is* pan, so
   cabling a source to a second Out cell **moves** it rather than adding a
   second cable — the gesture reads as dragging it along the row. It keeps the

@@ -746,12 +746,43 @@ their own; a cable out of one is the whole point.
 
 | Row | What it does |
 |--------|--------------|
-| Speed  | 0.02 – 20 Hz, log-mapped. On `follow` it reads "follows" and is inert |
+| Speed  | free: 0.02 – 20 Hz, log-mapped. Synced: a division or multiple of the beat, and the row reads "Ratio". On `follow` it reads "follows" and is inert |
+| Sync   | `free` or `clock` — what Speed above is measured against |
 | Shape  | one of eight (below) |
 | Slot   | which of this LFO's four destinations the three rows under it describe |
 | Target | which of the cells this LFO is cabled to *this slot* is aimed at |
 | Param  | which row of *that cell's* settings page this slot moves |
 | Depth  | how far *this slot* swings that knob, either side of where you left it |
+
+#### 2.12b Sync — in time with the transport
+
+Turn **Sync** to `clock` and the LFO stops keeping its own time. Its phase is
+read straight off `clock.get_beats()` at whatever **Ratio** the Speed knob is
+on, from the same ladder a Clock cell walks (§2.9): `1/128` … `1/2`, `1 x` on
+the centre detent, `2 x` … `8 x`, where the ratio is **cycles per beat** — so
+`1 x` is one cycle every beat and `1/4` one cycle every four (a bar, in four).
+
+Reading the phase is not the same thing as setting the rate to match. A rate
+is not a phase: two modulators tuned to exactly the right Hz still start
+wherever they were started and drift apart over a piece. A synced LFO's cycle
+begins *on* the beat and is still beginning on the beat an hour later, and two
+cells at the same ratio are in step with each other and with every Clock cell
+at that ratio, with nothing to reset. That is what makes a square wave on the
+beat a gate, a ramp across a bar a sweep that ends where the bar does, and a
+sample-and-hold at `1/2` a sequence in time with the drums.
+
+Free and synced keep **separate knobs** — flipping Sync and flipping back
+finds both where you left them, the same way a Clock cell's Mode leaves its
+Ratio alone. Free is still the default: a modulator whose job is to be at odds
+with the beat wants nothing to do with this, and neither does one cabled to an
+Output cell to be heard as a tone.
+
+Tempo is not ours to be told about — it moves from the norns PARAMS menu, from
+a MIDI clock, from a Link peer, none of which call into this script — so the
+engine-side rate is *reconciled* on the modulation metro rather than pushed
+from a row: read what it should be, compare with what was last sent, and send
+only on a change. Four float comparisons forty times a second, and an OSC
+message only when the number actually moves.
 
 **Four destinations, not one.** One modulator moving one knob is a patch cable
 with extra steps; what a modulator is *for* is moving several things at once,
@@ -2205,6 +2236,86 @@ running whether or not any of the eight knobs is up. Smaller
 across the board than
 before the overhaul — the trims (§2) bought back headroom the same way the
 original design's four-voices-not-six trade did.
+
+### 8.6 Levelling the families
+
+Every source on the panel used to carry one of a small number of shared
+output constants — `0.35` for a modal voice, `0.6` for a percussion cell,
+`0.3` for a gust, an FM/VA voice or an exciter, `0.5 * 0.35` for a field
+recording — on the reasoning that one headroom factor makes everything sit
+together. It does not, and measurement says so plainly.
+
+Each source was rendered offline (SuperCollider NRT, one cell at a time, at
+its own defaults, struck at full force where it is struck at all) and measured
+two ways: **K-weighted loudness** — BS.1770 weighting, 100 ms blocks, a −10 dB
+relative gate, mean of the surviving blocks, averaged over many strikes and
+several takes — and **sample peak**. The spread was **42 dB**: a percussion
+cell was ten times the loudness of a modal voice and four hundred times the
+quietest field recording. "Cable a cell to an Out and turn it up" meant
+something different for every family, and the mixer's faders were spent
+undoing that instead of balancing a piece.
+
+The correction is in two layers.
+
+**The family's share** is the output constant on each SynthDef, set so the
+family lands at **−25 LUFS** — which is where the gusts and the FM voices
+already sat, and so is the number that moves the fewest things.
+
+| Family | Was | Now |
+|---|---|---|
+| `\woodland_voice` | `0.35` | `1.17` |
+| `\wl_g_ping` | `0.6` | `0.252` |
+| `\wl_g_noise` | `0.6` | `1.62` |
+| `\wl_gust`, `\wl_fm` | `0.3` | `0.3` (the reference) |
+| `\wl_va` | `0.3` | `0.35` |
+| `\wl_smp` | `0.5 * 0.35` | `8.6` |
+| `\wl_exc_bracken` / `_ember` / `_gorse` / `_windfall` / `_mistle` | `0.3` each | `0.39` / `0.25` / `0.44` / `0.92` / `0.147` |
+| `\wl_exc_wisp` | `0.3` | `0.3` — see below |
+
+**The cell's share** is a `trim` in `topology.lua`, next to the pitch and
+decay defaults it belongs with, folded into the level Lua pushes for that cell
+(`voice.amp`, `gvoice.amp`, `sample.amp`). A family is one SynthDef and its
+cells are not one sound: the four modal voices were eleven decibels apart —
+almost all of it Damp, since a bank that rings for half a second is far louder
+than one that does not at the same peak — and Rain peaks 30 dB above Cicada
+before the panel is touched at all.
+
+A trim is **always ≤ 1**, by construction: the engine constant is set by
+whichever cell of the family needs the most gain, and every other cell is
+trimmed down from it. So a trim only ever turns a cell down relative to its
+siblings and can never push a level past a clip at the far end — which is what
+makes it safe on `\wl_smp`, whose `level` is clipped to 0..1 and squared (the
+trim goes in as its square root and comes out as a plain gain).
+
+The trim is deliberately *not* on the knob. The Level row still reads the same
+number on every cell of a family; two cells set to the same number now
+actually sound the same, which is the whole point of doing it here.
+
+Two things did not land on target, both on purpose:
+
+- **`\woodland_voice`'s Limiter moved inside the scaling** —
+  `Limiter.ar(LeakDC.ar(toned) * amp * 1.17, 0.95)` rather than limiting first
+  and scaling after (and the same in `\wl_g_ping` / `\wl_g_noise`). A mode
+  bank struck by a 5 ms noise burst has a crest factor around 24 dB, three or
+  four times a drone's, so levelling it by loudness necessarily raises its
+  rare peaks. A safety net on the far side of a `x1.17` is not a safety net;
+  on this side it caps the whole voice at 0.95 whatever Level, Drive and a
+  voice→voice feedback cable are doing, which is what §6 asked it for.
+- **`\wl_exc_wisp` is left at `0.3`.** It runs at 0.3–2.3 Hz: there is no
+  tone in it to be loud, and its measured loudness is an artefact of a
+  weighting curve that discards everything below ~40 Hz. Levelling it to match
+  would mean tripling a signal that is used as a slow control voltage. Its
+  *peak* already sits in the same range as the rest of its family.
+
+Measured after the change, every levelled source lands within about half a
+decibel of −25 LUFS, and the whole panel — wisp aside — spans **1.6 dB**.
+
+Two consequences worth knowing. An exciter has no Level row of its own, so its
+constant is also what a cable out of it carries as modulation: the six now
+modulate about as hard as each other as well as sounding it. And
+`\woodland_fx`'s gust-bed factor (`0.35` on `gustIn`) is no longer "the same
+headroom factor as everything else" — it is now simply how loud the automatic
+route is against the cabled one, which is what it was always really doing.
 
 ---
 

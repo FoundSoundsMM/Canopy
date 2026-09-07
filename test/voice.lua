@@ -254,4 +254,34 @@ do
   check("balance forwarded", c and math.abs(c.v - 0.9) < 1e-9, c and c.v)
 end
 
+print("\n-- §8.6 the level match: each cell's own trim reaches the engine --")
+do
+  local M = fresh(30)
+  M.voice.init()
+
+  -- the row prints the knob, not the trim: two voices at the same Level read
+  -- the same number, which is the whole point of doing it here rather than by
+  -- moving the knobs apart.
+  check("the Level row reads the same on every voice",
+        math.abs(M.voice.level("oak") - M.voice.level("rowan")) < 1e-9,
+        tostring(M.voice.level("oak")))
+
+  -- what goes out does carry it.
+  for _, id in ipairs({"oak", "hazel", "alder", "rowan"}) do
+    local cell = M.topology.get(id)
+    local c = last(CALLS.voice_amp, function(x) return x.voice == cell.index - 1 end)
+    check(id .. " goes out trimmed",
+          c and math.abs(c.v - M.voice.level(id) * cell.trim) < 1e-9,
+          c and string.format("%.4f vs %.4f", c.v, M.voice.level(id) * cell.trim))
+  end
+
+  -- the invariant topology.lua's own note relies on: the engine constant is
+  -- set by whichever cell needs the most, so no trim is ever a boost.
+  for _, id in ipairs({"oak", "hazel", "alder", "rowan"}) do
+    local t = M.topology.get(id).trim
+    check(id .. "'s trim is a cut, never a boost", t and t > 0 and t <= 1,
+          tostring(t))
+  end
+end
+
 report()
