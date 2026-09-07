@@ -40,12 +40,14 @@ do
   -- §5.2c added glyph.lua, which screenui requires directly (it is the whole
   -- widget vocabulary) and nothing else touches. §4.4 added colour.lua, the
   -- master chain's page -- required by Canopy.lua (for the page stack and
-  -- its init push) and by screenui (to draw it).
+  -- its init push) and by screenui (to draw it). §2.11c added send.lua, the
+  -- shared effect's page, which every sounding family's own page also reaches
+  -- for its Send row; §2.13 added synth.lua, the FM and VA cells.
   local WANT = {
     "bridge", "cellparam", "clockcell", "colour", "dispatch", "exciter",
     "glyph", "gparam", "gridui", "grove", "gust", "gvoice", "lexicon",
     "lfo", "mixer", "patch", "quantise", "rambler", "sample", "screenui",
-    "state", "tm", "topology", "voice", "weave",
+    "send", "state", "synth", "tm", "topology", "voice", "weave",
   }
   check("exactly the expected modules, one copy each",
         table.concat(names, ",") == table.concat(WANT, ","),
@@ -123,9 +125,10 @@ check("the Gait row swapped Hob's gait", M.rambler.info("d.hob").gait ~= "euclid
       M.rambler.info("d.hob").gait)
 
 -- tapping ANY cell opens its settings page and hands it the encoders; tapping
--- it again gives them back. Oak's cell is at (2,2).
+-- it again gives them back. §2.13 regrouped the instrument row, so Oak's cell
+-- is at (1,2).
 do
-  gridobj.key(2, 2, 1); T = T + 0.05; gridobj.key(2, 2, 0)
+  gridobj.key(1, 2, 1); T = T + 0.05; gridobj.key(1, 2, 0)
   check("tapping the voice cell opens its sound page",
         M.state.cell_edit == "oak", tostring(M.state.cell_edit))
 
@@ -150,7 +153,7 @@ do
   ok, err = pcall(redraw)
   check("the sound page redraws", ok, tostring(err))
 
-  gridobj.key(2, 2, 1); T = T + 0.05; gridobj.key(2, 2, 0)
+  gridobj.key(1, 2, 1); T = T + 0.05; gridobj.key(1, 2, 0)
   check("tapping it again closes it", M.state.cell_edit == nil,
         tostring(M.state.cell_edit))
 end

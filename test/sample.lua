@@ -245,7 +245,7 @@ do
   local M = fresh(10)
   local page = M.cellparam.page(RAIN)
   check("cellparam hands out the sample page", page == M.sample)
-  check("four rows: Attack, Decay, Speed, Level", page.PARAM_COUNT == 4,
+  check("five rows: Attack, Decay, Speed, Level, Send", page.PARAM_COUNT == 5,
         tostring(page.PARAM_COUNT))
 
   for i = 1, page.PARAM_COUNT do

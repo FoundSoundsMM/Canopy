@@ -10,8 +10,9 @@
 -- hold a cell, E1/E2/E3: pick a row, move it coarse/fine.
 -- press a gust (the twelve G cells on the bottom two rows): it sounds its note,
 --   on the way down. the release still toggles its page like any other cell.
--- K1 + tap a cell: fire it -- strike a voice or a drum, sound a gust, fire an
---   exciter, pulse a trigger/transform/register/clock.
+-- K1 + tap a cell: fire it -- strike a voice, a drum or one of the new
+--   synths, sound a gust, fire an exciter, clock a register, pulse a
+--   trigger/transform/clock.
 -- hold a cell, tap another: patch them together.
 -- hold a cell, tap a connected one: unpatch them.
 -- hold two cells together: read/set that edge's gain on E3.
@@ -20,11 +21,13 @@
 -- coarse/fine. K1+E3: master level.
 -- K3: forward, one page at a time, down the signal --
 --   main screen -> gusts (one Pitch/Timbre/Attack/Cross/Level over all twelve
---     gust cells at once, plus the Space/Delay/Regen of the delay line they
---     share; the family's Decay is the global page's Decay, which already
---     reaches them)
+--     gust cells at once; the family's Decay is the global page's Decay,
+--     which already reaches them, and the delay line they used to own is on
+--     the send page below)
 --   -> mixer (a fader for every Output cell something is cabled to; the list
 --     grows and shrinks with the patch)
+--   -> send (the one delay every voice can reach: Space, Delay, Regen, Tone.
+--     how much of a given cell goes there is that cell's own Send row)
 --   -> colour (the master chain: Tape, Crush, Alias, Loss, Chorus, Swirl,
 --     Shape, Comp)
 --   -> map (every cell, lit if it's cabled, dim if it isn't)
@@ -74,11 +77,14 @@
 -- panned by the column it sits in, and all twelve (two more were added later,
 -- to fill the top row out to six) share one delay line off the gusts page.
 -- cable two together and they cross-modulate.
--- the LFOs (§2.12): four plain sine sources on the row right above the
+-- the LFOs (§2.12): four free-running modulators on the row right above the
 -- gusts (lib/lfo.lua). cable one to a cell, then use its own page to pick
--- which of that cell's knobs it moves and how far: Speed, Depth, Target,
--- Param. left on Param "signal" it is the plain audio-rate cable it always
--- was, which is what cabling one to an Output cell (a sine tone) wants.
+-- which of that cell's knobs it moves and how far: Speed, Shape, Slot,
+-- Target, Param, Depth. eight shapes, including a sample-and-hold and an
+-- envelope follower that reads the Output row; four destination slots, each
+-- with its own target, knob and depth. left on Param "signal" a slot is the
+-- plain audio-rate cable it always was, which is what cabling one to an
+-- Output cell (a tone) wants.
 -- the re-cut's re-cut: six of the bottom weave row's R cells become G cells
 -- (lib/gvoice.lua) -- small, plain drum voices (three pinged resonant
 -- filters, three noise-with-decay) with a six-parameter sound page of their
@@ -106,6 +112,20 @@
 -- emulation, a two-knob chorus, a transient shaper and a compressor built for
 -- percussion. Swing now defaults to 0 rather than 0.8: a fresh patch arrives
 -- straight, and shuffle is something you add.
+-- the instrument row, re-cut. row 2 is grouped by family now -- the four
+-- modal voices, a gap, the six drums, a gap, and four NEW synths (§2.13,
+-- lib/synth.lua): a pair of two-operator FM voices ("X") and a pair of
+-- wavefolding virtual-analogue voices ("V"). each is struck like a voice, has
+-- an envelope of its own, and runs its pitch through grove like a modal voice
+-- does -- so a field or a Turing machine cabled in plays it in the same key
+-- as everything else. with them, four more changes: the Turing machines are
+-- the right-hand side of a Marbles and no longer generate triggers of their
+-- own (§2.8); the gusts' delay line is a SEND every voice can reach, with a
+-- Send row at the bottom of every sounding cell's page and its own knobs on a
+-- page past the mixer (§2.11c, lib/send.lua); eight more scales, most of them
+-- microtonal (Hijaz, Rast, Bayati, Sikah, Homayoun, slendro, pelog,
+-- Anchihoye); and Tape lost the wow that was never a wow -- a delayed wet
+-- path summed against the dry one, which is a comb filter, not a transport.
 
 engine.name = "Canopy"
 
@@ -135,12 +155,14 @@ local bridge   = wl("bridge")
 local voice    = wl("voice")
 local gvoice   = wl("gvoice")
 local gust     = wl("gust")   -- §2.11: the twelve drone cells on the bottom rows
+local synth    = wl("synth")  -- §2.13: the two FM and two VA cells, right of the drums
 local lfo      = wl("lfo")    -- §2.12: the four sine LFOs above the gusts
 local sample   = wl("sample") -- §2.5: the four sample cells on the right diagonal
 local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
 local gparam   = wl("gparam")
 local mixer    = wl("mixer")
 local colour   = wl("colour") -- §4.4 the master colour chain, one page past the mixer
+local send     = wl("send")   -- §2.11c the shared send effect and its page
 local rambler  = wl("rambler")
 local exciter  = wl("exciter") -- loaded for its patch/state listeners; see lib/exciter.lua
 local grove     = wl("grove")
@@ -371,6 +393,52 @@ local function do_regrow()
     end
   end
 
+  -- §2.13 one of the four new synth cells, hung off a pulse-maker that is
+  -- already running and cabled to an Output cell of its own. these are struck
+  -- voices with a full sound page, so what Regrow can usefully do with one is
+  -- put it in the patch already playing and already routed -- the knobs that
+  -- decide whether it is a bell or a bass are exactly the ones a player wants
+  -- to find rather than have chosen for them, so only the two that decide
+  -- whether it is AUDIBLE are seeded: a short envelope so it reads as a note
+  -- rather than a pad, and a modest level.
+  --
+  -- a register on it about a third of the time. that pairing is the whole
+  -- point of the two changes that arrived together -- a TM is a pitch source
+  -- and nothing else now, and these four take a pitch the same way a modal
+  -- voice does -- so a Regrow that never showed it would be hiding the thing
+  -- worth showing.
+  local syncells = shuffled(ids_of("FM"))
+  for _, id in ipairs(shuffled(ids_of("VA"))) do table.insert(syncells, id) end
+  local tmcells = shuffled(ids_of("TM"))
+  if #used_d > 0 and math.random() < 0.6 then
+    local sy = take(syncells)
+    local o = take(ocells)
+    if sy and o then
+      state.set_vparam(sy, "attack", math.random() * 0.35)
+      state.decay[sy] = 0.35 + math.random() * 0.35
+      state.set_vparam(sy, "level", 0.45 + math.random() * 0.25)
+      wl("synth").push_all(sy)
+      local d = used_d[math.random(#used_d)]
+      local r = (math.random() < 0.4) and seed_r(take(rcells)) or nil
+      if r then
+        patch.add(d, r, gain(0.6, 1.0), false)
+        patch.add(r, sy, gain(0.5, 0.95), false)
+      else
+        patch.add(d, sy, gain(0.5, 0.95), false)
+      end
+      patch.add(sy, o, gain(0.6, 1.0), false)
+      if math.random() < 0.35 then
+        local tm_id = take(tmcells)
+        if tm_id then
+          -- the same clock that plays it also steps the register, so the note
+          -- has moved by the time the strike lands.
+          patch.add(d, tm_id, gain(0.6, 1.0), false)
+          patch.add(tm_id, sy, gain(0.5, 0.9), false)
+        end
+      end
+    end
+  end
+
   -- §2.5 a soundscape underneath, now and then: one of the four sample cells
   -- hung off a clock rather than off a trigger, because what these are for is
   -- a swell that arrives once in a while rather than a part. it takes an
@@ -428,7 +496,13 @@ local k2_solo_press, k3_solo_press = false, false
 -- is what the balanced mix is put through on its way out; and the map is the
 -- reference you check rather than a control surface. walking right is walking
 -- downstream.
-local VIEW_ORDER = {"global", "gusts", "mixer", "colour", "map"}
+--
+-- §2.11c the Send page sits between the mixer and Colour, which is where its
+-- effect sits in the signal: after the channel faders decide the balance,
+-- before the master chain decides the surface. it is a master page rather
+-- than a family one -- the delay line it drives used to belong to the gusts
+-- and belongs to everything now.
+local VIEW_ORDER = {"global", "gusts", "mixer", "send", "colour", "map"}
 
 -- each page's E1 cursor and its own list, so the encoder handler below drives
 -- all four the same way rather than growing a branch per page. the main
@@ -450,12 +524,17 @@ local VIEW_PAGES = {
     count = function() return colour.PARAM_COUNT end,
     nudge = function(i, d, coarse) return colour.nudge(i, d, coarse) end,
   },
+  send = {
+    focus = "sparam_focus",
+    count = function() return send.PARAM_COUNT end,
+    nudge = function(i, d, coarse) return send.nudge(i, d, coarse) end,
+  },
 }
 
 -- what each page calls itself when you land on it. the main screen says
 -- nothing on the way back to it -- "Canopy" is already the header.
-local VIEW_LABEL = {gusts = "gusts", mixer = "mixer", colour = "colour",
-                    map = "map"}
+local VIEW_LABEL = {gusts = "gusts", mixer = "mixer", send = "send",
+                    colour = "colour", map = "map"}
 
 local function view_index()
   for i, v in ipairs(VIEW_ORDER) do
@@ -690,6 +769,10 @@ function init()
   voice.init()
   gvoice.init()
   gust.init()
+  -- §2.13 the two new synth families. pushed before grove.init, which is what
+  -- sends their pitch: everything else about them is theirs to push, and the
+  -- note they are sitting on is grove's.
+  synth.init()
   lfo.init()
   grove.init()
   gparam.init() -- adopts the clock's tempo, pushes the rest (§5.2)
@@ -702,6 +785,10 @@ function init()
   -- fresh load, but the engine still has to be holding those numbers rather
   -- than \wl_colour's own defaults -- one set of defaults, in lib/colour.lua.
   colour.init()
+  -- §2.11c the shared send effect: its four knobs, and every cell's Send
+  -- amount. all of the latter are zero on a fresh patch, so this costs four
+  -- messages and no synths at all until something is actually sent.
+  send.init()
   -- §2.5 the four sample cells. the engine reads each .wav async and holds
   -- every knob in the meantime, so pushing them straight afterwards loses
   -- nothing.

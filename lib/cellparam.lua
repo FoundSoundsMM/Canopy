@@ -332,7 +332,8 @@ local function build(kind)
   return page
 end
 
--- the one entry point. voice/GVOICE/TM/GUST/LFO/SMP keep their own modules;
+-- the one entry point. voice/GVOICE/TM/GUST/LFO/SMP/FM/VA keep their own
+-- modules;
 -- everything else lands here. returns nil only for a type with nothing at
 -- all to show, which no registered type currently is.
 function cellparam.page(id)
@@ -341,6 +342,11 @@ function cellparam.page(id)
   if cell.type == "voice" then return wl("voice") end
   if cell.type == "GVOICE" then return wl("gvoice") end
   if cell.type == "GUST" then return wl("gust") end
+  -- §2.13 one module, two pages: the FM and VA families differ only in what
+  -- makes the tone, so lib/synth.lua owns both and picks by type.
+  if cell.type == "FM" or cell.type == "VA" then
+    return wl("synth").page(cell.type)
+  end
   if cell.type == "LFO" then return wl("lfo") end
   if cell.type == "SMP" then return wl("sample") end
   if cell.type == "TM" then return wl("tm") end

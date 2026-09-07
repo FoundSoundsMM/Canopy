@@ -191,6 +191,11 @@ voice.PARAMS = {
       bridge.voice_mod(topology.get(id).index - 1, state.get_vparam(id, "balance", 0.5))
     end,
   },
+  -- §2.11c how much of this voice goes to the shared send effect (the delay
+  -- line that used to belong to the gusts alone). zero by default, so a patch
+  -- that never opens the Send page sounds exactly as it did before there was
+  -- one.
+  wl("send").row(),
 }
 
 voice.PARAM_COUNT = #voice.PARAMS

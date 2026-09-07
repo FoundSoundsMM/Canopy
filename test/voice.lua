@@ -38,8 +38,15 @@ do
         and M.topology.get("oak.mod") == nil and M.topology.get("oak.out") == nil)
   check("the voice cell itself is the only endpoint, and it is type voice",
         M.topology.get(OAK).type == "voice")
+  -- §2.13 the instrument row is grouped by family now: the four modal
+  -- voices run 1..4, the drums 6..11, the four new synths 13..16.
   check("it sits at its own single coordinate",
-        M.topology.at(2, 2) == OAK, tostring(M.topology.at(2, 2)))
+        M.topology.at(1, 2) == OAK, tostring(M.topology.at(1, 2)))
+  check("and the four of them are one run at the left of row 2",
+        M.topology.at(2, 2) == "hazel" and M.topology.at(3, 2) == "alder"
+        and M.topology.at(4, 2) == ROWAN,
+        table.concat({tostring(M.topology.at(2, 2)), tostring(M.topology.at(3, 2)),
+                      tostring(M.topology.at(4, 2))}, " "))
   check("all four voices exist, one point each", M.topology.get("hazel").type == "voice"
         and M.topology.get("alder").type == "voice" and M.topology.get(ROWAN).type == "voice")
 end
@@ -50,8 +57,10 @@ do
   M.voice.init()
   -- the socket collapse folded three more rows onto this page (the old T
   -- socket's hardness, the P socket's depth, the M socket's balance), so
-  -- nine grew to twelve.
-  check("twelve parameters", M.voice.PARAM_COUNT == 12, "#" .. M.voice.PARAM_COUNT)
+  -- nine grew to twelve; §2.11c's Send makes thirteen.
+  check("thirteen parameters", M.voice.PARAM_COUNT == 13, "#" .. M.voice.PARAM_COUNT)
+  check("and the last of them is Send",
+        M.voice.param(13).key == "send", tostring(M.voice.param(13).key))
   check("decay went out", last(CALLS.voice_decay, function(c) return c.voice == 0 end))
   check("structure went out", last(CALLS.voice_structure, function(c) return c.voice == 0 end))
   check("pitch went out", last(CALLS.voice_pitch, function(c) return c.voice == 0 end))

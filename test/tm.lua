@@ -1,12 +1,14 @@
 -- §2.3b: the four TM cells (lib/tm.lua). that they're registered right,
 -- flanking the D-cell block on row 4; that a TM cell never moves on its own
--- -- only a pulse cabled into it ever steps the register; that Prob=1/
+-- -- only a pulse cabled into it ever steps the register; that Deja=1/
 -- Drift=0 is a pure rotation of the register (so its evolution is fully
--- predictable, which is what the rest of these tests lean on); that Tap
--- gates the outgoing pulse to exactly the steps where that bit reads high;
--- that cabling a TM cell directly to a voice feeds its pitch the same way a
--- field does (the socket collapse means there is no separate P socket left
--- to require), and Range/Bits push it live; and that TM<->TM stays bounded.
+-- predictable, which is what the rest of these tests lean on); that it emits
+-- NO pulse of its own any more, whatever the register is doing (the Marbles
+-- rework -- the trigger half of the module is gone, and the panel's other
+-- four pulse families do that job); that cabling a TM cell directly to a
+-- voice feeds its pitch the same way a field does (the socket collapse means
+-- there is no separate P socket left to require), and Spread/Bias/Steps push
+-- it live; and that the Steps ladder walks from continuous to locked.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -72,7 +74,12 @@ do
         "12,4=" .. tostring(at["12,4"]) .. " 13,4=" .. tostring(at["13,4"]))
   check("a TM cell is a pulse cell, same family as D and R",
         M.topology.PULSE_TYPES.TM == true)
-  check("eight parameters", M.tm.PARAM_COUNT == 8, tostring(M.tm.PARAM_COUNT))
+  check("six parameters: Length, Deja, Drift, Spread, Bias, Steps",
+        M.tm.PARAM_COUNT == 6, tostring(M.tm.PARAM_COUNT))
+  local keys = {}
+  for _, p in ipairs(M.tm.PARAMS) do keys[p.key] = true end
+  check("Tap is gone with the trigger half of the module", keys.tap == nil)
+  check("and so is its Level", keys.level == nil)
 end
 
 print("\n-- nothing moves it but a trigger --")
@@ -91,7 +98,7 @@ do
   check("but a direct trigger does step it", changed)
 end
 
-print("\n-- Prob=1, Drift=0 is a pure rotation, and it repeats --")
+print("\n-- Deja=1, Drift=0 is a pure rotation, and it repeats --")
 do
   local M = fresh(3)
   set_length(M, PADFOOT, 4)
@@ -108,18 +115,52 @@ do
         table.concat(r.bits, ","))
 end
 
-print("\n-- Tap gates the outgoing pulse to exactly the steps where that bit is high --")
+print("\n-- it answers with a note and never with a pulse --")
 do
   local M = fresh(3)
   set_length(M, PADFOOT, 4)
   M.state.set_vparam(PADFOOT, "prob", 1.0)
   M.state.set_vparam(PADFOOT, "drift", 0.0)
-  M.state.set_vparam(PADFOOT, "tap", 0) -- bit 1
+  -- an exciter is the cheapest witness for "did a pulse leave this cell":
+  -- one grain per pulse, counted by `gates()`. every bit of this register is
+  -- high on half its steps, so the old Tap-gated output would have fired
+  -- twice over these four clocks.
   M.patch.add(PADFOOT, BECK, 1.0)
 
   for _ = 1, 4 do M.tm.pulse_in(PADFOOT, 1, nil, nil) end
-  check("half the steps of this alternating loop tap high",
-        gates() == 2, "got " .. gates())
+  check("four clock edges and not one outgoing pulse", gates() == 0,
+        "got " .. gates())
+
+  -- and the same through the scheduler, where an emitted pulse would be
+  -- queued on the inbox rather than delivered inline.
+  local M2 = fresh(13)
+  driver(M2, KNOCKER, 1.0)
+  M2.patch.add(KNOCKER, PADFOOT, 1.0)
+  M2.patch.add(PADFOOT, BECK, 1.0)
+  run(M2, 5)
+  check("nor when it is clocked by a running trigger", gates() == 0,
+        "got " .. gates())
+end
+
+print("\n-- K1+tap clocks the register rather than firing a pulse out of it --")
+do
+  local M = fresh(14)
+  set_length(M, PADFOOT, 8)
+  M.state.set_vparam(PADFOOT, "prob", 0)
+  M.patch.add(PADFOOT, "oak", 1.0)
+  M.patch.add(PADFOOT, BECK, 1.0)
+  M.state.set_vparam(PADFOOT, "steps", 0)   -- "free", so every step reads out
+                                            -- as a different number
+  -- and the global Scale off: that is a final quantiser downstream of
+  -- everything (grove.hz), and with it on it would round the register's own
+  -- output back onto the same note however far Steps let it move.
+  M.state.global.scale_i = 0
+  local before = #pitches_for(0)
+  local gridui = wl("gridui")
+  for _ = 1, 6 do gridui.act(PADFOOT, M.topology.get(PADFOOT)) end
+  check("the cabled voice was retuned", #pitches_for(0) > before,
+        before .. " -> " .. #pitches_for(0))
+  check("and the exciter heard nothing", gates() == 0, "got " .. gates())
 end
 
 print("\n-- a pulse arriving from elsewhere is deferred a tick, same as an R cell --")
@@ -152,46 +193,124 @@ do
         string.format("%.2f..%.2f st", lo, hi))
 end
 
-print("\n-- Range and Bits push the cabled voice live; the sequencing knobs do not --")
+print("\n-- Spread/Bias/Steps push the cabled voice live; the loop knobs do not --")
 do
   local M = fresh(6)
   -- the default Length (8) and its starting alternating pattern give a mixed
-  -- register, so both knobs below actually have something to move -- and the
+  -- register, so every knob below actually has something to move -- and the
   -- nudges are large on purpose, so the snapped degree is guaranteed to cross
-  -- into a different scale tone rather than landing near a boundary.
+  -- into a different scale tone rather than landing near a boundary. the
+  -- global Scale is off for the same reason it is off in the Steps test
+  -- below: it is a final quantiser downstream of all three of these knobs.
+  M.state.global.scale_i = 0
   M.state.set_vparam(PADFOOT, "range", 0)
   M.patch.add(PADFOOT, "oak", 1.0)
 
   local before = #pitches_for(0)
-  M.tm.nudge(PADFOOT, 5, 0.9) -- Range, narrow -> wide
-  check("Range pushes immediately", #pitches_for(0) > before,
-        before .. " -> " .. #pitches_for(0))
-
-  M.state.set_vparam(PADFOOT, "bits", 0)
-  before = #pitches_for(0)
-  M.tm.nudge(PADFOOT, 6, 0.9) -- Bits, 1 -> 7
-  check("so does Bits", #pitches_for(0) > before,
+  M.tm.nudge(PADFOOT, 4, 0.9) -- Spread, narrow -> wide
+  check("Spread pushes immediately", #pitches_for(0) > before,
         before .. " -> " .. #pitches_for(0))
 
   before = #pitches_for(0)
-  M.tm.nudge(PADFOOT, 2, 0.1) -- Prob
+  M.tm.nudge(PADFOOT, 5, 0.3) -- Bias
+  check("so does Bias", #pitches_for(0) > before,
+        before .. " -> " .. #pitches_for(0))
+
+  before = #pitches_for(0)
+  M.tm.nudge(PADFOOT, 6, -0.4) -- Steps, "scale" -> "free"
+  check("and so does Steps", #pitches_for(0) > before,
+        before .. " -> " .. #pitches_for(0))
+
+  before = #pitches_for(0)
+  M.tm.nudge(PADFOOT, 2, 0.1) -- Deja
   M.tm.nudge(PADFOOT, 1, 0.1) -- Length
-  check("Prob/Length wait for the next trigger instead",
+  check("Deja/Length wait for the next clock edge instead",
         #pitches_for(0) == before, before .. " -> " .. #pitches_for(0))
 end
 
-print("\n-- TM<->TM stays bounded --")
+print("\n-- Bias moves the whole line, Spread only widens it --")
+do
+  local M = fresh(15)
+  set_length(M, PADFOOT, 8)
+  M.state.set_vparam(PADFOOT, "steps", 0)      -- "free": no snap, so the
+                                               -- numbers below are exact
+  M.state.set_vparam(PADFOOT, "range", 0.5)
+
+  M.state.set_vparam(PADFOOT, "bias", 0.5)
+  local centred = M.tm.degree(PADFOOT)
+  M.state.set_vparam(PADFOOT, "bias", 1.0)
+  local raised = M.tm.degree(PADFOOT)
+  check("full Bias lifts the same register by an octave",
+        math.abs((raised - centred) - 12) < 1e-6,
+        string.format("%+.3f -> %+.3f", centred, raised))
+
+  M.state.set_vparam(PADFOOT, "bias", 0.0)
+  check("and the other way, symmetrically",
+        math.abs((M.tm.degree(PADFOOT) - centred) + 12) < 1e-6,
+        tostring(M.tm.degree(PADFOOT)))
+end
+
+print("\n-- Steps walks from continuous to one note --")
+do
+  local M = fresh(16)
+  set_length(M, PADFOOT, 8)
+  M.state.set_vparam(PADFOOT, "range", 1.0)   -- two octaves, so a grid bites
+  M.state.set_vparam(PADFOOT, "bias", 0.5)
+
+  local names = {}
+  for i = 1, #M.tm.STEP_MODES do
+    -- the middle of position i, so the floor() lands squarely on it
+    M.state.set_vparam(PADFOOT, "steps", (i - 0.5) / #M.tm.STEP_MODES)
+    check("position " .. i .. " reads back as itself",
+          M.tm.step_mode(PADFOOT) == i, tostring(M.tm.step_mode(PADFOOT)))
+    names[i] = M.tm.step_name(PADFOOT)
+  end
+  check("the ladder runs free .. lock",
+        names[1] == "free" and names[#names] == "lock",
+        table.concat(names, ","))
+
+  -- "lock" is the end of the ladder and means one note, whatever the
+  -- register and however wide the Spread.
+  M.state.set_vparam(PADFOOT, "steps", 1.0)
+  local locked = true
+  for _ = 1, 12 do
+    M.tm.pulse_in(PADFOOT, 1, nil, 0)
+    if math.abs(M.tm.degree(PADFOOT)) > 1e-9 then locked = false end
+  end
+  check("locked, the register runs and the pitch does not move", locked)
+
+  -- "free" is the other end: no grid at all, so a wide Spread lands on
+  -- values that are not whole semitones.
+  M.state.set_vparam(PADFOOT, "steps", 0)
+  local fractional = false
+  for _ = 1, 24 do
+    M.tm.pulse_in(PADFOOT, 1, nil, 0)
+    local d = M.tm.degree(PADFOOT)
+    if math.abs(d - math.floor(d + 0.5)) > 1e-6 then fractional = true end
+  end
+  check("free, it lands between the notes", fractional)
+end
+
+print("\n-- TM<->TM is inert, and a chain through one costs nothing --")
 do
   local M = fresh(7)
   driver(M, KNOCKER, 1.0)
   M.patch.add(KNOCKER, PADFOOT, 1.0)
   M.patch.add(PADFOOT, BARGHEST, 0.9)
   M.patch.add(BARGHEST, BECK, 1.0)
+  local b = M.tm.get(BARGHEST)
+  local before = table.concat(b.bits, ",")
   local t0 = os.clock()
   run(M, 20)
   local wall = os.clock() - t0
   check("terminates", true)
-  check("it is audibly doing something", gates() > 0, "#" .. gates())
+  -- the whole point of the rework: a register cabled downstream of another
+  -- register is not a sequencer chain any more. Padfoot is clocked, Barghest
+  -- is not, and the exciter past it hears nothing at all.
+  check("the second register never got clocked",
+        table.concat(b.bits, ",") == before,
+        before .. " -> " .. table.concat(b.bits, ","))
+  check("and nothing downstream of it fired", gates() == 0, "#" .. gates())
   check("20s of ticks in reasonable time", wall < 15, string.format("%.2fs", wall))
 end
 

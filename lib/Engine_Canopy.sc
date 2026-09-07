@@ -79,6 +79,7 @@ Engine_Canopy : CroneEngine {
 	var gustSynths;
 	var gustSpaceSynth;
 	var lfoSynths;
+	var fmSynths, vaSynths;
 
 	// name, freq, structureBase (0..1, ignored when oddOnly=1), oddOnly, dampBase, decay
 	// §8 "per-voice defaults" table. keep freq/structureBase/dampBase/decay in
@@ -118,7 +119,22 @@ Engine_Canopy : CroneEngine {
 
 	classvar nVoices = 4, nExc = 6, nG = 6, nOut = 16, nSmp = 4,
 		nGust = 12,
-		nLfo = 4;
+		nLfo = 4,
+		// §2.13 the two new synth families on the right of the instrument
+		// row: two two-operator FM voices and two wavefolding VA voices.
+		nFm = 2, nVa = 2;
+
+	// §2.13 the knobs each of those two families answers to. `fm_set` /
+	// `va_set` will only set an argument named in here -- the same
+	// key-checked one-command-per-family shape the `colour` command uses,
+	// and for the same reason: these are a page of knobs on ONE synth, so a
+	// dozen near-identical named commands would say nothing the key does
+	// not. keep them identical to lib/synth.lua's own row keys.
+	classvar fmKeys = #[\ratio, \index, \fbk, \atk, \dcy, \cross, \amp];
+	classvar vaKeys = #[
+		\shape, \noise, \fold, \cutoff, \res, \envAmt,
+		\atk, \dcy, \cross, \amp
+	];
 
 	// §4.4 the eight knobs on \woodland_fx's colour chain. the `colour`
 	// command below will only set an argument named in here -- keep it
@@ -147,11 +163,20 @@ Engine_Canopy : CroneEngine {
 	// took its seats -- those four used to pan themselves into a shared
 	// stereo bus \woodland_fx read directly, and are ordinary cabled sources
 	// now, so an SFX loop is routed exactly like a voice.
+	// §2.13 adds two families of the same shape a gust already had -- one
+	// mono tap out per cell and one summed mod input per cell -- and §2.11c
+	// adds one more channel on the end: `sendBase`, the single mono bus every
+	// source's Send knob writes into. that one is not per cell and never will
+	// be: it is the input of one shared effect, and what decides how much of
+	// a given cell arrives there is that cell's own knob, applied as the gain
+	// on an ordinary patch synth (lib/send.lua).
 	classvar excBase = 0, colourModBase = 6, modInBase = 12,
 		voiceOutBase = 16, gvoiceOutBase = 20, outBase = 26,
 		gustOutBase = 42, gustModBase = 54, lfoOutBase = 66,
 		smpOutBase = 70,
-		patchTotal = 74;
+		fmOutBase = 74, fmModBase = 76, vaOutBase = 78, vaModBase = 80,
+		sendBase = 82,
+		patchTotal = 83;
 
 	*new { arg context, doneCallback;
 		^super.new(context, doneCallback);
@@ -544,6 +569,160 @@ Engine_Canopy : CroneEngine {
 			Out.ar(spaceOut, Pan2.ar(sig, pan.clip(-1, 1)));
 		}).add;
 
+		// §2.13 a two-operator FM voice. one sine modulating the phase of
+		// another, and nothing else: no operator stack, no algorithm menu, no
+		// per-operator envelopes. two operators is the point at which FM stops
+		// being a bank of presets and starts being something you can hear the
+		// shape of while you turn the knob.
+		//
+		// phase modulation rather than true frequency modulation, which is
+		// what every digital FM synth since the DX7 has actually done: the
+		// modulator is added to the carrier's PHASE, so the carrier's average
+		// pitch does not drift as Index comes up. true FM detunes as it gets
+		// brighter, which sounds like the tuning slipping rather than like the
+		// timbre opening.
+		//
+		// Index is enveloped as well as knobbed, on a copy of the amplitude
+		// envelope with a shorter fall. that is the single thing that makes
+		// two operators sound like an instrument rather than a test tone: a
+		// struck sound is brightest at the attack and darkens as it decays,
+		// and a static index gives you a note that is exactly as bright at the
+		// end as at the start.
+		//
+		// SinOscFB, not SinOsc, for the modulator: the feedback coefficient
+		// walks it continuously from a sine up through a saw-like shape and
+		// on into noise, which is the cheapest way to get an operator that is
+		// not a pure sine and is exactly what the DX's own feedback did.
+		//
+		// InFeedback on the mod bus for the same reason \wl_gust uses it: a
+		// cell cabled to another cell that is cabled back is a cycle with no
+		// node order that resolves it, so one block of latency is the answer.
+		SynthDef(\wl_fm, {
+			arg out=0, modIn=0, t_trig=0, force=0.8, freq=110,
+				ratio=2.0, index=0.3, fbk=0, atk=0.01, dcy=0.9,
+				cross=0.3, amp=0.7, hold=0;
+
+			var x = cross.clip(0, 1);
+			// the same MOD_MAKEUP reasoning \wl_gust's own comment sets out:
+			// a tap on this panel is written at mix level and is far too
+			// quiet to be a modulator, so it is scaled back to near unity
+			// here and soft-limited, kept bipolar so a negative-gain cable
+			// pulls the other way.
+			var mod = ((InFeedback.ar(modIn, 1) * 5).tanh) * x;
+
+			var fBase = Lag.kr(freq.clip(8, 8000), 0.02);
+			// a cable bends the pitch an octave either way and opens the
+			// index at the same time, so a cable into an FM voice reads as
+			// modulation rather than as a mix -- the same two things at once
+			// a gust's Cross does.
+			var f = (fBase * (mod * 12).midiratio).clip(8, 8000);
+
+			var holdAmt = Lag.kr(hold.clip(0, 1), 0.15);
+			var a = atk.clip(0.001, 8);
+			var d = dcy.clip(0.02, 20);
+			var env = EnvGen.ar(Env.perc(a, d, 1, [-2, -4]), t_trig)
+				* force.clip(0, 1);
+			// §2.9b a Clock cell set to High: the same envelope shape held
+			// open instead of falling. hold=0 makes the crossfade pick the
+			// struck path exactly, so a cell nothing is holding is untouched.
+			var sustEnv = EnvGen.ar(Env.asr(a, 1, d, [-2, -4]), hold);
+			var gateEnv = (env * (1 - holdAmt)) + (sustEnv * holdAmt);
+
+			// the index envelope: the same attack, a shorter fall, and a
+			// floor of whatever `hold` is asking for so a held note keeps its
+			// brightness rather than fading to a sine.
+			var idxEnv = EnvGen.ar(Env.perc(a, d * 0.6, 1, [-2, -4]), t_trig)
+				.max(holdAmt);
+			// in radians of carrier phase. twelve is a modulation index deep
+			// enough to be plainly noisy at the top of the knob and still
+			// controllable through the middle of it.
+			var idx = index.clip(0, 1) * 12 * (1 + (mod.abs * 2));
+
+			var modOsc = SinOscFB.ar((f * ratio.clip(0.01, 32)).clip(1, 12000),
+				fbk.clip(0, 1) * 2.0);
+			var carrier = SinOsc.ar(f, modOsc * idx * idxEnv);
+
+			var sig = LeakDC.ar(carrier.tanh) * gateEnv * amp.clip(0, 1) * 0.3;
+			Out.ar(out, sig);
+		}).add;
+
+		// §2.13 a variable-waveform virtual-analogue voice with a Buchla-style
+		// wavefolder in it.
+		//
+		// the chain is oscillator -> noise -> FOLD -> filter, and the order of
+		// the last two is the whole character of the thing. a folder after a
+		// filter is a distortion box on the end of a subtractive synth; a
+		// folder BEFORE the filter is a Buchla timbre section, where folding
+		// generates the harmonics and the filter then decides how many of them
+		// survive. fold a sine and you get partials no filter could have put
+		// back, which is exactly why this is not a saw through a low-pass with
+		// extra steps.
+		//
+		// `shape` walks the core continuously from a sine through a triangle
+		// to a saw, in two crossfades rather than one, so the middle of the
+		// knob is a real triangle rather than a half-mixed sine and saw
+		// beating against each other.
+		//
+		// `envAmt` opens the filter with the amplitude envelope. it is a knob
+		// and not a constant because a struck VA voice with a static filter
+		// speaks the same on every note whatever else is set, and hiding that
+		// behind a fixed amount would be a decision the player could hear and
+		// could not reach.
+		SynthDef(\wl_va, {
+			arg out=0, modIn=0, t_trig=0, force=0.8, freq=110,
+				shape=0.3, noise=0, fold=0.2, cutoff=0.6, res=0.3,
+				envAmt=0.4, atk=0.005, dcy=1.1, cross=0.3, amp=0.7, hold=0;
+
+			var x = cross.clip(0, 1);
+			var mod = ((InFeedback.ar(modIn, 1) * 5).tanh) * x;
+
+			var fBase = Lag.kr(freq.clip(8, 8000), 0.02);
+			var f = (fBase * (mod * 12).midiratio).clip(8, 8000);
+
+			var holdAmt = Lag.kr(hold.clip(0, 1), 0.15);
+			var a = atk.clip(0.001, 8);
+			var d = dcy.clip(0.02, 20);
+			var env = EnvGen.ar(Env.perc(a, d, 1, [-2, -4]), t_trig)
+				* force.clip(0, 1);
+			var sustEnv = EnvGen.ar(Env.asr(a, 1, d, [-2, -4]), hold);
+			var gateEnv = (env * (1 - holdAmt)) + (sustEnv * holdAmt);
+
+			var sh = shape.clip(0, 1);
+			var core = XFade2.ar(
+				XFade2.ar(SinOsc.ar(f), LFTri.ar(f), ((sh * 4) - 1).clip(-1, 1)),
+				Saw.ar(f),
+				((sh * 4) - 3).clip(-1, 1)
+			);
+			// pink rather than white: it sits under a pitched core as breath
+			// and body rather than as hiss, and it is the same noise every
+			// other source on this panel reaches for first.
+			var nz = noise.clip(0, 1);
+			var mixed = (core * (1 - nz)) + (PinkNoise.ar(1) * nz);
+
+			// the folder. gain into a fold2, which is the plainest honest
+			// version of what a Buchla timbre section does, with the fold
+			// amount opened further by whatever is cabled in -- so a modulated
+			// VA cell buzzes on the peaks of the modulator exactly the way a
+			// modulated gust does. the makeup division keeps the level roughly
+			// steady as the fold count goes up, since folding raises the
+			// harmonic count and not the peak.
+			var foldAmt = (fold.clip(0, 1) + (mod.abs * 0.7)).clip(0, 1.7);
+			var folded = (mixed * (1 + (foldAmt * 6))).fold2(1)
+				/ (1 + (foldAmt * 0.8));
+
+			// a log cutoff, because the audible half of a filter knob is all
+			// at the bottom, opened by the envelope by however much envAmt
+			// asks for. rq is the reciprocal of resonance and is floored well
+			// above zero -- an RLPF at rq 0 self-oscillates into the limiter.
+			var co = (40 * (300 ** cutoff.clip(0, 1))
+				* (1 + (envAmt.clip(0, 1) * gateEnv * 7))).clip(30, 16000);
+			var rq = (1 - (res.clip(0, 1) * 0.92)).max(0.06);
+			var filtered = RLPF.ar(folded, co, rq);
+
+			var sig = LeakDC.ar(filtered.tanh) * gateEnv * amp.clip(0, 1) * 0.3;
+			Out.ar(out, sig);
+		}).add;
+
 		// §2.11 the one delay line every gust is heard through -- "a globally
 		// defined delayline that gives it space and ambience". one line for
 		// all twelve rather than one each: what it is for is putting the family
@@ -555,31 +734,94 @@ Engine_Canopy : CroneEngine {
 		// decays rather than staying where the dry signal was. the line's own
 		// time is lagged hard: moving a delay time is a tape effect, and an
 		// instant jump is a click.
+		// §2.11c it is a SEND now, not just the gusts' own room. `sendIn` is
+		// one mono bus that every source on the panel can write into, at
+		// whatever its own Send knob says (lib/send.lua builds those as
+		// ordinary patch synths, so no source SynthDef had to learn about
+		// this). the gusts still arrive on `in` the way they always did, dry
+		// and wet together; a send arrives wet only, because a source that
+		// sent its dry signal here as well would be heard twice at two
+		// different levels and the Send knob would be a second volume
+		// control.
+		//
+		// the mono send is centred rather than spread. what places a source
+		// in the image on this panel is the Out cell it is cabled to, and a
+		// send that arrived somewhere else in the stereo field would put the
+		// tail of a hard-left instrument in the middle of the room -- which
+		// is, as it happens, exactly what a real send does, and is why this
+		// is the one place the panel's "position is pan" rule does not run.
+		//
+		// `tone` is the damping in the feedback loop -- how dark each repeat
+		// is compared to the one before it. it was a fixed 3200 Hz, which is
+		// the right number for twelve gusts and the wrong one for a snare:
+		// once every family on the panel can reach this, the colour of the
+		// tail is something the player has to be able to set.
 		SynthDef(\wl_gust_space, {
-			arg in=0, out=0, mix=0.35, time=0.38, fb=0.45;
-			var dry = In.ar(in, 2);
+			arg in=0, out=0, sendIn=0, mix=0.35, time=0.38, fb=0.45, tone=0.5;
+			var gusts = In.ar(in, 2);
+			var sends = In.ar(sendIn, 1) ! 2;
 			var t = Lag.kr(time.clip(0.02, 2.0), 0.5);
 			var back = LocalIn.ar(2);
-			var wet = DelayC.ar(dry + (back * fb.clip(0, 0.92)), 2.1, [t, t * 1.37]);
+			var wet = DelayC.ar(gusts + sends + (back * fb.clip(0, 0.92)),
+				2.1, [t, t * 1.37]);
 			// damped in the loop, so each repeat is darker than the last --
 			// without this a long feedback setting builds rather than decays.
-			wet = LPF.ar(wet, 3200);
+			// log-mapped across a genuinely useful band: 700 Hz is a dub
+			// delay and 12k is a bright plate.
+			wet = LPF.ar(wet, Lag.kr(700 * (17 ** tone.clip(0, 1)), 0.1));
 			// three allpasses, times chosen mutually prime-ish so the smear
 			// does not develop a pitch of its own.
 			[0.0131, 0.0271, 0.0353].do({ |dt|
 				wet = AllpassC.ar(wet, 0.05, [dt, dt * 1.19], 0.9);
 			});
 			LocalOut.ar(LeakDC.ar(wet).tanh);
-			Out.ar(out, dry + (wet * Lag.kr(mix.clip(0, 1), 0.1) * 1.2));
+			// only the gusts' dry signal passes through: a send's dry copy is
+			// already going to the Output row on its own cable.
+			Out.ar(out, gusts + (wet * Lag.kr(mix.clip(0, 1), 0.1) * 1.2));
 		}).add;
 
-		// §2.12 an LFO cell: the plainest synth on the panel -- one sine,
-		// always running, written to its own `lfoOutBase` tap. there is no amp
-		// argument: depth is entirely the cable's own gain (dispatch.lua),
-		// same as every other continuous source's cable. `freq` is lagged so a
-		// Speed change is a glide, not a click.
-		SynthDef(\wl_lfo, { arg out=0, freq=0.2;
-			Out.ar(out, SinOsc.ar(Lag.kr(freq.clip(0.02, 20), 0.05)));
+		// §2.12 an LFO cell. it used to be the plainest synth on the panel --
+		// one sine, always running -- and it has a shape bank now, which is
+		// what a modulator with only one waveform was always missing: a
+		// square is a switch, a ramp is a sweep, a sample-and-hold is a
+		// stepped sequence, and none of them is a sine with a different name.
+		//
+		// there is no amp argument: depth is entirely the cable's own gain
+		// (dispatch.lua), same as every other continuous source's cable.
+		// `freq` is lagged so a Speed change is a glide, not a click.
+		//
+		// eight shapes, selected rather than crossfaded -- these are discrete
+		// choices and a half-square is not a shape anyone asked for. every
+		// one is bipolar and runs -1..+1, so switching shape changes what the
+		// modulation does and not how much of it there is.
+		//
+		// two of them are worth a note. `Latch` on white noise clocked by an
+		// Impulse at the same rate IS a sample-and-hold: a fresh random value
+		// per cycle, held flat between them, which is the one shape a
+		// free-running oscillator cannot make. and the last is not an
+		// oscillator at all -- it is an envelope follower on the Output row,
+		// so an LFO on that shape moves with the instrument rather than
+		// against it. it reads `inBus` (the same sixteen output channels
+		// \woodland_fx reads) with a plain In.ar, which is legal because this
+		// synth lives in gVoice and gPatch has already written them; the
+		// follower's own attack and release are fixed and fast, because a
+		// follower slow enough to need a knob is an LFO.
+		SynthDef(\wl_lfo, { arg out=0, freq=0.2, shape=0, inBus=0;
+			var f = Lag.kr(freq.clip(0.02, 20), 0.05);
+			var trig = Impulse.ar(f);
+			var follow = Amplitude.ar(Mix.ar(In.ar(inBus, nOut)), 0.01, 0.15);
+			Out.ar(out, Select.ar(shape.clip(0, 7), [
+				SinOsc.ar(f),
+				LFTri.ar(f),
+				LFSaw.ar(f),                 // ramp: rising
+				LFSaw.ar(f).neg,             // saw: falling
+				LFPulse.ar(f, 0, 0.5).range(-1, 1),
+				Latch.ar(WhiteNoise.ar(1), trig),
+				LFNoise2.ar(f),              // smooth random
+				// bipolar so it sits on the same scale as the rest: at
+				// silence it pulls a knob down, at full it pushes it up.
+				((follow * 4).clip(0, 1) * 2) - 1
+			]));
 		}).add;
 
 		// the grid overhaul's Output row (§2's `O` cells): the only place
@@ -661,7 +903,7 @@ Engine_Canopy : CroneEngine {
 			var kComp = Lag.kr(comp.clip(0, 1), 0.08);
 			var fast, slow, tilt, shaped;
 			var cThresh, cSlope;
-			var driven, saturated, wow;
+			var driven, saturated;
 			var chRate, chDepth, chA, chB;
 			var q, crushed;
 			var srFreq, aliased;
@@ -700,18 +942,30 @@ Engine_Canopy : CroneEngine {
 				* (1 + (kComp * 1.7));
 
 			// -- Tape ------------------------------------------------------
-			// three things at once, because one of them alone is not tape.
-			// a tanh curve, which is the saturation; the top end coming off
-			// as it is driven, which is what a machine's head and bias do;
-			// and a slow wow on the wet path, +-0.6 ms at about 0.7 Hz,
-			// which is the thing that makes it sound like a transport rather
-			// than a distortion box. the output is scaled back by the drive
-			// so turning it up is a change of character and not just a
+			// two things, not three. a tanh curve, which is the saturation,
+			// and the top end coming off as it is driven, which is what a
+			// machine's head and bias do. the output is scaled back by the
+			// drive so turning it up is a change of character and not just a
 			// change of level.
+			//
+			// there used to be a third: a slow wow, a +-0.6 ms modulated
+			// delay on the wet path. it had to go, and not because the wow
+			// itself was wrong. the wet path was DELAYED -- 8 ms of fixed
+			// offset before the modulation even started -- and then
+			// crossfaded against the dry one. a delayed copy summed with its
+			// original is a comb filter, so the whole knob swept a phaser
+			// across the mix rather than driving it into tape, and the
+			// modulation on top only made the phasing move. turning Tape up
+			// sounded like a parallel effect because it was one.
+			//
+			// so the delay line is gone entirely and the saturation is
+			// computed in place. a real transport's wow belongs on the
+			// signal going ONTO the tape, not on a copy summed back against
+			// it, and there is nothing on this chain to put it on -- so
+			// rather than fake it in a way that combs, Tape is saturation
+			// and bandwidth and says so.
 			driven = sig * (1 + (kTape * 6));
-			wow = DelayC.ar(driven, 0.05,
-				(0.008 + (SinOsc.kr(0.7, [0, 1.1]) * 0.0006 * kTape)).clip(0.001, 0.04));
-			saturated = LPF.ar(wow.tanh, 18000 - (kTape * 9500))
+			saturated = LPF.ar(driven.tanh, 18000 - (kTape * 9500))
 				/ (1 + (kTape * 2.4));
 			sig = XFade2.ar(sig, saturated, ((kTape * 2) - 1).clip(-1, 1));
 
@@ -1028,7 +1282,28 @@ Engine_Canopy : CroneEngine {
 		lfoSynths = Array.newClear(nLfo);
 		nLfo.do({ |i|
 			lfoSynths[i] = Synth.new(\wl_lfo, [
-				\out, patchBus.index + lfoOutBase + i
+				\out, patchBus.index + lfoOutBase + i,
+				\inBus, patchBus.index + outBase
+			], gVoice);
+		});
+
+		// §2.13 always-on, for the same reason the gusts and the voices are:
+		// these are instruments that are silent until they are struck, not
+		// streams that only exist while cabled. lib/synth.lua's init() pushes
+		// every cell's whole page right after this.
+		fmSynths = Array.newClear(nFm);
+		nFm.do({ |i|
+			fmSynths[i] = Synth.new(\wl_fm, [
+				\out, patchBus.index + fmOutBase + i,
+				\modIn, patchBus.index + fmModBase + i
+			], gVoice);
+		});
+
+		vaSynths = Array.newClear(nVa);
+		nVa.do({ |i|
+			vaSynths[i] = Synth.new(\wl_va, [
+				\out, patchBus.index + vaOutBase + i,
+				\modIn, patchBus.index + vaModBase + i
 			], gVoice);
 		});
 
@@ -1043,6 +1318,7 @@ Engine_Canopy : CroneEngine {
 		// needs -- plain In.ar on both sides, no feedback bus required.
 		gustSpaceSynth = Synth.new(\wl_gust_space, [
 			\in, gustBus.index,
+			\sendIn, patchBus.index + sendBase,
 			\out, gustSpaceBus.index
 		], gTap);
 
@@ -1328,16 +1604,85 @@ Engine_Canopy : CroneEngine {
 			};
 		});
 
-		// gust_space(mix, time, feedback) -- the one delay line all twelve are
-		// heard through, driven from the gusts page.
-		this.addCommand("gust_space", "fff", { |msg|
-			gustSpaceSynth.set(\mix, msg[1], \time, msg[2], \fb, msg[3]);
+		// gust_space(mix, time, feedback, tone) -- the shared send effect
+		// (§2.11c). still the line all twelve gusts are heard through, and now
+		// also what every source's Send knob feeds; driven from its own page
+		// off the mixer (lib/send.lua).
+		this.addCommand("gust_space", "ffff", { |msg|
+			gustSpaceSynth.set(\mix, msg[1], \time, msg[2], \fb, msg[3],
+				\tone, msg[4]);
 		});
 
-		// §2.12 lfo_rate(index, hz) -- the one knob an LFO cell has.
+		// §2.13 the FM and VA cells. `*_note` is the whole strike in one
+		// message -- pitch and force together, the way `gust_note` is for a
+		// gust -- and `*_pitch` is the same pitch without sounding it, for a
+		// field, a register, a Scale change or a transpose that has to reach a
+		// cell already ringing.
+		this.addCommand("fm_note", "iff", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nFm }) {
+				fmSynths[i].set(\freq, msg[2], \force, msg[3], \t_trig, 1);
+			};
+		});
+
+		this.addCommand("fm_pitch", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nFm }) { fmSynths[i].set(\freq, msg[2]) };
+		});
+
+		// fm_set(index, key, v) -- one knob on one FM cell. see fmKeys above
+		// for why this is one keyed command rather than seven named ones.
+		this.addCommand("fm_set", "isf", { |msg|
+			var i = msg[1].asInteger;
+			var key = msg[2].asSymbol;
+			if (i >= 0 and: { i < nFm } and: { fmKeys.includes(key) }) {
+				fmSynths[i].set(key, msg[3]);
+			};
+		});
+
+		this.addCommand("fm_hold", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nFm }) { fmSynths[i].set(\hold, msg[2]) };
+		});
+
+		this.addCommand("va_note", "iff", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nVa }) {
+				vaSynths[i].set(\freq, msg[2], \force, msg[3], \t_trig, 1);
+			};
+		});
+
+		this.addCommand("va_pitch", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nVa }) { vaSynths[i].set(\freq, msg[2]) };
+		});
+
+		this.addCommand("va_set", "isf", { |msg|
+			var i = msg[1].asInteger;
+			var key = msg[2].asSymbol;
+			if (i >= 0 and: { i < nVa } and: { vaKeys.includes(key) }) {
+				vaSynths[i].set(key, msg[3]);
+			};
+		});
+
+		this.addCommand("va_hold", "if", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nVa }) { vaSynths[i].set(\hold, msg[2]) };
+		});
+
+		// §2.12 lfo_rate(index, hz) -- how fast the cell runs.
 		this.addCommand("lfo_rate", "if", { |msg|
 			var i = msg[1].asInteger;
 			if (i >= 0 and: { i < nLfo }) { lfoSynths[i].set(\freq, msg[2].clip(0.02, 20)) };
+		});
+
+		// lfo_shape(index, n) -- which of \wl_lfo's eight shapes, 0..7, in
+		// the same order lib/lfo.lua's SHAPES table lists them.
+		this.addCommand("lfo_shape", "ii", { |msg|
+			var i = msg[1].asInteger;
+			if (i >= 0 and: { i < nLfo }) {
+				lfoSynths[i].set(\shape, msg[2].clip(0, 7));
+			};
 		});
 
 		// exciter_on/off(index) -- §2.4 lazy allocation: an E cell only runs
@@ -1554,6 +1899,8 @@ Engine_Canopy : CroneEngine {
 		voiceSynths.do({ |s| if (s.notNil) { s.free } });
 		gSynths.do({ |s| if (s.notNil) { s.free } });
 		gustSynths.do({ |s| if (s.notNil) { s.free } });
+		fmSynths.do({ |s| if (s.notNil) { s.free } });
+		vaSynths.do({ |s| if (s.notNil) { s.free } });
 		if (gustSpaceSynth.notNil) { gustSpaceSynth.free };
 		lfoSynths.do({ |s| if (s.notNil) { s.free } });
 		excSynths.do({ |s| if (s.notNil) { s.free } });

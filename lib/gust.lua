@@ -19,8 +19,9 @@
 --
 --   * it is heard uncabled. every other source is silent until it reaches
 --     the Output row; a gust is routed to the main mix by the engine, panned
---     by where it physically sits (topology's `pan`), through a delay line
---     shared by all twelve (gust.SPACE, driven from the gusts page). a cable
+--     by where it physically sits (topology's `pan`), through the shared send
+--     effect (§2.11c, lib/send.lua -- which was this family's own delay line
+--     until every other family got a Send knob into it). a cable
 --     into an Output cell is still allowed and still means what it means --
 --     it just places a second copy rather than being the only way to hear
 --     the first.
@@ -34,11 +35,10 @@
 -- it to screenui and gridui through the one code path they already have.
 --
 -- §2.11b this file carries a SECOND page as well: the family's own, reached
--- with K3 from the main screen and sitting just before the mixer. five offsets
--- that slide all twelve cells together (gust.MACRO, below) and the three rows
--- for the delay line they share, which used to be the second page of the
--- global list. it is `gust.MACROS`, in the same shape gparam.PARAMS and
--- mixer.PARAMS are, so screenui and Canopy.lua drive all three identically.
+-- with K3 from the main screen and sitting just before the mixer: five
+-- offsets that slide all twelve cells together (gust.MACRO, below). it is
+-- `gust.MACROS`, in the same shape gparam.PARAMS and mixer.PARAMS are, so
+-- screenui and Canopy.lua drive all three identically.
 
 local topology = wl("topology")
 local state    = wl("state")
@@ -355,6 +355,11 @@ gust.PARAMS = {
       bridge.gust_amp(cell.index - 1, gust.level(id))
     end,
   },
+  -- §2.11c how much of this cell goes to the send effect. a gust already
+  -- reaches that line dry-plus-wet on its own automatic route, so this is a
+  -- second, deliberate helping on top of it -- worth having, because the
+  -- automatic one is at whatever Space is set to for the whole family.
+  wl("send").row(),
 }
 
 gust.PARAM_COUNT = #gust.PARAMS
@@ -395,60 +400,40 @@ function gust.each()
   return ids
 end
 
--- the shared delay line (§2.11b, the gusts page's Space / Delay / Regen
--- rows). one line for all twelve cells rather than one each: what it is for is
--- putting the family in a room, and twelve rooms is not a room. the numbers
--- live on state.global so a PSET picks them up with everything else.
-gust.SPACE = {
-  space = 0.35,   -- how much of the delayed signal is heard, 0..1
-  delay = 0.38,   -- the line's own time in seconds
-  regen = 0.45,   -- how much comes back round, 0..1
-}
-
-gust.DELAY_MIN, gust.DELAY_MAX = 0.02, 2.0
-gust.REGEN_MAX = 0.92
-
-local function space_defaults()
-  state.global.gust_space = state.global.gust_space or {}
-  local t = state.global.gust_space
-  for k, v in pairs(gust.SPACE) do
-    if t[k] == nil then t[k] = v end
-  end
-  return t
-end
-
+-- the shared send effect (§2.11c) --------------------------------------------
+-- the delay line all twelve gusts are heard through used to be set from this
+-- module: gust.SPACE held its three numbers and the gusts page carried its
+-- three rows. it is a SEND now -- every family on the panel can reach it, at
+-- whatever its own Send knob says -- so the numbers, the ranges and the rows
+-- all moved to lib/send.lua and onto a page of their own past the mixer.
+-- nothing about the gusts' own route through it changed: they still arrive
+-- dry-plus-wet, exactly as before, and the state is still the same table on
+-- state.global so a patch saved before the move comes back on its settings.
+--
+-- these three forward rather than being deleted outright: gust.init and a
+-- handful of callers ask for them by name, and one indirection here is
+-- cheaper than teaching each of them where the numbers went.
 function gust.get_space(key)
-  return space_defaults()[key]
+  return wl("send").get_fx(key)
 end
 
 function gust.set_space(key, v)
-  local t = space_defaults()
-  if key == "delay" then
-    t[key] = util.clamp(v, gust.DELAY_MIN, gust.DELAY_MAX)
-  elseif key == "regen" then
-    t[key] = util.clamp(v, 0, gust.REGEN_MAX)
-  else
-    t[key] = util.clamp(v, 0, 1)
-  end
-  return t[key]
+  return wl("send").set_fx(key, v)
 end
 
 function gust.push_space()
-  bridge.gust_space(gust.get_space("space"), gust.get_space("delay"),
-                    gust.get_space("regen"))
+  wl("send").push_fx()
 end
 
 -- the gusts page (§2.11b) -----------------------------------------------------
 -- exactly one screen, sitting between the main page and the mixer: the five
--- family offsets above, then the three rows for the delay line all twelve are
--- heard through. eight widgets, no page dots, the whole family in one look --
--- which is worth the small discipline of keeping it at eight.
+-- family offsets above, and nothing else. the whole family in one look.
 --
--- those three used to be the second page of the global list, which was always
--- a compromise -- they are patch-wide numbers, but they are patch-wide
--- numbers about ONE family, and they sat next to BPM and Scale because there
--- was nowhere better. there is now: the page that is about that family. what
--- they do and how far they go is unchanged, and so is the state they live in.
+-- it used to carry three more rows -- the Space/Delay/Regen of the delay line
+-- all twelve are heard through -- which was right for exactly as long as that
+-- line belonged to the gusts. it is a send every family can reach now
+-- (§2.11c) and its rows are on their own page past the mixer; a knob that has
+-- stopped being about one family has no business on that family's page.
 --
 -- the page object is the same shape gparam's and mixer's are -- PARAMS with
 -- get/set/text/frac/push, E1 to pick, E2/E3 coarse/fine -- so screenui and
@@ -494,42 +479,6 @@ gust.MACROS = {
   macro_row("cross",  "Cross",  "link"),
   macro_row("level",  "Level",  "fader"),
 }
-
--- the delay line's three, in the same shape. they were written as `space_row`
--- on the global page and are written the same way here, for the same reason:
--- lib/gust.lua owns their defaults and their ranges and these rows are only
--- the face.
-local function space_row(key, label, gl, text_fn, frac_fn, coarse, fine)
-  return {
-    key = "gust_" .. key, label = label, glyph = gl,
-    coarse = coarse, fine = fine,
-    get = function() return gust.get_space(key) end,
-    set = function(v) gust.set_space(key, v) end,
-    text = text_fn, frac = frac_fn,
-    push = function() gust.push_space() end,
-  }
-end
-
-table.insert(gust.MACROS, space_row("space", "Space", "peak",
-  function() return string.format("%.2f", gust.get_space("space")) end,
-  function() return gust.get_space("space") end,
-  COARSE, FINE))
-
--- in seconds on the wire and milliseconds on the screen, not a 0..1 knob: a
--- delay time is a number you want to read, and often one you want to match to
--- the tempo by eye.
-table.insert(gust.MACROS, space_row("delay", "Delay", "steps",
-  function() return string.format("%.0f ms", gust.get_space("delay") * 1000) end,
-  function()
-    return (gust.get_space("delay") - gust.DELAY_MIN)
-           / (gust.DELAY_MAX - gust.DELAY_MIN)
-  end,
-  0.01, 0.002))
-
-table.insert(gust.MACROS, space_row("regen", "Regen", "combs",
-  function() return string.format("%.2f", gust.get_space("regen")) end,
-  function() return gust.get_space("regen") / gust.REGEN_MAX end,
-  COARSE, FINE))
 
 gust.MACRO_COUNT = #gust.MACROS
 

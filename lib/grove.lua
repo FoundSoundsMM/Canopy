@@ -119,24 +119,62 @@ end
 -- quantises the sum, unconditionally, whenever a scale is selected. index 0
 -- is "free": the tuning is whatever it already was.
 --
--- pentatonic only, on purpose: every entry here is a five-note anhemitonic
--- set, so nothing this quantises to a scale can land a semitone against
--- itself. E.Pn1 and E.Pn2 are the two distinct 12-TET roundings of a true
--- five-equal-step (slendro-style) division of the octave that aren't already
--- major or minor pentatonic under some rotation.
+-- the first four were pentatonic only, on purpose: every one of them is a
+-- five-note anhemitonic set, so nothing quantised to one could land a
+-- semitone against itself. E.Pn1 and E.Pn2 are the two distinct 12-TET
+-- roundings of a true five-equal-step (slendro-style) division of the octave
+-- that aren't already major or minor pentatonic under some rotation.
+--
+-- the eight after them are not pentatonic and several are not in 12-TET at
+-- all, which is the whole point of adding them. a degree here is a number of
+-- SEMITONES, not a MIDI note, and nothing downstream ever rounded it -- so a
+-- 3.5 is three and a half semitones and always was; the table simply never
+-- had a fractional entry in it before. that is what lets the maqam and
+-- dastgah rows carry their real neutral seconds and thirds (the koron/
+-- half-flat degrees, three quarter-tones off the natural) rather than a
+-- 12-TET impression of them, and it is what lets Slendro and Pelog be the
+-- actual Javanese step sizes instead of the two roundings above.
+--
+-- the cost, stated plainly: a seven-note scale with a semitone in it CAN put
+-- two voices a semitone apart, which the original four could not. that is a
+-- fair trade for being able to play in Hijaz, and the four pentatonics are
+-- still first in the list for anyone who wants the old guarantee.
+--
+--   Hijaz   the Arabic/Turkish jins with the augmented second -- 12-TET,
+--           because Hijaz's own second degree is a genuine semitone
+--   Rast    the central Arabic maqam: neutral third and neutral seventh
+--   Bayat   Bayati/Shur -- neutral second, the commonest Persian colour
+--   Sikah   built on the neutral third itself
+--   Homay   Homayoun, the Persian dastgah: neutral second, major third
+--   Slen    slendro, five equal steps of 240 cents
+--   Pelog   the Javanese seven-tone set, its common five-note selection
+--   Anchi   Anchihoye, an Ethiopian qenet -- a semitone above the root and
+--           a semitone below the fifth's octave, which is what gives it its
+--           particular lean
 --
 -- the names are abbreviations rather than words, and deliberately so: the
 -- Scale row draws with `word` (lib/glyph.lua), whose box is 26px wide -- five
 -- characters of norns' font. "Pent Maj" was clipped to "Pent " there, which
 -- named the family and hid the only part that differed between the four. so
--- the shared half is the one that gets abbreviated: P.Maj / P.Min / E.Pn1 /
--- E.Pn2 all fit whole, and index 0 stays the word "free".
-grove.SCALE_NAMES = {"P.Maj", "P.Min", "E.Pn1", "E.Pn2"}
+-- the shared half is the one that gets abbreviated, and every name below fits
+-- five characters whole; index 0 stays the word "free".
+grove.SCALE_NAMES = {
+  "P.Maj", "P.Min", "E.Pn1", "E.Pn2",
+  "Hijaz", "Rast", "Bayat", "Sikah", "Homay", "Slen", "Pelog", "Anchi",
+}
 grove.SCALES = {
   {0, 2, 4, 7, 9},                -- major pentatonic
   {0, 3, 5, 7, 10},               -- minor pentatonic (grove.SCALE's own scale)
   {0, 2, 5, 7, 9},                -- equidistant pentatonic, rounding A
   {0, 2, 5, 8, 10},               -- equidistant pentatonic, rounding B
+  {0, 1, 4, 5, 7, 8, 11},         -- Hijaz
+  {0, 2, 3.5, 5, 7, 9, 10.5},     -- Rast: neutral 3rd and 7th
+  {0, 1.5, 3, 5, 7, 8, 10},       -- Bayati / Shur: neutral 2nd
+  {0, 1.5, 4, 5.5, 7, 9, 10.5},   -- Sikah: rooted on the neutral 3rd
+  {0, 1.5, 4, 5, 7, 8, 11},       -- Homayoun
+  {0, 2.4, 4.8, 7.2, 9.6},        -- slendro: five equal 240-cent steps
+  {0, 1.2, 2.7, 6.7, 7.85},       -- pelog, the common five-note selection
+  {0, 1, 5, 7, 8},                -- Anchihoye (Ethiopian qenet)
 }
 
 function grove.quantise_semitones(x)
@@ -370,7 +408,10 @@ local function rebuild_links()
         -- the socket collapse means a field cabled to a voice always tunes
         -- it -- there is no separate P socket left to require, and no other
         -- meaning a pulse-less "neither" family link to a voice could have.
-        if other.type == "voice" and can_send then
+        -- §2.13 the two new synth families are pitched the same way and land
+        -- in the same list; `voice_links` is keyed by cell id and has never
+        -- cared what type the cell on the other end was.
+        if grove.is_pitched(other) and can_send then
           table.insert(f.voices, {id = other_id, gain = edge.gain})
           voice_links[other_id] = voice_links[other_id] or {}
           table.insert(voice_links[other_id], {f = f, gain = edge.gain})
@@ -387,6 +428,50 @@ end
 
 -- engine forwarding --------------------------------------------------------------
 
+-- §2.13 the pitched families, and what each of them answers to. this file
+-- used to say "voice" everywhere and mean it; the two new synth families run
+-- their pitch through exactly the same route -- a field or a register cabled
+-- in tunes them, the global transpose moves them, the global Scale has the
+-- last word -- so the route is written once and the three differences per
+-- family are in here.
+--
+-- `tune` is the cell's own pitch knob in semitones, `depth` the multiplier it
+-- puts on whatever the cabled fields and registers are doing, and `push` how
+-- the Hz reaches the engine. `glide` and `drift` are optional and only a
+-- modal voice has them: a mode bank's pitch moves under a note that is
+-- already ringing, so portamento and a few cents of continuous wander are
+-- part of what it is. an oscillator has no such need and gets neither.
+local PITCHED = {
+  voice = {
+    tune  = function(id) return wl("voice").tune_semitones(id) end,
+    depth = function(id) return wl("voice").depth(id) end,
+    push  = function(cell, hz) bridge.voice_pitch(cell.index - 1, hz) end,
+    glide = function(cell, secs) bridge.voice_glide(cell.index - 1, secs) end,
+    drift = function(cell, depth, rate, seed)
+      bridge.voice_drift(cell.index - 1, depth, rate, seed)
+    end,
+  },
+  FM = {
+    tune  = function(id) return wl("synth").tune_semitones(id) end,
+    depth = function(id) return wl("synth").depth(id) end,
+    push  = function(cell, hz) bridge.fm_pitch(cell.index - 1, hz) end,
+  },
+  VA = {
+    tune  = function(id) return wl("synth").tune_semitones(id) end,
+    depth = function(id) return wl("synth").depth(id) end,
+    push  = function(cell, hz) bridge.va_pitch(cell.index - 1, hz) end,
+  },
+}
+
+grove.PITCHED = PITCHED
+
+-- is this a cell a field or a register can tune? asked by rebuild_links and
+-- by everything that walks the panel looking for something to push.
+function grove.is_pitched(cell)
+  return (cell and PITCHED[cell.type]) and true or false
+end
+
+
 -- a voice's total offset: every field cabled to it, weighted by cable gain
 -- (bipolar -- a negative cable inverts the field's contour) and normalised by
 -- the total weight, so cabling a second field to a voice averages the two
@@ -397,7 +482,9 @@ end
 -- and the voice sits on its root anyway; at 2 a narrow field reads as a wide
 -- one. it is the per-voice answer to "that is too much melody".
 function grove.depth(voice_id)
-  return wl("voice").depth(voice_id)
+  local cell = topology.get(voice_id)
+  local kind = cell and PITCHED[cell.type]
+  return kind and kind.depth(voice_id) or 1
 end
 
 function grove.offset(voice_id)
@@ -423,32 +510,37 @@ end
 function grove.hz(voice_id, extra_semitones)
   local cell = topology.get(voice_id)
   if not cell or not cell.root then return nil end
+  local kind = PITCHED[cell.type]
+  if not kind then return nil end
   local st = grove.offset(voice_id) + wl("tm").offset(voice_id) * grove.depth(voice_id)
-             + wl("voice").tune_semitones(voice_id)
+             + kind.tune(voice_id)
              + (state.global.pitch_offset or 0) + (extra_semitones or 0)
   st = grove.quantise_semitones(st)
   return cell.root * (2 ^ (st / 12))
 end
 
--- push one voice's pitch, if it actually moved. `glide` is the portamento to
--- ask for; nil means "whatever the slowest field driving this voice wants".
+-- push one cell's pitch, if it actually moved. `glide` is the portamento to
+-- ask for; nil means "whatever the slowest field driving this cell wants".
 local function push_voice(voice_id, glide, extra)
   local cell = topology.get(voice_id)
   if not cell or not cell.root then return end
-  local v = cell.index - 1
+  local kind = PITCHED[cell.type]
+  if not kind then return end
 
-  if glide == nil then
-    glide = 0
-    local links = voice_links[voice_id]
-    if links then
-      for _, l in ipairs(links) do
-        glide = math.max(glide, MODES[l.f.mode].glide)
+  if kind.glide then
+    if glide == nil then
+      glide = 0
+      local links = voice_links[voice_id]
+      if links then
+        for _, l in ipairs(links) do
+          glide = math.max(glide, MODES[l.f.mode].glide)
+        end
       end
     end
-  end
-  if last_glide[voice_id] ~= glide then
-    last_glide[voice_id] = glide
-    bridge.voice_glide(v, glide)
+    if last_glide[voice_id] ~= glide then
+      last_glide[voice_id] = glide
+      kind.glide(cell, glide)
+    end
   end
 
   local hz = grove.hz(voice_id, extra)
@@ -460,7 +552,7 @@ local function push_voice(voice_id, glide, extra)
   -- a staircase.
   if prev and math.abs(hz - prev) < prev * 0.0002 then return end
   last_hz[voice_id] = hz
-  bridge.voice_pitch(v, hz)
+  kind.push(cell, hz)
 end
 
 -- how much SC-side detune drift this voice should carry: a floor everyone
@@ -469,6 +561,9 @@ end
 local function push_drift(voice_id)
   local cell = topology.get(voice_id)
   if not cell or not cell.root then return end
+  -- only a modal voice has a drift: see PITCHED above.
+  local kind = PITCHED[cell.type]
+  if not kind or not kind.drift then return end
   local depth = DRIFT_BASE
   for _, l in ipairs(voice_links[voice_id] or {}) do
     depth = depth + math.abs(l.gain) * grove.span(l.f.id) * 0.02
@@ -727,7 +822,7 @@ end
 function grove.init()
   rebuild_links()
   for id, cell in topology.each() do
-    if cell.type == "voice" then
+    if grove.is_pitched(cell) then
       push_drift(id)
       push_voice(id)
     end
@@ -743,7 +838,7 @@ local function on_graph_change()
     if not tracked[s_id] then wl("exciter").set_colour_offset(s_id, 0) end
   end
   for id, cell in topology.each() do
-    if cell.type == "voice" then
+    if grove.is_pitched(cell) then
       push_drift(id)
       push_voice(id)
     end

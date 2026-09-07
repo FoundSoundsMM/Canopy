@@ -224,8 +224,9 @@ do
     return true
   end)())
 
-  -- and the gusts' delay line is not here any more: it is a room, not a
-  -- channel, and it went to the gusts' own page (gust.lua's MACROS).
+  -- and the shared delay line is not here any more: it is a room, not a
+  -- channel. it went to the gusts' own page, and then (§2.11c, once every
+  -- family could reach it) to a Send page one K3 further along.
   local room_row = false
   for _, p in ipairs(mixer.PARAMS) do
     if p.key:match("^gust") then room_row = true end
@@ -235,12 +236,12 @@ do
 end
 
 -- 3: K3 there, K2 back -------------------------------------------------------
--- the stack is five deep now -- global, gusts, mixer, colour, map -- so the
--- mixer is two K3s in rather than one, and what this section is really
+-- the stack is six deep now -- global, gusts, mixer, send, colour, map -- so
+-- the mixer is two K3s in rather than one, and what this section is really
 -- checking is that the walk is a walk: strictly one page per press, in one
 -- fixed order, stopping dead at both ends.
 
-local VIEWS = {"global", "gusts", "mixer", "colour", "map"}
+local VIEWS = {"global", "gusts", "mixer", "send", "colour", "map"}
 
 print("\n-- K3 forward, K2 back, one page at a time --")
 do

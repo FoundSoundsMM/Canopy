@@ -2,9 +2,11 @@
 --
 -- covers: (1) four cells, one row, above the gust rows; (2) the Speed page
 -- reaches the engine, log-mapped end to end; (3) it is a pure continuous
--- source -- cabled to a voice, an exciter, the heartwood, a gust or an
--- Output cell it lands on that cell's usual continuous bus, and a pulse
--- landing on it does nothing; (4) cellparam hands out the module's own page.
+-- source -- cabled to a voice, an exciter, a gust or an Output cell it lands
+-- on that cell's usual continuous bus, and a pulse landing on it does
+-- nothing; (4) cellparam hands out the module's own page; (5) the four
+-- destination slots are independent, and (6) the eight shapes are the eight
+-- the engine knows, in the same order.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -50,8 +52,13 @@ do
 
   local page = M.cellparam.page(id)
   check("cellparam hands out the lfo page", page == M.lfo)
-  check("it has four rows: Speed, Depth, Target, Param",
-        page.PARAM_COUNT == 4, tostring(page.PARAM_COUNT))
+  check("it has six rows: Speed, Shape, Slot, Target, Param, Depth",
+        page.PARAM_COUNT == 6, tostring(page.PARAM_COUNT))
+  local keys = {}
+  for i, p in ipairs(page.PARAMS) do keys[i] = p.key end
+  check("in that order",
+        table.concat(keys, ",") == "rate,shape,slot,target,param,depth",
+        table.concat(keys, ","))
 
   local before = #CALLS.lfo_rate
   local p = page.nudge(id, 1, 0.1)
@@ -134,10 +141,134 @@ do
         tostring(M.lfo.target(L)))
 
   -- pulling that cable drops the target rather than leaving it pointed at
-  -- something it no longer reaches.
+  -- something it no longer reaches. it goes IDLE rather than sliding onto
+  -- whatever else happens to be cabled: the player named a destination, and
+  -- silently re-aiming a modulator at a different one is worse than stopping.
   M.patch.remove(L, "oak")
-  check("pulling the cable drops it", M.lfo.target(L) == "gu.squall",
+  check("pulling the cable drops it", M.lfo.target(L) == nil,
         tostring(M.lfo.target(L)))
+
+  -- an untouched slot 1 does still follow the cables, which is what keeps a
+  -- freshly patched LFO working without opening its page at all.
+  local M2 = fresh(20)
+  M2.patch.add("lfo.neap", "gu.squall", 0.5)
+  check("an untouched slot aims itself at the one cable",
+        M2.lfo.target("lfo.neap") == "gu.squall",
+        tostring(M2.lfo.target("lfo.neap")))
+end
+
+print("\n-- four slots, each with its own target, param and depth --")
+do
+  local M = fresh(21)
+  local L = "lfo.flood"
+  check("four of them", M.lfo.SLOTS == 4, tostring(M.lfo.SLOTS))
+  M.patch.add(L, "gu.gale", 0.5)
+  M.patch.add(L, "oak", 0.5)
+
+  M.lfo.set_target(L, "gu.gale", 1)
+  M.lfo.set_param_key(L, "timbre", 1)
+  M.lfo.set_depth(L, 0.5, 1)
+  M.lfo.set_target(L, "oak", 2)
+  M.lfo.set_param_key(L, "bright", 2)
+  M.lfo.set_depth(L, 0.1, 2)
+
+  check("slot 1 holds its own pair", M.lfo.target(L, 1) == "gu.gale"
+        and M.lfo.param_key(L, 1) == "timbre")
+  check("slot 2 holds a different one", M.lfo.target(L, 2) == "oak"
+        and M.lfo.param_key(L, 2) == "bright")
+  check("with their own depths", math.abs(M.lfo.depth(L, 1) - 0.5) < 1e-9
+        and math.abs(M.lfo.depth(L, 2) - 0.1) < 1e-9,
+        M.lfo.depth(L, 1) .. " " .. M.lfo.depth(L, 2))
+  check("slots 3 and 4 are off", M.lfo.target(L, 3) == nil
+        and M.lfo.target(L, 4) == nil)
+  check("and it counts as modulating both cells",
+        M.lfo.modulates(L, "gu.gale") and M.lfo.modulates(L, "oak"))
+
+  -- one pass moves both, from the same value of the shape.
+  local timbre_before = #CALLS.gust_timbre
+  local bright_before = #CALLS.voice_bright
+  M.lfo.apply()
+  check("one pass pushes both destinations",
+        #CALLS.gust_timbre > timbre_before and #CALLS.voice_bright > bright_before)
+  check("and neither stored value moved",
+        math.abs(M.state.get_vparam("gu.gale", "timbre", 0.35) - 0.35) < 1e-9
+        and math.abs(M.state.get_vparam("oak", "bright", 0.5) - 0.5) < 1e-9)
+
+  -- the Slot row is what the page's Target/Param/Depth rows follow.
+  M.state.set_vparam(L, "slot", 0)
+  check("the page starts on slot 1", M.lfo.slot(L) == 1, tostring(M.lfo.slot(L)))
+  check("and Target with no slot given reads slot 1",
+        M.lfo.target(L) == "gu.gale", tostring(M.lfo.target(L)))
+  M.state.set_vparam(L, "slot", 0.3)
+  check("moving the row moves to slot 2", M.lfo.slot(L) == 2,
+        tostring(M.lfo.slot(L)))
+  check("and Target follows it", M.lfo.target(L) == "oak",
+        tostring(M.lfo.target(L)))
+end
+
+print("\n-- eight shapes, and the engine is told which --")
+do
+  local M = fresh(22)
+  local L = "lfo.ebb"
+  check("eight of them", #M.lfo.SHAPES == 8, tostring(#M.lfo.SHAPES))
+  check("sine first, follow last",
+        M.lfo.SHAPES[1] == "sine" and M.lfo.SHAPES[8] == "follow",
+        M.lfo.SHAPES[1] .. ".." .. M.lfo.SHAPES[8])
+
+  -- every position on the knob reads back as itself, and pushes the index the
+  -- engine expects: 0-based, in the table's own order.
+  for i = 1, #M.lfo.SHAPES do
+    M.state.set_vparam(L, "shape", (i - 0.5) / #M.lfo.SHAPES)
+    check("position " .. i .. " is " .. M.lfo.SHAPES[i],
+          M.lfo.shape_index(L) == i and M.lfo.shape(L) == M.lfo.SHAPES[i],
+          tostring(M.lfo.shape_index(L)))
+  end
+
+  local before = #CALLS.lfo_shape
+  M.lfo.param(2).push(L)
+  check("pushing Shape reaches the engine", #CALLS.lfo_shape > before)
+  local c = CALLS.lfo_shape[#CALLS.lfo_shape]
+  check("0-based, at this cell's index",
+        c.n == #M.lfo.SHAPES - 1 and c.index == M.topology.get(L).index,
+        c.index .. " " .. c.n)
+
+  -- every shape stays inside -1..+1 across a whole cycle, which is what lets
+  -- Depth mean the same thing whichever one is running.
+  M.state.set_vparam(L, "rate", 1.0)
+  local period = 1 / M.lfo.rate_hz(L)
+  for i = 1, #M.lfo.SHAPES do
+    M.state.set_vparam(L, "shape", (i - 0.5) / #M.lfo.SHAPES)
+    local lo, hi = 2, -2
+    for k = 0, 24 do
+      T = T + period / 25
+      local v = M.lfo.value(L)
+      lo, hi = math.min(lo, v), math.max(hi, v)
+    end
+    check(M.lfo.SHAPES[i] .. " stays bipolar and bounded",
+          lo >= -1.0001 and hi <= 1.0001,
+          string.format("%.3f..%.3f", lo, hi))
+  end
+
+  -- the oscillator shapes actually move; the follower with nothing cabled
+  -- sits still at the bottom, which is the honest reading of a silent patch.
+  for i = 1, 7 do
+    M.state.set_vparam(L, "shape", (i - 0.5) / #M.lfo.SHAPES)
+    -- eleven samples over two cycles rather than five over one: a
+    -- sample-and-hold only changes at the wrap, and a five-sample window can
+    -- put the wrap on its first sample and read flat for the rest.
+    local seen = {}
+    for k = 1, 11 do
+      T = T + period / 5
+      seen[k] = M.lfo.value(L)
+    end
+    local moved = false
+    for k = 2, 11 do if seen[k] ~= seen[1] then moved = true end end
+    check(M.lfo.SHAPES[i] .. " moves over a cycle", moved)
+  end
+  M.state.set_vparam(L, "shape", 7.5 / 8)
+  check("follow reads the outputs, and sits at rest with none cabled",
+        M.lfo.shape(L) == "follow" and M.lfo.value(L) == -1,
+        tostring(M.lfo.value(L)))
 end
 
 print("\n-- Param: which knob of the target it moves --")

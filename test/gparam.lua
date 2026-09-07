@@ -129,6 +129,84 @@ do
         math.abs(snapped_hz - root * 2 ^ (2 / 12)) < 1e-6, string.format("%.3f", snapped_hz))
 end
 
+print("\n-- the world scales, including the microtonal ones --")
+do
+  local M = fresh(10)
+  local root = M.topology.get(OAK).root
+
+  check("there are twelve of them", #M.grove.SCALES == 12,
+        tostring(#M.grove.SCALES))
+  check("one name per scale", #M.grove.SCALE_NAMES == #M.grove.SCALES,
+        #M.grove.SCALE_NAMES .. " vs " .. #M.grove.SCALES)
+
+  -- every entry has to be sorted, inside the octave, and start on the root --
+  -- snap_to searches the octave a degree lands in and the one above, and an
+  -- entry outside 0..12 would quantise into a register nothing else is in.
+  local bad = {}
+  for i, sc in ipairs(M.grove.SCALES) do
+    if sc[1] ~= 0 then table.insert(bad, M.grove.SCALE_NAMES[i] .. ": no root") end
+    for j = 1, #sc do
+      if sc[j] < 0 or sc[j] >= 12 then
+        table.insert(bad, M.grove.SCALE_NAMES[i] .. ": " .. sc[j] .. " outside the octave")
+      end
+      if j > 1 and sc[j] <= sc[j - 1] then
+        table.insert(bad, M.grove.SCALE_NAMES[i] .. ": not ascending")
+      end
+    end
+  end
+  check("every scale is a sorted set inside one octave, rooted at 0",
+        #bad == 0, bad[1] or "")
+
+  -- the point of adding them: a degree is a number of SEMITONES and always
+  -- was, so a fractional entry is a real quarter-tone rather than a rounding.
+  -- at least one scale has to have one, or nothing microtonal got in.
+  local fractional = false
+  for _, sc in ipairs(M.grove.SCALES) do
+    for _, d in ipairs(sc) do
+      if math.abs(d - math.floor(d + 0.5)) > 1e-9 then fractional = true end
+    end
+  end
+  check("and at least one of them is genuinely microtonal", fractional)
+
+  -- Rast (index 6) has a neutral third at 3.5 semitones: three and a half,
+  -- not three and not four. quantising a voice tuned near it must land there.
+  local rast
+  for i, n in ipairs(M.grove.SCALE_NAMES) do if n == "Rast" then rast = i end end
+  check("Rast is on the list", rast ~= nil)
+  M.voice.init()
+  M.state.set_vparam(OAK, "tune", 0.5 + (3.4 / 48))   -- 3.4 semitones up
+  M.state.global.scale_i = rast
+  check("and it snaps a voice onto its neutral third",
+        math.abs(M.grove.hz(OAK) - root * 2 ^ (3.5 / 12)) < 1e-6,
+        string.format("%.4f", M.grove.hz(OAK)))
+
+  -- slendro is five equal steps of 240 cents, so its second degree is 2.4
+  -- semitones -- a pitch 12-TET has no name for at all.
+  local slen
+  for i, n in ipairs(M.grove.SCALE_NAMES) do if n == "Slen" then slen = i end end
+  M.state.set_vparam(OAK, "tune", 0.5 + (2.3 / 48))
+  M.state.global.scale_i = slen
+  check("and slendro onto its own 240-cent step",
+        math.abs(M.grove.hz(OAK) - root * 2 ^ (2.4 / 12)) < 1e-6,
+        string.format("%.4f", M.grove.hz(OAK)))
+
+  -- and every one of them is reachable from the row, which is the thing that
+  -- would silently break if the Scale row had a hardcoded count in it.
+  M.state.global.scale_i = 0
+  local scale_i = 4
+  local reached = {}
+  for _ = 1, #M.grove.SCALES * 3 do
+    M.gparam.nudge(scale_i, 1, true)
+    reached[M.state.global.scale_i] = true
+  end
+  local missed = {}
+  for i = 1, #M.grove.SCALES do
+    if not reached[i] then table.insert(missed, M.grove.SCALE_NAMES[i]) end
+  end
+  check("every scale is reachable from the row", #missed == 0,
+        table.concat(missed, ","))
+end
+
 print("\n-- Drops widens the per-strike detune range --")
 do
   -- on_strike's detune only shows up in what actually reaches the engine

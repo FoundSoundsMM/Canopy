@@ -185,6 +185,11 @@ gvoice.PARAMS = {
       bridge.g_amp(cell.index - 1, gvoice.level(id))
     end,
   },
+  -- §2.11c how much of this drum goes to the shared send effect. this is the
+  -- row the whole send was built for: a kit that could be compressed,
+  -- saturated and crushed on the Colour page and could not be put in the same
+  -- room as the drone underneath it.
+  wl("send").row(),
 }
 
 gvoice.PARAM_COUNT = #gvoice.PARAMS

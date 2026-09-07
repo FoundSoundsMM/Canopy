@@ -101,6 +101,12 @@ local DESC = {
   ["lfo.neap"]   = "A sine that never stops. Cable it out, then pick what it moves.",
   ["lfo.spring"] = "A sine that never stops. Cable it out, then pick what it moves.",
 
+  -- the two new synth families / X and V (§2.13)
+  ["fm.1"] = "Two operator FM. Ratio and Index make the tone. Strike it.",
+  ["fm.2"] = "Two operator FM, an octave up. Ratio and Index make the tone.",
+  ["va.1"] = "Sine to saw, plus noise, folded and filtered. Strike it.",
+  ["va.2"] = "Sine to saw, plus noise, folded and filtered. An octave up.",
+
   -- the grove / F (§2.6)
   ["f.cuckoo"]   = "Picks notes. Two notes back and forth, never quite the same.",
   ["f.nightjar"] = "Picks notes. Sits on the root and only drifts a few cents.",
@@ -116,8 +122,8 @@ end
 
 -- §4.2 "the one thing that matters about that cell" --------------------
 -- a voice has no single one: it has the sound editor instead (§5.5), which
--- is why there is no `voice` row here. GVOICE, TM, GUST, LFO and SMP are the
--- same way.
+-- is why there is no `voice` row here. GVOICE, TM, GUST, LFO, SMP, FM and VA
+-- are the same way.
 
 local CHARACTER = {
   D = {label = "Rate",  lo = 0, hi = 1, note = "how often it fires"},

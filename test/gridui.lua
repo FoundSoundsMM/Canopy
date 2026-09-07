@@ -37,7 +37,7 @@ do
   local M = fresh(1)
   local SKETCH = {
     "OOOOOOOOOOOOOOOO",
-    ".M.M.FFFNNN.M.M.",
+    "MMMM.FFFNNN.XXVV",
     "................",
     "F..ttCTTTTCtt..S",
     ".F...CTTTTC...S.",
@@ -49,7 +49,7 @@ do
   -- two-character family (TM) to one column each.
   local LETTER = {O = "O", voice = "M", GVOICE = nil, D = "T", TM = "t",
                   C = "C", SMP = "S", E = "E", R = "R", F = "F", GUST = "G",
-                  LFO = "L"}
+                  LFO = "L", FM = "X", VA = "V"}
   local rows_ok = true
   local first_bad = nil
   for y = 1, 8 do

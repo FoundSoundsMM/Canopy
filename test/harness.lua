@@ -71,7 +71,8 @@ local function fresh_calls()
     strike = {},
     exciter_on = {}, exciter_off = {}, exciter_colour = {}, exciter_gated = {}, exciter_gate = {},
     patch_add = {}, patch_gain = {}, patch_free = {},
-    voice_mod = {}, voice_structure = {},
+    voice_mod = {}, voice_structure = {}, voice_bright = {},
+    voice_damp = {}, voice_drive = {}, voice_amp = {}, voice_pos = {},
     voice_pitch = {}, voice_glide = {}, voice_drift = {},
     voice_decay = {}, exciter_decay = {}, voice_bend = {},
     smp_load = {}, smp_note = {}, smp_attack = {}, smp_decay = {},
@@ -82,7 +83,9 @@ local function fresh_calls()
     gust_note = {}, gust_pitch = {}, gust_attack = {}, gust_decay = {},
     gust_timbre = {}, gust_cross = {}, gust_amp = {}, gust_pan = {},
     gust_space = {},
-    lfo_rate = {},
+    lfo_rate = {}, lfo_shape = {},
+    fm_note = {}, fm_pitch = {}, fm_set = {}, fm_hold = {},
+    va_note = {}, va_pitch = {}, va_set = {}, va_hold = {},
     voice_hold = {}, g_hold = {}, gust_hold = {},
   }
 end
@@ -112,6 +115,16 @@ engine = setmetatable({}, {__index = function(_, k)
       table.insert(CALLS.voice_mod, {t = T, voice = a[1], v = a[2]})
     elseif k == "voice_structure" then
       table.insert(CALLS.voice_structure, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_bright" then
+      table.insert(CALLS.voice_bright, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_damp" then
+      table.insert(CALLS.voice_damp, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_drive" then
+      table.insert(CALLS.voice_drive, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_amp" then
+      table.insert(CALLS.voice_amp, {t = T, voice = a[1], v = a[2]})
+    elseif k == "voice_pos" then
+      table.insert(CALLS.voice_pos, {t = T, voice = a[1], v = a[2]})
     elseif k == "voice_pitch" then
       table.insert(CALLS.voice_pitch, {t = T, voice = a[1], hz = a[2]})
     elseif k == "voice_glide" then
@@ -155,9 +168,28 @@ engine = setmetatable({}, {__index = function(_, k)
     elseif k == "gust_pan" then
       table.insert(CALLS.gust_pan, {t = T, index = a[1], v = a[2]})
     elseif k == "gust_space" then
-      table.insert(CALLS.gust_space, {t = T, mix = a[1], time = a[2], fb = a[3]})
+      table.insert(CALLS.gust_space, {t = T, mix = a[1], time = a[2], fb = a[3],
+                                      tone = a[4]})
+    elseif k == "fm_note" then
+      table.insert(CALLS.fm_note, {t = T, index = a[1], hz = a[2], force = a[3]})
+    elseif k == "fm_pitch" then
+      table.insert(CALLS.fm_pitch, {t = T, index = a[1], hz = a[2]})
+    elseif k == "fm_set" then
+      table.insert(CALLS.fm_set, {t = T, index = a[1], key = a[2], v = a[3]})
+    elseif k == "fm_hold" then
+      table.insert(CALLS.fm_hold, {t = T, index = a[1], on = a[2]})
+    elseif k == "va_note" then
+      table.insert(CALLS.va_note, {t = T, index = a[1], hz = a[2], force = a[3]})
+    elseif k == "va_pitch" then
+      table.insert(CALLS.va_pitch, {t = T, index = a[1], hz = a[2]})
+    elseif k == "va_set" then
+      table.insert(CALLS.va_set, {t = T, index = a[1], key = a[2], v = a[3]})
+    elseif k == "va_hold" then
+      table.insert(CALLS.va_hold, {t = T, index = a[1], on = a[2]})
     elseif k == "lfo_rate" then
       table.insert(CALLS.lfo_rate, {t = T, index = a[1], hz = a[2]})
+    elseif k == "lfo_shape" then
+      table.insert(CALLS.lfo_shape, {t = T, index = a[1], n = a[2]})
     elseif k == "smp_load" then
       table.insert(CALLS.smp_load, {t = T, index = a[1], path = a[2]})
     elseif k == "smp_note" then
@@ -211,7 +243,7 @@ function fresh(seed)
                       "lexicon", "sample", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
                       "gparam", "mixer", "colour", "tm", "gust", "lfo",
-                      "cellparam"}) do
+                      "send", "synth", "cellparam"}) do
     M[n] = wl(n)
   end
   return M

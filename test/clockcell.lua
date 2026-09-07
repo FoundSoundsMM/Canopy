@@ -189,15 +189,38 @@ do
   local M = fresh(2)
   M.clockcell.set_high(TOLL, true)
 
+  -- and at the index that family's every other command uses, which the three
+  -- of these got wrong for a while: a drum's and a gust's cells are numbered
+  -- from 1 and the engine's arrays from 0, so an unadjusted index held the
+  -- cell next door and dropped the last of each family outright.
   M.patch.add(TOLL, "oak", 1.0)
   check("a modal voice", #CALLS.voice_hold == 1 and CALLS.voice_hold[1].on == 1,
         tostring(#CALLS.voice_hold))
+  check("at Oak's own engine index", CALLS.voice_hold[1].voice == 0,
+        tostring(CALLS.voice_hold[1].voice))
   M.patch.add(TOLL, "gu.gale", 1.0)
   check("a gust", #CALLS.gust_hold == 1 and CALLS.gust_hold[1].on == 1,
         tostring(#CALLS.gust_hold))
+  check("at Gust 1's own engine index", CALLS.gust_hold[1].index == 0,
+        tostring(CALLS.gust_hold[1].index))
   M.patch.add(TOLL, "gv.yaffle", 1.0)
   check("a drum", #CALLS.g_hold == 1 and CALLS.g_hold[1].on == 1,
         tostring(#CALLS.g_hold))
+  check("at Yaffle's own engine index", CALLS.g_hold[1].index == 0,
+        tostring(CALLS.g_hold[1].index))
+
+  -- the last cell of each family is the one an off-by-one loses entirely,
+  -- since the engine's bounds check drops it rather than mis-routing it.
+  local M2 = fresh(4)
+  M2.clockcell.set_high(TOLL, true)
+  M2.patch.add(TOLL, "gv.rattle", 1.0)
+  check("and the LAST drum is reachable at all",
+        #CALLS.g_hold == 1 and CALLS.g_hold[1].index == 5,
+        tostring(CALLS.g_hold[1] and CALLS.g_hold[1].index))
+  M2.patch.add(TOLL, "gu.haar", 1.0)
+  check("as is the last gust",
+        #CALLS.gust_hold == 1 and CALLS.gust_hold[1].index == 11,
+        tostring(CALLS.gust_hold[1] and CALLS.gust_hold[1].index))
 
   -- and the families with no envelope to hold are silently skipped rather
   -- than erroring: a field takes a note, a register takes a trigger.

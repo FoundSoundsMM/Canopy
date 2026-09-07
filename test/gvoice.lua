@@ -47,7 +47,11 @@ print("\n-- the sound page pushes all six at init --")
 do
   local M = fresh(1)
   M.gvoice.init()
-  check("six parameters", M.gvoice.PARAM_COUNT == 6, "#" .. M.gvoice.PARAM_COUNT)
+  check("seven parameters", M.gvoice.PARAM_COUNT == 7, "#" .. M.gvoice.PARAM_COUNT)
+  -- §2.11c the seventh is Send: the row that lets a kit sit in the same room
+  -- as the drone under it rather than always being the dry thing on top.
+  check("and the last of them is Send",
+        M.gvoice.param(7).key == "send", tostring(M.gvoice.param(7).key))
   check("pitch went out", #CALLS.g_pitch >= 6, "#" .. #CALLS.g_pitch)
   check("decay went out", #CALLS.g_decay >= 6, "#" .. #CALLS.g_decay)
   check("tone went out", #CALLS.g_tone >= 6, "#" .. #CALLS.g_tone)

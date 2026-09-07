@@ -279,35 +279,37 @@ do
         tostring(#CALLS.gust_note))
 end
 
-print("\n-- the shared delay line clamps to its own range --")
+print("\n-- the shared delay line moved off this page and onto the send page --")
 do
   local M = fresh(11)
+  -- §2.11c the line is a send now, so its numbers and its rows belong to
+  -- lib/send.lua. gust.get_space/set_space stay as forwarders because
+  -- gust.init and a few callers still ask for them by name.
   M.gust.set_space("delay", 99)
-  check("delay time is capped", M.gust.get_space("delay") == M.gust.DELAY_MAX,
+  check("delay time is capped", M.gust.get_space("delay") == M.send.DELAY_MAX,
         tostring(M.gust.get_space("delay")))
   M.gust.set_space("regen", 1.0)
   check("feedback stops short of unity",
-        M.gust.get_space("regen") == M.gust.REGEN_MAX,
+        M.gust.get_space("regen") == M.send.REGEN_MAX,
         tostring(M.gust.get_space("regen")))
   M.gust.set_space("space", -3)
   check("mix cannot go negative", M.gust.get_space("space") == 0)
 
-  -- and the gusts page drives all three. they have moved twice: off the
-  -- mixer once that page became one fader per active output (a room is not a
-  -- channel), onto the global page for want of anywhere better, and now onto
-  -- the page that is actually about this family.
-  local before = #CALLS.gust_space
-  local rows = 0
-  for i = 1, M.gust.MACRO_COUNT do
-    local key = M.gust.macro_param(i).key
-    if key == "gust_space" or key == "gust_delay" or key == "gust_regen" then
-      rows = rows + 1
-      M.gust.macro_nudge(i, 1, true)
+  -- they have moved three times now: off the mixer once that page became one
+  -- fader per active output (a room is not a channel), onto the global page
+  -- for want of anywhere better, onto the gusts page when the gusts owned the
+  -- line, and off it again the moment every family could reach it.
+  check("no delay row is left on the gusts page", (function()
+    for i = 1, M.gust.MACRO_COUNT do
+      local key = M.gust.macro_param(i).key
+      if key == "gust_space" or key == "gust_delay" or key == "gust_regen" then
+        return false
+      end
     end
-  end
-  check("the gusts page carries all three rows", rows == 3, tostring(rows))
-  check("and each pushes the line", #CALLS.gust_space - before == 3,
-        tostring(#CALLS.gust_space - before))
+    return true
+  end)(), "a delay row is still on the gusts page")
+  check("the gusts page is the five family offsets and nothing else",
+        M.gust.MACRO_COUNT == 5, tostring(M.gust.MACRO_COUNT))
   check("and none of them is left on the global page", (function()
     for i = 1, M.gparam.PARAM_COUNT do
       if M.gparam.param(i).key:match("^gust_") then return false end
@@ -320,12 +322,6 @@ do
     end
     return true
   end)(), "a gust_ row is still on the mixer")
-
-  -- the delay row's coarse step is in seconds, so nudging it up from the
-  -- default must not blow past the cap or land somewhere unreadable.
-  local t = M.gust.get_space("delay")
-  check("nudging Delay leaves it in range",
-        t >= M.gust.DELAY_MIN and t <= M.gust.DELAY_MAX, tostring(t))
 end
 
 print("\n-- the family macros: offsets over all twelve, not values --")
@@ -475,7 +471,12 @@ do
   local M = fresh(12)
   local page = M.cellparam.page("gu.buffet")
   check("cellparam hands out the gust page", page == M.gust)
-  check("six rows, one screen", page.PARAM_COUNT == 6, tostring(page.PARAM_COUNT))
+  -- §2.11c the seventh is Send: how much of this cell goes to the shared
+  -- effect. still one screen.
+  check("seven rows, one screen", page.PARAM_COUNT == 7,
+        tostring(page.PARAM_COUNT))
+  check("and the last of them is Send",
+        page.param(7).key == "send", tostring(page.param(7).key))
   for i = 1, page.PARAM_COUNT do
     local p = page.param(i)
     local v = p.get("gu.buffet")

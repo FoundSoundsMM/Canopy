@@ -8,7 +8,7 @@
 -- collapse into one cable endpoint; Climate is gone and its letter is
 -- reused for a small Clock family; the six percussion cells become two
 -- three-cell groups (the ping ones read "F", the noise ones read "N");
--- Turing Machines are unchanged; the weave/heartwood/exciter families keep
+-- the weave/heartwood/exciter families keep
 -- their mechanics with a smaller, curated set of default seats; and the two
 -- bottom rows carry ten Gust cells -- small drone synths, one per cell (the
 -- Q4/Q6 step-sequencer lanes that were briefly there are gone; see §2.11).
@@ -17,7 +17,7 @@
 --
 --       1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
 --  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
---  2    .   M   .   M   .   F   F   F   N   N   N   .   M   .   M   .
+--  2    M   M   M   M   .   F   F   F   N   N   N   .   X   X   V   V
 --  3    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
 --  4    F   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   S
 --  5    .   F   .   .   .   C   T   T   T   T   C   .   .   .   S   .
@@ -25,12 +25,21 @@
 --  7    E   E   .   F   .   G   G   G   G   G   G   .   S   .   R   R
 --  8    E   E   E   .   .   G   G   G   G   G   G   .   .   R   R   R
 --
---   O  output (16)     M  voice (4)        F  grove field / percussion-ping
+--   O  output (16)     M  modal voice (4)  F  grove field / percussion-ping
 --   N  percussion-noise TM Turing Machine  C  clock (4)
 --   T  trigger source (8, was D)           S  sample player (4)
 --   E  exciter (6, was S)                  R  weave (6)
 --   G  gust (12, drone synths)             L  LFO (4, sine modulators)
+--   X  2-op FM synth (2)                   V  wavefolding VA synth (2)
 --   .  unregistered, dark and inert
+--
+-- row 2 is the instrument row and reads left to right as one sentence: the
+-- four modal voices, a gap, the six drums, a gap, the four new synths. it
+-- used to interleave them -- two voices, the drums, two more voices -- which
+-- put the same family on both sides of the kit and left no seat anywhere for
+-- a family that was not already on the panel. grouped, every family is one
+-- run of adjacent cells and the two gaps are the only punctuation the row
+-- needs.
 
 local topology = {}
 
@@ -72,14 +81,15 @@ end
 -- handlers), the same "every socket is androgynous" principle the panel
 -- already ran on -- just with one socket per voice instead of four.
 
--- all four sit together on row 2 now, two either side of the six percussion
--- cells, rather than two up top and two buried among the E/R families in row
--- 7 -- where the panel read as having two voices, not four.
+-- all four sit together at the left end of row 2 now. they used to be split
+-- two-and-two either side of the drum block, which read as two separate
+-- families of two and left the four new synths (§2.13) nowhere to go; the row
+-- is one family per run now, modal voices first.
 local VOICES = {
-  {id = "oak",   name = "Oak",   index = 1, root = 55,  decay = 1.2,  struct = 0.55, damp = 1.1, x = 2,  y = 2},
-  {id = "hazel", name = "Hazel", index = 2, root = 220, decay = 0.28, struct = 0.95, damp = 1.3, x = 4,  y = 2},
-  {id = "alder", name = "Alder", index = 3, root = 98,  decay = 1.6,  struct = 0.50, damp = 0.8, x = 13, y = 2},
-  {id = "rowan", name = "Rowan", index = 4, root = 330, decay = 1.8,  struct = 0.75, damp = 0.6, x = 15, y = 2},
+  {id = "oak",   name = "Oak",   index = 1, root = 55,  decay = 1.2,  struct = 0.55, damp = 1.1, x = 1, y = 2},
+  {id = "hazel", name = "Hazel", index = 2, root = 220, decay = 0.28, struct = 0.95, damp = 1.3, x = 2, y = 2},
+  {id = "alder", name = "Alder", index = 3, root = 98,  decay = 1.6,  struct = 0.50, damp = 0.8, x = 3, y = 2},
+  {id = "rowan", name = "Rowan", index = 4, root = 330, decay = 1.8,  struct = 0.75, damp = 0.6, x = 4, y = 2},
 }
 
 for _, v in ipairs(VOICES) do
@@ -120,8 +130,9 @@ for _, d in ipairs(D_CELLS) do
 end
 
 -- 2.3b Turing Machine cells -- TM (4) ---------------------------------------
--- unchanged: independent 8-bit shift-register sequencers, no phase of their
--- own, moved only by an incoming pulse. see lib/tm.lua.
+-- independent shift-register voltage sources -- the right-hand side of a
+-- Marbles. no phase of their own, moved only by an incoming pulse, and they
+-- answer with a number rather than with a pulse of their own. see lib/tm.lua.
 
 local TM_CELLS = {
   {id = "padfoot",    x = 4,  y = 4, counterpart = "tatterfoal"},
@@ -264,6 +275,54 @@ for i, gc in ipairs(GVOICE_CELLS) do
   })
 end
 
+-- 2.13 the new synths -- X/V (4, internally "FM" and "VA") -------------------
+-- the right-hand end of the instrument row, and the first genuinely new
+-- sound-making family since the gusts. four cells, two of each kind:
+--
+--   X  a two-operator FM voice. one sine modulating another, at a Ratio you
+--      set, by an Index you set, with the modulator able to feed back into
+--      itself. that is the whole of it -- no operator stack, no algorithm
+--      menu. two operators is where FM stops being a preset and starts being
+--      something you can hear the shape of while you turn the knob.
+--   V  a variable-waveform virtual-analogue voice. one oscillator morphing
+--      continuously from sine to saw, a noise source blended alongside it, a
+--      resonant low-pass, and a Buchla-style wavefolder after the filter --
+--      which is what stops it being a subtractive synth with the corners
+--      already taken off. fold a sine and you get harmonics that no filter
+--      can put back.
+--
+-- both are struck like a voice and both have an envelope of their own
+-- (Attack and Decay per cell), which is what makes them play from the panel's
+-- own pulse families rather than droning like a gust. their pitch runs
+-- through the same route a modal voice's does -- a field or a register cabled
+-- in tunes them, the global Pitch transposes them, and the global Scale has
+-- the last word -- so a TM cabled to one plays it in the same key as
+-- everything else on the panel.
+--
+-- `index` is 1-based per KIND, not across the four: the engine keeps two
+-- arrays of two, and a cell's index is its slot in its own.
+local FM_CELLS = {
+  {id = "fm.1", name = "FM 1", index = 1, root = 110.0, decay = 0.9, x = 13, y = 2},
+  {id = "fm.2", name = "FM 2", index = 2, root = 220.0, decay = 0.5, x = 14, y = 2},
+}
+
+for _, f in ipairs(FM_CELLS) do
+  reg("FM", f.id, f.name, {{f.x, f.y}}, {
+    letter = "X", index = f.index, root = f.root, decay = f.decay,
+  })
+end
+
+local VA_CELLS = {
+  {id = "va.1", name = "VA 1", index = 1, root = 82.41, decay = 1.1, x = 15, y = 2},
+  {id = "va.2", name = "VA 2", index = 2, root = 164.81, decay = 0.6, x = 16, y = 2},
+}
+
+for _, v in ipairs(VA_CELLS) do
+  reg("VA", v.id, v.name, {{v.x, v.y}}, {
+    letter = "V", index = v.index, root = v.root, decay = v.decay,
+  })
+end
+
 -- 2.4 exciter cells -- E (6, internally type "E", was "S") ------------------
 -- trimmed from 20 to 6 -- a spread of textures (rustle, spiky resonance,
 -- crackle, grain bursts, pitched chirp, slow walk).
@@ -362,13 +421,14 @@ for i, gu in ipairs(GUST_CELLS) do
 end
 
 -- 2.12 the LFOs -- L (4, internally type "LFO") -----------------------------
--- four free-running sine sources, sitting on the row right above the gusts.
+-- four free-running modulators, sitting on the row right above the gusts.
 -- each is a plain continuous point, patched like anything else -- what a
 -- cable out of one bends is decided entirely by the cell at its other end
--- (dispatch.lua), same as an E or H cell's stream; the cable's own gain
--- decides how much. the cell's own page has exactly one row, Speed, so
--- "select a destination" is just the ordinary hold/tap cable gesture and
--- there is nothing else here to set. see lib/lfo.lua.
+-- (dispatch.lua), same as an E cell's stream; the cable's own gain decides
+-- how much. the cell's own page carries eight shapes (including a
+-- sample-and-hold and an envelope follower on the Output row) and four
+-- destination slots, each with its own Target, Param and Depth. see
+-- lib/lfo.lua.
 local LFO_CELLS = {
   {id = "flood",  x = 7,  y = 6},
   {id = "ebb",    x = 8,  y = 6},
@@ -395,6 +455,8 @@ end
 -- the name beside them.
 local FAMILY = {
   voice  = "Voice",
+  FM     = "FM",
+  VA     = "VA",
   D      = "Trigger",
   R      = "Process",   -- a trigger processor: the weave's rules
   TM     = "Register",

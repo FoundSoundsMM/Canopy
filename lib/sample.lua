@@ -183,6 +183,8 @@ sample.PARAMS = {
       bridge.smp_level(topology.get(id).index, sample.level(id))
     end,
   },
+  -- §2.11c how much of this recording goes to the shared send effect.
+  wl("send").row(),
 }
 
 sample.PARAM_COUNT = #sample.PARAMS

@@ -50,6 +50,17 @@ bridge.BUS = {
   gust_mod   = {base = 54, n = 12}, -- per-GUST cross-mod input sum
   lfo_out    = {base = 66, n = 4},  -- per-LFO sine tap
   smp_out    = {base = 70, n = 4},  -- per-SMP (sample cell) audio tap
+  -- §2.13 the two new synth families, each the same shape a gust already
+  -- has: one mono tap out per cell, and one summed mod input per cell that
+  -- the cell's own Cross knob scales.
+  fm_out     = {base = 74, n = 2},  -- per-FM cell audio tap
+  fm_mod     = {base = 76, n = 2},  -- per-FM cross-mod input sum
+  va_out     = {base = 78, n = 2},  -- per-VA cell audio tap
+  va_mod     = {base = 80, n = 2},  -- per-VA cross-mod input sum
+  -- §2.11c the send bus: ONE mono channel, not one per cell. every source's
+  -- Send knob is the gain on an ordinary patch synth from that source's own
+  -- tap into here, and here is what the shared effect reads (lib/send.lua).
+  send       = {base = 82, n = 1},
 }
 
 function bridge.bus(name, index)
@@ -223,16 +234,69 @@ function bridge.gust_pan(index, v)
   engine.gust_pan(index, v)
 end
 
--- the one delay line all twelve gusts are heard through (§2.11b's Space /
--- Delay / Regen rows on the gusts page). global, not per cell.
-function bridge.gust_space(mix, time, feedback)
-  engine.gust_space(mix, time, feedback)
+-- §2.11c the shared send effect: still the delay line all twelve gusts are
+-- heard through, and now also what every source's Send knob feeds. global,
+-- not per cell, and driven from its own page past the mixer (lib/send.lua).
+-- the name stays `gust_space` because it is the same synth doing the same
+-- job -- what changed is who can reach it.
+function bridge.gust_space(mix, time, feedback, tone)
+  engine.gust_space(mix, time, feedback, tone or 0.5)
 end
 
--- §2.12 LFO cells: the one knob. always-on, like a gust's core -- there is no
--- separate on/off, since a cable can land on it at any time.
+-- §2.13 the FM and VA cells. `*_note` is the whole strike in one message --
+-- pitch and force together, the way `gust_note` and `strike` are -- and
+-- `*_pitch` is the same pitch without sounding it, for a field, a register, a
+-- Scale change or a transpose reaching a cell that is already ringing.
+--
+-- `*_set` is one keyed command for the whole page rather than a named one per
+-- knob, exactly as `colour` is for the master chain and for the same reason:
+-- these are a page of knobs on ONE synth, so the key IS the argument name and
+-- a dozen identical wrappers would only be restating that. the engine checks
+-- the key against its own list, so a typo is a dropped message rather than a
+-- stray argument silently set on the synth.
+function bridge.fm_note(index, hz, force)
+  engine.fm_note(index, hz, force)
+end
+
+function bridge.fm_pitch(index, hz)
+  engine.fm_pitch(index, hz)
+end
+
+function bridge.fm_set(index, key, v)
+  engine.fm_set(index, key, v)
+end
+
+function bridge.fm_hold(index, on)
+  engine.fm_hold(index, on and 1 or 0)
+end
+
+function bridge.va_note(index, hz, force)
+  engine.va_note(index, hz, force)
+end
+
+function bridge.va_pitch(index, hz)
+  engine.va_pitch(index, hz)
+end
+
+function bridge.va_set(index, key, v)
+  engine.va_set(index, key, v)
+end
+
+function bridge.va_hold(index, on)
+  engine.va_hold(index, on and 1 or 0)
+end
+
+-- §2.12 LFO cells: how fast it runs and which of the eight shapes it is
+-- running. always-on, like a gust's core -- there is no separate on/off,
+-- since a cable can land on it at any time. `shape` is a 0-based index into
+-- lib/lfo.lua's SHAPES, which is the same order \wl_lfo's own Select.ar
+-- lists them in.
 function bridge.lfo_rate(index, hz)
   engine.lfo_rate(index, hz)
+end
+
+function bridge.lfo_shape(index, n)
+  engine.lfo_shape(index, n)
 end
 
 -- §2.4 exciter cells: lazy on/off, Colour (E2), the gated flag (has this S

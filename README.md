@@ -3,10 +3,40 @@
 A monome norns script for grid (128). Full design in
 [`docs/canopy-spec.md`](docs/canopy-spec.md).
 
-## Status: the grid overhaul, and the screen after it
+## Status: the instrument row, re-cut
 
-A second re-cut of the panel, on top of everything build phases 1–7 (and 6b,
-6c, 6d) already built: an explicit Output row, one cable point per voice
+Seven changes, and the biggest of them is that row 2 — the instrument row —
+is regrouped and has four new voices on it. In short:
+
+- **the instrument row is grouped by family**: the four modal voices, a gap,
+  the six drums, a gap, and **four new synths**. It used to interleave them,
+  two voices either side of the kit, which read as two families of two and
+  left no adjacent run anywhere for anything new;
+- **the four new synths** are a pair of **two-operator FM** voices (`X`) and a
+  pair of **wavefolding virtual-analogue** voices (`V`). Each is struck like a
+  voice, has an envelope of its own, and takes its pitch the same way a modal
+  voice does — so a field or a Turing machine cabled in plays it in the same
+  key as everything else on the panel;
+- **the Turing machines are the right-hand side of a Marbles now** — Spread,
+  Bias and a Steps ladder from continuous to locked — and no longer generate
+  triggers of their own. That job belongs to the four families whose whole job
+  it already was;
+- **the LFOs carry four destinations each and eight shapes**, including
+  sample-and-hold and an **envelope follower** that reads the instrument's own
+  output;
+- **the gusts' delay line is a send every voice can reach.** Every sounding
+  cell has a **Send** row at the bottom of its page, and the effect's knobs
+  (plus a new **Tone**) are on a page of their own past the mixer;
+- **eight more scales**, most of them microtonal: Hijaz, Rast, Bayati, Sikah,
+  Homayoun, slendro, pelog and Anchihoye — with real neutral thirds and real
+  240-cent steps rather than 12-TET impressions of them;
+- **Tape lost its wow**, which was never a wow: the wet path was delayed 8 ms
+  and summed against the dry one, so the knob swept a comb filter across the
+  mix. It is saturation and bandwidth now, and sounds like one thing rather
+  than a parallel effect.
+
+All of that sits on top of a second re-cut of the panel, itself on top of
+everything build phases 1–7 (and 6b, 6c, 6d) already built: an explicit Output row, one cable point per voice
 instead of four sockets, and Climate replaced by a small Clock family. Full
 detail and rationale in
 [`docs/canopy-spec.md`](docs/canopy-spec.md) §2/§9; this is the short version.
@@ -52,8 +82,8 @@ And an interface pass on top of that, which is where the panel stands now:
   the first, the same way a source landing on a second Out cell moves itself.
   That is what lets a channel be named after its instrument;
 - **Scale starts on P.Maj**, the major pentatonic, rather than on free, and
-  the four scales are abbreviated to fit the shape that draws them — free,
-  P.Maj, P.Min, E.Pn1, E.Pn2;
+  the names are abbreviated to fit the shape that draws them (five characters
+  — free, P.Maj, P.Min, E.Pn1, E.Pn2, and the eight world scales added since);
 - **Rain draws rainfall**, light at the bottom of the knob and heavy at the
   top, and it is the one shape on the panel that moves on its own;
 - the gusts are **Gust 1–12** and the clocks **Clock 1–4**, twelve and four of
@@ -99,7 +129,7 @@ needs (spec §2.11b, §4.1c, §4.4):
 ```
      1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16
 1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
-2    ·   M   ·   M   ·   F   F   F   N   N   N   ·   M   ·   M   ·
+2    M   M   M   M   ·   F   F   F   N   N   N   ·   X   X   V   V
 3    ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·
 4    F   ·   ·  TM  TM   C   T   T   T   T   C  TM  TM   ·   ·   S
 5    ·   F   ·   ·   ·   C   T   T   T   T   C   ·   ·   ·   S   ·
@@ -108,9 +138,10 @@ needs (spec §2.11b, §4.1c, §4.4):
 8    E   E   E   ·   ·   G   G   G   G   G   G   ·   ·   R   R   R
 ```
 
-`O` output · `M` voice · `F`/`N` percussion (ping / noise) · `TM` register ·
-`C` clock · `T` trigger · `S` sample player · `E` exciter · `R` weave ·
-`G` gust · `L` LFO · `F` (column 1–4 diagonal) pitch field.
+`O` output · `M` modal voice · `F`/`N` percussion (ping / noise) ·
+`X` 2-op FM synth · `V` wavefolding VA synth · `TM` register · `C` clock ·
+`T` trigger · `S` sample player · `E` exciter · `R` weave · `G` gust ·
+`L` LFO · `F` (column 1–4 diagonal) pitch field.
 
 `·` is dark and inert — an unregistered coordinate, not a cell you can
 reach. The shape of what is left is what makes the panel readable.
@@ -155,10 +186,11 @@ reach. The shape of what is left is what makes the panel readable.
   a folded triangle under a slow swell and a slow fall you set per cell.
   Press one and it sounds; a pulse cabled in sounds it too. It is the one
   family heard without an Output cable, panned by the column it sits in, and
-  all twelve share one delay line off the gusts page. Cable two together and
+  all twelve are heard through the shared send effect. Cable two together and
   they FM each other, as deeply as **Cross** on each is turned up.
-- **Four LFOs sit on the row above them.** Plain sines, one knob each until
-  you cable one somewhere — see **Target** and **Param** above.
+- **Four LFOs sit on the row above them.** Eight shapes and four destinations
+  each — see **Slot**, **Target**, **Param** and **Depth** on the cell's own
+  page.
 - **The weave, grove and exciters are all trimmed**, not changed: 6 weave
   rules (was 14), 4 pitch fields (was 8), 6 exciters (was 20). Every weave
   rule and grove mode not given a dedicated seat is still reachable from the
@@ -226,15 +258,16 @@ panel has a gesture that only it responds to any more.
   Scale, Plonks, Decay, Pitch, Drums — and `E2`/`E3` nudge it coarse/fine.
   `K1`+`E3` is the master level.
 - **`K3` is forward, `K2` is back**, one page at a time down one stack:
-  **main screen → gusts → mixer → colour → map**. Neither end wraps — `K3` on
-  the map stays on the map, and `K2` on the main screen, with nothing to come
-  back from, is Still as it always was. `K3` works from an open cell page too,
-  which it closes on the way, dropping that cell's focus. The order is the
-  signal's own: the gusts are the one family that routes itself, the mixer
-  balances what the cables deliver, Colour is what the balanced mix goes
-  through on its way out, and the map is the reference you check rather than
-  a surface you play. Each page keeps its own `E1` cursor, so stepping away
-  and back lands on the row you left.
+  **main screen → gusts → mixer → send → colour → map**. Neither end wraps —
+  `K3` on the map stays on the map, and `K2` on the main screen, with nothing
+  to come back from, is Still as it always was. `K3` works from an open cell
+  page too, which it closes on the way, dropping that cell's focus. The order
+  is the signal's own: the gusts are the one family that routes itself, the
+  mixer balances what the cables deliver, the send is the one effect every
+  voice can reach into, Colour is what the balanced mix goes through on its
+  way out, and the map is the reference you check rather than a surface you
+  play. Each page keeps its own `E1` cursor, so stepping away and back lands
+  on the row you left.
 - **Swing and Rain are the groove knobs.** At Swing 0 / Rain 0 every
   pulse — however freely its cell runs — snaps onto a grid line, and
   unrelated gaits cohere into one groove: each cell quantises to the coarsest
@@ -321,20 +354,26 @@ lib/
                              and the shared pulse bus everything emits through
   weave.lua                 the six R-cell pulse transforms
   clockcell.lua             the four C-cell clock flashers (§2.9)
-  voice.lua                 the eleven-parameter voice sound page (§5.5)
+  voice.lua                 the thirteen-parameter voice sound page (§5.5)
   gparam.lua                the eight-parameter global page (§4.1, §5.2)
   colour.lua                the master colour chain's page (§4.4)
   exciter.lua               E-cell control layer: lazy alloc, gating, Colour
   sample.lua                the four S-cell sample players (§2.5)
   gust.lua                  the twelve G-cell drone synths (§2.11), and the
                              gusts page that moves all twelve at once (§2.11b)
-  lfo.lua                   the four L-cell sines, and what each one moves
+  synth.lua                 the two FM and two VA cells, and both their
+                             sound pages (§2.13)
+  send.lua                  the shared send effect, its page, and the Send
+                             row every sounding cell's page ends with (§2.11c)
+  lfo.lua                   the four L-cell modulators: eight shapes and four
+                             destinations each (§2.12)
   grove.lua                 the pitch fields: modes, coupling, voice retuning
   gvoice.lua                the six GVOICE-cell drums + their sound page
   bridge.lua                Lua-side wrapper around the engine commands
   Engine_Canopy.sc          SC: four modal voices, six percussion cells, six
-                             exciters, twelve gusts, four sample players,
-                             four sines, the patch matrix, the Output row's
+                             exciters, twelve gusts, two FM and two VA
+                             synths, the shared send effect, four sample
+                             players, four LFOs, the patch matrix, the Output row's
                              fixed-pan mix
 audio/
   Rain.wav                  one per S cell, played rather than looped.
@@ -379,7 +418,11 @@ to actually render audio.
   musical rather than millisecond, a chain of the multiplying rules with a
   voice loop in it stays bounded.
 - `clockcell.lua` — Mode: High stops a cell clocking and holds every family
-  at the far end of its cables open instead, letting go when the mode, the
+  at the far end of its cables open instead — at that family's own engine
+  index, which the drums' and the gusts' gates got wrong for a while (their
+  cells number from 1 and the engine's arrays from 0, so an unadjusted index
+  held the cell next door and dropped the last of each family outright) —
+  letting go when the mode, the
   cable or the whole patch changes, with two High cells on one target
   counting as one grip; and a Clock cell fires at the expected multiple/division of
   the master clock, Ratio changes take effect, it never reacts to an
@@ -453,10 +496,32 @@ to actually render audio.
   together while preserving the spread between them and leaving each cell's
   own stored knob untouched, clamping per cell at the ends, pushing all twelve
   when nudged, and the per-cell pages reading the effective value while `E2`
-  still moves the cell's own knob.
-- `tm.lua` — the four Turing Machine cells at their new coordinates,
-  register stepping, Tap-gated answering pulse, and pitch feeding a voice
-  directly (no more P socket to route through).
+  still moves the cell's own knob. Since the send (§2.11c),
+  the family page no longer carries the delay line's three rows (they went to
+  the send page), which the same file checks by looking for them.
+- `synth.lua` — the two FM cells and the two VA cells: where they sit and how
+  row 2 is grouped now, both pages and their envelopes, a pulse playing a note
+  at the pitch grove says it is on, the refractory, being tuned by a field and
+  by a register, the global Scale having the last word, no glide or drift
+  being sent for either, the cable matrix (Output, cross-modulation with each
+  other and with a gust, an LFO on the mod input), a High clock holding a note
+  open, and the global Decay macro reaching them.
+- `send.lua` — every sounding family has a Send row and it starts at zero; a
+  fresh patch builds no send synths at all; turning one up builds a patch
+  synth from that cell's own tap into the send bus at the squared knob
+  position, moving it is a gain change rather than a second synth, re-pushing
+  an unchanged value is silent, and zero frees it; a send id can never collide
+  with a cable's and never moves when the graph does; the four effect knobs
+  clamp, print and reach the engine; the ranges and the state are the gusts'
+  delay line's own, unchanged; and an LFO can move a Send knob like any other
+  row.
+- `tm.lua` — the four Turing Machine cells at their coordinates, register
+  stepping, pitch feeding a voice directly (no more P socket to route
+  through), and the Marbles rework: no outgoing pulse under any circumstance,
+  K1+tap clocking the register rather than firing one, Bias moving the whole
+  line by an octave rather than skewing the coin, the Steps ladder walking
+  from continuous to one locked note, and a register cabled downstream of
+  another register being inert.
 - `gparam.lua` — the global param page: eight rows on exactly one screen, E1
   clamped at both ends, BPM's coarse/fine steps and clock/floor/ceiling
   clamping, Scale's one-entry-per-flick detent, Plonks widening the per-strike
@@ -480,15 +545,15 @@ to actually render audio.
   is cabled and never more than sixteen; each channel named after the
   instrument on it, renamed when a second source evicts the first, and drawn
   with a meter; each an independent 0..1 knob that forwards to its own
-  output; `K3`/`K2` walk the whole five-page stack in the documented order,
+  output; `K3`/`K2` walk the whole six-page stack in the documented order,
   one page per press, stopping dead at both ends; and an external Start/Stop
   freezes and unfreezes the patch without flooding on resume.
 - `smoke.lua` — loads `Canopy.lua` itself and exercises every screen
-  view, the sound page, and every control against the 78-cell panel.
+  view, the sound page, and every control against the 82-cell panel.
 - `soak.lua` — the same, but against a *strict* norns stub: `screen`, `util`
   and `clock` expose only the functions norns actually has, so calling one it
   doesn't is an error rather than a silent no-op. Redraws from every state
-  (every cell held one at a time, every type pair held in twos, all five
+  (every cell held one at a time, every type pair held in twos, all six
   full-screen pages walked with `K3` the way a player reaches them, the
   global page with a live patch), thousands of random gestures with the
   scheduler running, and the per-frame screen command and paint budgets --

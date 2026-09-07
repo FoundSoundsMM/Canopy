@@ -164,8 +164,10 @@ do
   M.state.view = "global"
   M.state.cell_edit = nil
   M.state.held = {}
-  press(3); press(3); press(3)
-  check("three K3s from the main screen land on Colour",
+  -- §2.11c the Send page sits between the mixer and Colour, so Colour is one
+  -- press further along than it was.
+  press(3); press(3); press(3); press(3)
+  check("four K3s from the main screen land on Colour",
         M.state.view == "colour", M.state.view)
 
   -- the encoders follow the screen: E1 walks this page's own cursor and E2
@@ -190,7 +192,10 @@ do
         M.state.global.bpm == bpm_before, tostring(M.state.global.bpm))
 
   press(2)
-  check("K2 comes back to the mixer", M.state.view == "mixer", M.state.view)
+  check("K2 comes back to the send page", M.state.view == "send", M.state.view)
+  press(2)
+  check("and one more to the mixer", M.state.view == "mixer", M.state.view)
+  press(3)
   press(3)
   press(3)
   check("and K3 past Colour is the map, not a wrap",

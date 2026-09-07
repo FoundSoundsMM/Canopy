@@ -1,28 +1,39 @@
 -- tm.lua
--- the §2.3b TM cells: four independent 8-bit shift-register sequencers, akin
--- to the Music Thing Modular Turing Machine with its Pulses/Voltages
--- expanders collapsed onto one cell each. they sit inside the sealed D core,
--- directly above Hob and Grim and directly below Spriggan and Gabriel.
+-- the §2.3b TM cells: four independent shift-register voltage sources. they
+-- sit inside the sealed D core, directly above Hob and Grim and directly
+-- below Spriggan and Gabriel.
 --
--- unlike a D cell, a TM cell has no phase and no free-running gait -- it has
--- no clock of its own at all. the only thing that ever moves its register is
--- a pulse cabled into it. that is the point: it is meant to be clocked, the
--- way the hardware it is named after always is.
+-- what they are now, and what changed. these used to be a Music Thing Turing
+-- Machine with its Pulses AND Voltages expanders collapsed onto one cell --
+-- so a TM both chose a pitch and answered with a trigger of its own, gated by
+-- a Tap bit. the trigger half is gone. this panel already has four families
+-- whose entire job is making and shaping pulses (T, C, R and the clock cells
+-- that feed them); a fifth one hidden inside the pitch source was a second
+-- way to do a job that was already done, and it meant every TM in a patch
+-- silently doubled as a sequencer nobody had asked for.
+--
+-- so a TM cell is the RIGHT-HAND side of a Mutable Marbles and nothing else:
+-- a clocked random voltage with a loop. it is fed a pulse and it answers with
+-- a number, not with another pulse.
 --
 -- each incoming pulse is one clock edge:
 --   1. the bit about to fall off the end of the register is either kept
 --      (looped) -- with its own small chance of flipping anyway (Drift, the
 --      "the knob past noon still surprises you" character) -- or thrown away
---      for a fresh, Bias-skewed coin flip, decided by Prob.
---   2. some number of the register's bits (Bits) are summed, binary-weighted,
---      into a pitch offset the same shape as a grove.lua field's degree
---      (§2.6) -- scaled by Range and snapped to the same minor pentatonic --
---      and pushed to any voice cabled to this cell's P socket, on top of
---      whatever fields are also cabled there.
---   3. if the register's Tap bit reads high, the cell answers with a pulse of
---      its own, weighted by Level -- the Pulses expander's eight gate outputs
---      collapsed onto the one bit you pick, since one cell has one outgoing
---      cable bank rather than eight.
+--      for a fresh coin flip, decided by Deja.
+--   2. the register is read out, binary-weighted, as a position in a
+--      distribution: Spread is how wide that distribution is, Bias is where
+--      its centre sits, and Steps decides what grid the result is snapped to
+--      -- continuous at one end, locked to a single note at the other. the
+--      answer is a pitch offset the same shape as a grove.lua field's degree
+--      (§2.6), pushed to any voice cabled to this cell on top of whatever
+--      fields are also cabled there.
+--
+-- Spread / Bias / Steps are Marbles' own three knobs and mean what they mean
+-- there. Length and Deja are the loop, which Marbles calls Deja Vu and the
+-- Turing Machine calls the big knob; they are kept as two rows because a loop
+-- length you can set exactly is worth more here than one folded into the same
+-- control as the probability of looping at all.
 --
 -- dependency note: rambler.lua requires this file at load (its inbox needs a
 -- branch here, exactly the one weave.lua already gets), so this one must not
@@ -40,21 +51,54 @@ local tm = {}
 local LENGTH_MIN, LENGTH_MAX = 2, 16
 
 -- the same span grove.lua's fields use (§2.6): 25 cents of shimmer at the
--- narrow end, two octaves at the wide one, so a TM cabled to a P socket reads
--- on the same scale an F cell would.
+-- narrow end, two octaves at the wide one, so a TM cabled to a voice reads on
+-- the same scale an F cell would. this is Marbles' Spread.
 local SPAN_MIN, SPAN_MAX = 0.25, 24.0
 
--- the same minor pentatonic grove.lua's fields snap to by default. duplicated
--- rather than exported -- every module here keeps its own copy of the small
--- pure helpers it needs (char(), spb(), snap_to...) rather than reaching into
--- a neighbour for one function.
-local SCALE = {0, 3, 5, 7, 10}
+-- Bias moves the CENTRE of the distribution rather than skewing the coin, one
+-- octave either way. it used to skew the coin flip instead -- which changed
+-- the shape of the distribution and only moved its centre as a side effect,
+-- and never by an amount anyone could name. Marbles' own bias is a straight
+-- offset and so is this: at +12 the same pattern plays an octave up.
+local BIAS_ST = 12
 
-local function snap_to(x)
+-- Steps: the grid the readout is snapped to, coarsest last. this is Marbles'
+-- third knob, and the point of it is that one control walks all the way from
+-- "a continuous voltage" to "one note" without ever being ambiguous about
+-- which of those it is on -- so it is a ladder of named grids rather than a
+-- blend, and the row prints the name of the one it is on.
+--
+--   free   no snap at all -- a glide, a detune, a continuous line
+--   semi   whole semitones
+--   scale  the global Scale (§4.1), or the minor pentatonic when that is on
+--          "free" -- so a TM lands in tune with everything else by default
+--   fifth  the root, its fifth and its octave
+--   oct    octaves only
+--   lock   the root, and nothing else: the register still runs, and nothing
+--          it does reaches the pitch
+--
+-- `nil` in the grid slot means "no snap"; a table is a set of semitone
+-- offsets inside the octave, exactly the shape grove.SCALES entries are.
+local PENTATONIC = {0, 3, 5, 7, 10}
+
+tm.STEP_MODES = {
+  {name = "free",  grid = nil},
+  {name = "semi",  grid = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}},
+  {name = "scale", grid = "scale"},
+  {name = "fifth", grid = {0, 7}},
+  {name = "oct",   grid = {0}},
+  {name = "lock",  grid = "lock"},
+}
+
+-- nearest tone of `scale` to `x` semitones, searching the octave it lands in
+-- and the one above -- the same routine grove.lua uses, kept here rather than
+-- imported because every module on this panel keeps its own copy of the small
+-- pure helpers it needs (char(), spb(), snap_to...).
+local function snap_to(x, scale)
   local oct = math.floor(x / 12)
   local rem = x - oct * 12
   local best, bd = 0, math.huge
-  for _, s in ipairs(SCALE) do
+  for _, s in ipairs(scale) do
     local d = math.abs(rem - s)
     if d < bd then bd, best = d, s end
   end
@@ -79,30 +123,70 @@ function tm.length(id)
                     LENGTH_MIN, LENGTH_MAX)
 end
 
-function tm.bits(id)
-  local v = state.get_vparam(id, "bits", 1.0)
-  return util.clamp(math.floor(1 + v * 7 + 0.5), 1, 8)
-end
-
-function tm.tap(id)
-  local v = state.get_vparam(id, "tap", 0)
-  return util.clamp(math.floor(1 + v * 7 + 0.5), 1, 8)
-end
-
-function tm.span(id)
+-- Spread, in semitones: how wide the distribution the register is read out
+-- into actually is. log-mapped, same as an F cell's Range, because the useful
+-- half of it is at the narrow end where this is a detuner rather than a tune.
+function tm.spread(id)
   local v = state.get_vparam(id, "range", 0.5)
   return SPAN_MIN * ((SPAN_MAX / SPAN_MIN) ^ v)
 end
 
-function tm.out_level(id)
-  return state.get_vparam(id, "level", 0.8)
+-- kept under its old name as well: two dozen lines below and one test file
+-- read it, and "span" is what the number is.
+tm.span = tm.spread
+
+-- Bias, in semitones: where the centre of that distribution sits.
+function tm.bias_semitones(id)
+  return (state.get_vparam(id, "bias", 0.5) - 0.5) * 2 * BIAS_ST
 end
 
--- every voice cabled to this cell's P socket needs to hear the new value the
--- moment Range or Bits changes the shape of the DAC, exactly the way
+-- which of tm.STEP_MODES this cell is on, 1..#STEP_MODES. the knob stays a
+-- plain continuous 0..1 -- the mode is derived from it rather than stored --
+-- so the row round-trips through its own getter and needs none of the
+-- unrounded-accumulator machinery a genuinely stepped row does.
+function tm.step_mode(id)
+  local v = state.get_vparam(id, "steps", 0.4)
+  local n = #tm.STEP_MODES
+  return util.clamp(math.floor(v * n) + 1, 1, n)
+end
+
+function tm.step_name(id)
+  return tm.STEP_MODES[tm.step_mode(id)].name
+end
+
+-- snap `x` onto whatever grid this cell's Steps row is asking for.
+function tm.quantise(id, x)
+  local grid = tm.STEP_MODES[tm.step_mode(id)].grid
+  if grid == nil then return x end
+  if grid == "lock" then return 0 end
+  if grid == "scale" then
+    -- the global Scale, so a TM tunes with the rest of the panel. with Scale
+    -- on "free" grove.quantise_semitones is the identity and there would be
+    -- no snap at all -- which is what the row's own "free" position is for --
+    -- so this position falls back to the minor pentatonic, which is the scale
+    -- a TM has always quantised to.
+    if (state.global.scale_i or 0) <= 0 then return snap_to(x, PENTATONIC) end
+    return wl("grove").quantise_semitones(x)
+  end
+  return snap_to(x, grid)
+end
+
+-- how many of the register's bits are summed into the readout. no longer a
+-- row of its own: Marbles has no such control, and what it did here -- fewer
+-- bits is coarser and jumpier -- is the same axis Steps now covers, from the
+-- other end and more legibly. fixed at the full eight, which is the smoothest
+-- setting and the one the row defaulted to.
+local READ_BITS = 8
+
+function tm.bits()
+  return READ_BITS
+end
+
+-- every voice cabled to this cell needs to hear the new value the moment
+-- Spread, Bias or Steps changes the shape of the readout, exactly the way
 -- grove.lua's state.on_character_change listener re-pushes a field's voices
 -- when its Range knob moves -- otherwise the change would sit silent until
--- the next trigger.
+-- the next clock edge.
 local function push_voices(id)
   local r = machines[id]
   if not r then return end
@@ -110,7 +194,7 @@ local function push_voices(id)
   for _, l in ipairs(r.voices) do grove.push_voice_now(l.id) end
 end
 
--- the eight, in E1 order --------------------------------------------------
+-- the six, in E1 order ----------------------------------------------------
 
 local function vp_get(key, default)
   return function(id) return state.get_vparam(id, key, default) end
@@ -131,17 +215,20 @@ tm.PARAMS = {
     push = function() end, -- takes effect on the register's next step
   },
   {
-    -- the classic module's one knob, isolated: how often the bit that would
-    -- fall off the end is kept (the loop) rather than thrown away for a fresh
-    -- coin flip. 0 is fully random every step; 1 never lets go of the loop it
-    -- started with.
-    key = "prob", label = "Prob", glyph = "dots", default = 0.65,
+    -- Marbles calls it Deja Vu and the Turing Machine calls it the big knob:
+    -- how often the bit that would fall off the end is kept (the loop) rather
+    -- than thrown away for a fresh coin flip. 0 is a fresh sequence every
+    -- step; 1 never lets go of the loop it started with. the stored key stays
+    -- `prob`, which is what four other places in this file call it.
+    key = "prob", label = "Deja", glyph = "dots", default = 0.65,
     get = vp_get("prob", 0.65), set = vp_set("prob"),
-    text = function(id) return string.format("%.0f%% lock", state.get_vparam(id, "prob", 0.65) * 100) end,
+    text = function(id)
+      return string.format("%.0f%% loop", state.get_vparam(id, "prob", 0.65) * 100)
+    end,
     push = function() end,
   },
   {
-    -- separated out from Prob on purpose: a locked loop that never moves is a
+    -- separated out from Deja on purpose: a locked loop that never moves is a
     -- bar-length loop forever, and the real module's charm past noon is that
     -- it doesn't quite stay locked. this is that, as its own knob.
     key = "drift", label = "Drift", glyph = "wander", default = 0.15,
@@ -150,50 +237,35 @@ tm.PARAMS = {
     push = function() end,
   },
   {
-    -- skews a fresh coin flip toward 0 or 1, so the pattern's density -- and
-    -- the pitch line's average height -- can drift instead of sitting at 50/50.
+    -- Marbles' Spread: how wide the distribution the register is read out
+    -- into is. the stored key stays `range`, which is what it was called when
+    -- it did exactly this job under the other name.
+    key = "range", label = "Spread", glyph = "span", default = 0.5,
+    get = vp_get("range", 0.5), set = vp_set("range"),
+    text = function(id) return span_text(tm.spread(id)) end,
+    push = function(id) push_voices(id) end,
+  },
+  {
+    -- Marbles' Bias: where that distribution's centre sits, an octave either
+    -- way. it used to skew the coin flip instead -- see BIAS_ST above.
     key = "bias", label = "Bias", glyph = "bipolar", default = 0.5,
     get = vp_get("bias", 0.5), set = vp_set("bias"),
-    text = function(id) return string.format("%+.2f", (state.get_vparam(id, "bias", 0.5) - 0.5) * 2) end,
-    push = function() end,
-  },
-  {
-    key = "range", label = "Range", glyph = "span", default = 0.5,
-    get = vp_get("range", 0.5), set = vp_set("range"),
-    text = function(id) return span_text(tm.span(id)) end,
+    text = function(id) return string.format("%+.1f st", tm.bias_semitones(id)) end,
     push = function(id) push_voices(id) end,
   },
   {
-    -- how many of the register's bits are summed into the pitch DAC: fewer is
-    -- coarser and jumpier, more is smoother -- the "Voltages expander" idea
-    -- (more bits summed, more continuous a line) folded into one knob rather
-    -- than eight fixed weights.
-    key = "bits", label = "Bits", glyph = "stack", default = 1.0,
-    get = vp_get("bits", 1.0), set = vp_set("bits"),
-    text = function(id) return tm.bits(id) .. " bits" end,
-    glyph_data = function(id) return {n = 8, lit = tm.bits(id)} end,
-    push = function(id) push_voices(id) end,
-  },
-  {
-    -- which bit gates the outgoing trigger: the "Pulses expander"'s eight
-    -- per-bit gate outputs, collapsed onto the one you pick, since a TM cell
-    -- has one outgoing cable bank rather than eight.
-    key = "tap", label = "Tap", glyph = "register", default = 0,
-    get = vp_get("tap", 0), set = vp_set("tap"),
-    text = function(id) return "bit " .. tm.tap(id) end,
-    -- the only shape on the panel that draws another module's live state:
-    -- "bit 4" means nothing without the eight bits either side of it.
+    -- Marbles' Steps: the grid the readout lands on, from no grid at all to
+    -- one note. `stack` rather than `word` because the six positions are an
+    -- ordered ladder from continuous to locked, and a stack of six with one
+    -- lit says where on that ladder you are in a way a boxed word cannot --
+    -- the word itself is printed on the value line underneath.
+    key = "steps", label = "Steps", glyph = "stack", default = 0.4,
+    get = vp_get("steps", 0.4), set = vp_set("steps"),
+    text = function(id) return tm.step_name(id) end,
     glyph_data = function(id)
-      local r = tm.get(id)
-      return {bits = r and r.bits or nil, tap = tm.tap(id) - 1}
+      return {n = #tm.STEP_MODES, lit = tm.step_mode(id)}
     end,
-    push = function() end,
-  },
-  {
-    key = "level", label = "Level", glyph = "fader", default = 0.8,
-    get = vp_get("level", 0.8), set = vp_set("level"),
-    text = function(id) return string.format("%.2f", tm.out_level(id)) end,
-    push = function() end,
+    push = function(id) push_voices(id) end,
   },
 }
 
@@ -239,16 +311,18 @@ local function step_register(id, r)
 
   local prob = state.get_vparam(id, "prob", 0.65)
   local drift = state.get_vparam(id, "drift", 0.15)
-  local bias = (state.get_vparam(id, "bias", 0.5) - 0.5) * 2
 
+  -- an unbiased coin. Bias moves the readout's centre now rather than
+  -- skewing the register itself (see BIAS_ST), so the bit stream is a plain
+  -- fair walk and every knob that shapes the melody does so at the output,
+  -- where the number it moves things by can be printed on the screen.
   local old = r.bits[n]
   local new_bit
   if math.random() < prob then
     new_bit = old
     if math.random() < drift then new_bit = 1 - new_bit end
   else
-    local p1 = util.clamp(0.5 + bias * 0.5, 0, 1)
-    new_bit = (math.random() < p1) and 1 or 0
+    new_bit = (math.random() < 0.5) and 1 or 0
   end
 
   for i = n, 2, -1 do r.bits[i] = r.bits[i - 1] end
@@ -256,7 +330,10 @@ local function step_register(id, r)
 end
 
 -- the register's current pitch offset, in semitones -- a pure read, the same
--- shape as grove.degree(): a normalised position times Range, snapped.
+-- shape as grove.degree(). the register is read out binary-weighted into a
+-- position in -1..+1, that position is scaled by Spread and shifted by Bias,
+-- and the result is snapped onto whatever grid Steps is asking for. those
+-- three lines are Marbles' whole right-hand side.
 function tm.degree(id)
   local r = machines[id]
   if not r then return 0 end
@@ -269,7 +346,7 @@ function tm.degree(id)
     wsum = wsum + w
   end
   local norm = (wsum > 0) and (sum / wsum) or 0
-  return snap_to((norm * 2 - 1) * tm.span(id))
+  return tm.quantise(id, (norm * 2 - 1) * tm.spread(id) + tm.bias_semitones(id))
 end
 
 -- construction ----------------------------------------------------------------
@@ -289,8 +366,8 @@ for id, cell in topology.each() do
 end
 
 -- pitch linking -------------------------------------------------------------
--- same shape as grove.lua's rebuild_links: a cable from this cell to a voice
--- makes it a pitch source for that voice, summed with whatever fields are
+-- same shape as grove.lua's rebuild_links: a cable from this cell to a
+-- pitched cell makes it a pitch source for it, summed with whatever fields are
 -- also cabled there (§2.6's "neither" family -- a number, not a pulse or a
 -- stream -- so this bypasses dispatch.lua entirely). the socket collapse
 -- means that's just any cable to the voice's own point now -- there is no
@@ -308,7 +385,10 @@ local function rebuild_links()
       -- a one-way cable a->b only sends from a (§3), the same rule grove.lua
       -- and rambler.lua apply.
       local can_send = (not edge.oneway) or (edge.a == r.id)
-      if other and other.type == "voice" and can_send then
+      -- §2.13 "a voice" here means any pitched cell -- the four modal voices
+      -- and the four new synths alike. grove.is_pitched is the one place that
+      -- list lives.
+      if other and can_send and wl("grove").is_pitched(other) then
         table.insert(r.voices, {id = other_id, gain = edge.gain})
         voice_links[other_id] = voice_links[other_id] or {}
         table.insert(voice_links[other_id], {m = r.id, gain = edge.gain})
@@ -339,9 +419,15 @@ end
 
 -- delivery ----------------------------------------------------------------------
 -- called from rambler's inbox, one tick after the pulse that triggered it was
--- emitted -- exactly the delivery path weave.pulse_in already gets, since a TM
--- cell is a pulse cell for the same reason an R cell is (topology.PULSE_TYPES).
-
+-- emitted -- exactly the delivery path weave.pulse_in already gets. a TM cell
+-- is still a member of topology.PULSE_TYPES, and has to be: that membership is
+-- what routes an arriving pulse through the inbox rather than straight into
+-- dispatch, which is what keeps a cycle in the patch from recursing.
+--
+-- what it no longer does is answer. the clock edge steps the register and
+-- re-pushes every voice this cell is tuning, and that is the whole of it --
+-- there is no rambler.emit_from here any more, and no Tap bit deciding when
+-- to fire one. see the note at the top of this file for why.
 function tm.pulse_in(id, w, src, now)
   local r = machines[id]
   if not r then return end
@@ -351,12 +437,6 @@ function tm.pulse_in(id, w, src, now)
 
   for _, l in ipairs(r.voices) do
     wl("grove").push_voice_now(l.id)
-  end
-
-  local n = math.max(#r.bits, 1)
-  local tap = util.clamp(tm.tap(id), 1, n)
-  if r.bits[tap] == 1 then
-    wl("rambler").emit_from(id, tm.out_level(id), nil, src)
   end
 end
 

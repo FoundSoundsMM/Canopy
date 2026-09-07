@@ -148,6 +148,30 @@ HANDLERS["GUST"] = function(source_id, target_id, edge, weight)
   end
 end
 
+-- -> an FM or VA cell (§2.13): the same shape a GUST cell's handler has --
+-- the cell is the trigger, a pulse landing on it plays a note, and it answers
+-- out of that same id a tick later, excluding the cable the pulse arrived on.
+-- unlike a gust these two are struck rather than swelled, so they carry the
+-- ordinary drum-head refractory (synth.REFRACTORY) rather than a gust's much
+-- shorter one, and the pitch they play is whatever the fields and registers
+-- cabled to them have left them on (synth.play asks grove for it).
+local function play_synth(source_id, target_id, edge, weight)
+  local force = util.clamp(math.abs(edge.gain) * (weight or 1), 0, 1)
+  local wForce = wobble(force, 0.04, 0, 1)
+  -- §2.6, exactly as for a modal voice: every field cabled here takes a step
+  -- and the new pitch is settled before the note, so the note lands on the
+  -- degree the field just chose rather than on the previous one.
+  grove.on_strike(target_id)
+  if not wl("synth").play(target_id, wForce) then return end
+
+  if patch.degree(target_id) > 1 then
+    wl("rambler").post_source(target_id, wForce, source_id)
+  end
+end
+
+HANDLERS["FM"] = play_synth
+HANDLERS["VA"] = play_synth
+
 local DEFAULT_GATE_DUR = 0.15
 
 -- -> E: "a stream cell is continuous until a pulse is cabled into it. a pulse
@@ -198,6 +222,18 @@ HANDLERS["O"] = function() end
 -- there is nothing here for a pulse arriving down a cable to do.
 HANDLERS["LFO"] = function() end
 
+-- -> a TM cell: one clock edge. an ordinary cabled pulse never comes through
+-- here -- a register is in topology.PULSE_TYPES, so rambler's inbox delivers
+-- to tm.pulse_in a tick later and a cycle in the patch cannot recurse. this
+-- entry is for the one path that is not a cable: K1+tap on the cell itself
+-- (gridui.act), which stands a synthetic full-gain edge up and calls straight
+-- in here. it used to be handled by emitting a pulse OUT of the register,
+-- which is the half of the module that no longer exists.
+HANDLERS["TM"] = function(source_id, target_id, edge, weight)
+  wl("tm").pulse_in(target_id, util.clamp(weight or 1, 0, 1), source_id,
+                    util.time())
+end
+
 -- §2.9b the gates. a Clock cell set to High (lib/clockcell.lua) does not
 -- pulse; it holds every cell it is cabled to open for as long as it is set
 -- that way. this is the level version of HANDLERS above -- one entry per
@@ -216,16 +252,34 @@ GATES["voice"] = function(cell, on)
   bridge.voice_hold(cell.index - 1, on)
 end
 
+-- `index - 1` on the two families whose cells are numbered from 1, `index` on
+-- the one numbered from 0. these three used to pass `cell.index` unadjusted,
+-- which was an off-by-one on the first two: a GVOICE cell's index runs 1..6
+-- and a GUST cell's 1..12, so holding drum 1 held drum 2, holding gust 1 held
+-- gust 2, and holding the last of either was dropped by the engine's own
+-- bounds check. every other command to those families already subtracted one
+-- (bridge.g_strike, bridge.gust_note) -- these three were the outliers. an
+-- SMP cell's index is 0-based, which is why that one is unchanged.
 GATES["GVOICE"] = function(cell, on)
-  bridge.g_hold(cell.index, on)
+  bridge.g_hold(cell.index - 1, on)
 end
 
 GATES["GUST"] = function(cell, on)
-  bridge.gust_hold(cell.index, on)
+  bridge.gust_hold(cell.index - 1, on)
 end
 
 GATES["SMP"] = function(cell, on)
   bridge.smp_hold(cell.index, on)
+end
+
+-- §2.13 the two new synth families, held the same way: the envelope stops
+-- closing and the note is simply held at full for as long as the gate is up.
+GATES["FM"] = function(cell, on)
+  bridge.fm_hold(cell.index - 1, on)
+end
+
+GATES["VA"] = function(cell, on)
+  bridge.va_hold(cell.index - 1, on)
 end
 
 -- hold `target_id` open, or let it go. clockcell.resync_gates is the only
@@ -387,6 +441,72 @@ local function lfo_to_gust_spec(l, gu, gain)
   return to_gust_mod_spec(bridge.bus("lfo_out", l.index), gu, gain)
 end
 
+-- §2.13 the three families built the same way: a mono tap of their own, and
+-- one summed mod input that the cell's own Cross knob scales into pitch and
+-- into whatever decides its brightness. a gust was the only one of these when
+-- the shape was invented; the two new synth families are the same shape, so
+-- every pair among them is one rule rather than nine.
+--
+-- `bias` is what to subtract from the cell's `index` to get its 0-based bus
+-- slot. all three number their cells from 1, so all three are 1 -- it is
+-- written out because that has been wrong once already on this panel and a
+-- silently off-by-one bus is a cable that modulates the wrong cell.
+local CROSS = {
+  GUST = {out = "gust_out", mod = "gust_mod", bias = 1},
+  FM   = {out = "fm_out",   mod = "fm_mod",   bias = 1},
+  VA   = {out = "va_out",   mod = "va_mod",   bias = 1},
+}
+
+local function cross_out(cell)
+  local x = CROSS[cell.type]
+  return bridge.bus(x.out, cell.index - x.bias)
+end
+
+local function cross_mod(cell)
+  local x = CROSS[cell.type]
+  return bridge.bus(x.mod, cell.index - x.bias)
+end
+
+-- two of them cabled together: each one's audio lands on the other's mod
+-- input, so the pair genuinely cross-modulates rather than merely summing.
+-- symmetric; a one-way cable only sends from the a-side (§3).
+local function cross_pair_specs(a, b, edge, out)
+  local function link(from, to)
+    table.insert(out, {kind = "aa", src = cross_out(from), dst = cross_mod(to),
+                       gain = edge.gain})
+  end
+  link(a, b)
+  if not edge.oneway then link(b, a) end
+end
+
+-- one of them and a modal voice: two different meanings, one per direction,
+-- gated independently the way voice<->E already is. the synth colours the
+-- voice's mod path; the voice colours the synth's core.
+local function cross_voice_specs(x, v, edge, out)
+  if (not edge.oneway) or edge.a == x.id then
+    table.insert(out, {kind = "aa", src = cross_out(x),
+                       dst = bridge.bus("mod_in", v.index - 1), gain = edge.gain})
+  end
+  if (not edge.oneway) or edge.a == v.id then
+    table.insert(out, {kind = "aa", src = bridge.bus("voice_out", v.index - 1),
+                       dst = cross_mod(x), gain = edge.gain})
+  end
+end
+
+-- one of them and an exciter: the exciter's texture into the synth's core,
+-- and the synth's own tone riding the exciter's colour. the same
+-- two-halves-one-cable shape voice<->E has.
+local function cross_e_specs(x, e, edge, out)
+  if (not edge.oneway) or edge.a == e.id then
+    table.insert(out, {kind = "aa", src = bridge.bus("exc", e.index),
+                       dst = cross_mod(x), gain = edge.gain})
+  end
+  if (not edge.oneway) or edge.a == x.id then
+    table.insert(out, {kind = "ak", src = cross_out(x),
+                       dst = bridge.bus("colour_mod", e.index), gain = edge.gain})
+  end
+end
+
 -- a source cell's own audio into an Output row cell -- the only way anything
 -- is ever heard. position along the row sets pan (topology's `pan` field);
 -- the gain is this cable's own, so patching one source into several O cells
@@ -494,6 +614,49 @@ local function specs_for(edge)
     return out
   end
 
+  -- §2.13 everything left that involves an FM or a VA cell. the gust pairs
+  -- above are written out because each carries a note about the gust family
+  -- in particular; these are the same four rules over the CROSS table, so
+  -- FM<->VA, FM<->GUST, VA<->voice and the rest are one branch each rather
+  -- than fifteen.
+  local xa, xb = CROSS[a.type], CROSS[b.type]
+  if xa or xb then
+    local x = xa and a or b
+    local y = xa and b or a
+    if xa and xb then
+      -- re-derived from the edge's own a/b, since `ordered`-style swapping
+      -- above may have put them the other way round and the one-way rule is
+      -- written in terms of the edge (same as GUST<->GUST).
+      cross_pair_specs(topology.get(edge.a), topology.get(edge.b), edge, out)
+      return out
+    end
+    if y.type == "O" then
+      table.insert(out, to_output_spec(cross_out(x), y, edge.gain))
+      return out
+    end
+    if y.type == "voice" then
+      cross_voice_specs(x, y, edge, out)
+      return out
+    end
+    if y.type == "E" then
+      cross_e_specs(x, y, edge, out)
+      return out
+    end
+    if y.type == "GVOICE" then
+      -- a drum has no mod input, so this is one-directional: the drum's own
+      -- audio bends the synth, and nothing comes back.
+      table.insert(out, {kind = "aa",
+                         src = bridge.bus("gvoice_out", y.index - 1),
+                         dst = cross_mod(x), gain = edge.gain})
+      return out
+    end
+    if y.type == "SMP" then
+      table.insert(out, {kind = "aa", src = bridge.bus("smp_out", y.index),
+                         dst = cross_mod(x), gain = edge.gain})
+      return out
+    end
+  end
+
   -- §2.12 the LFOs. an LFO pointed at a named knob on the cell at the other
   -- end (lfo.lua's Target/Param rows) is not an audio cable at all -- Lua
   -- moves that knob directly, a few dozen times a second -- so there is
@@ -525,6 +688,19 @@ local function specs_for(edge)
   x, y = ordered("LFO", "GUST")
   if x then
     table.insert(out, lfo_to_gust_spec(x, y, edge.gain))
+    return out
+  end
+
+  -- §2.13 and into one of the two new synth families' cross-mod inputs,
+  -- which is the same bus a second gust or another synth would land on.
+  if a.type == "LFO" and CROSS[b.type] then
+    table.insert(out, {kind = "aa", src = bridge.bus("lfo_out", a.index),
+                       dst = cross_mod(b), gain = edge.gain})
+    return out
+  end
+  if b.type == "LFO" and CROSS[a.type] then
+    table.insert(out, {kind = "aa", src = bridge.bus("lfo_out", b.index),
+                       dst = cross_mod(a), gain = edge.gain})
     return out
   end
 

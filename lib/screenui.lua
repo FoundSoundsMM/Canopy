@@ -1,6 +1,6 @@
 -- screenui.lua
--- the global param page, the gusts page, the mixer page, the Colour page, the
--- map, the per-cell settings page, and the edge view.
+-- the global param page, the gusts page, the mixer page, the Send page, the
+-- Colour page, the map, the per-cell settings page, and the edge view.
 --
 -- the lexicon pages are gone. they were a manual you had to leave the patch
 -- to read, and everything worth reading off them -- what a cell's one knob
@@ -80,6 +80,7 @@ local gparam     = wl("gparam")
 local mixer      = wl("mixer")
 local gust       = wl("gust")   -- §2.11b its family page, not its cell page
 local colour     = wl("colour") -- §4.4 the master colour chain
+local send       = wl("send")   -- §2.11c the shared send effect
 local cellparam  = wl("cellparam")
 local lexicon    = wl("lexicon")
 local glyph      = wl("glyph")
@@ -536,6 +537,31 @@ function screenui.draw_colour()
                   function(q) return q.glyph_data and q.glyph_data() or nil end)
 end
 
+-- §2.11c the Send page (K3 from the mixer) -------------------------------------
+-- the four knobs of the one delay effect every source on the panel can reach
+-- (lib/send.lua). it used to be three rows on the gusts page, back when that
+-- line was the gusts' own room; every family has a Send knob into it now, so
+-- it sits with the master pages, between the faders that balance the dry
+-- signal and the chain that colours the sum.
+--
+-- what is deliberately NOT on this page is how much of anything is going
+-- there. that belongs to the cell -- it is a per-instrument decision, it
+-- lives on that instrument's page next to its Level, and a second list of
+-- twenty-six send amounts here would be a mixer nobody asked for. so the
+-- header counts them instead: "3 sending" is the one thing this page cannot
+-- show you any other way.
+
+function screenui.draw_send()
+  local focus = util.clamp(state.sparam_focus or 1, 1, send.PARAM_COUNT)
+  local pages = math.max(1, math.ceil(send.PARAM_COUNT / PL_PER_PAGE))
+  screenui.draw_header("Send", send.active_count() .. " sending",
+                       screenui.page_of(focus), pages)
+  draw_param_grid(send.PARAMS, focus,
+                  function(q) return q.text() end,
+                  function(q) return q.frac() end,
+                  function(q) return q.glyph_data and q.glyph_data() or nil end)
+end
+
 -- §4.1b the mixer page (K3, back with K2) --------------------------------------
 -- one channel per Output cell the patch is actually using, each named after
 -- the instrument cabled to it and each carrying a live meter (lib/mixer.lua).
@@ -636,17 +662,25 @@ end
 
 local SCOPES = {}
 
--- an LFO is a sine and the screen never once showed a sine. the wave scrolls
+-- an LFO is a shape and the screen never once showed one. the wave scrolls
 -- and the right-hand edge is now; the current value is carried out to the
 -- margin as a 3px dot, which is the only part of it that matters when you are
 -- listening rather than looking.
+--
+-- it draws whichever of the eight shapes the cell is on, so the page says
+-- what a square or a ramp or a sample-and-hold actually looks like rather
+-- than drawing a sine over the top of one. `follow` has no waveform at all --
+-- it is reading the mix -- so it draws as a flat line at wherever the level
+-- currently is, which is the honest picture of it.
 --
 -- sampled, not curved: the phase moves every frame, and a cubic's control
 -- points would have to be re-derived per frame anyway. 26 samples across 92
 -- pixels is one command each -- affordable here precisely because an LFO page
 -- has one widget on it and the whole frame is nowhere near the budget.
 SCOPES.LFO = function(id)
-  local phase = wl("lfo").phase(id)
+  local lfo = wl("lfo")
+  local phase = lfo.phase(id)
+  local shape = lfo.shape(id)
   local my = SCOPE_Y + SCOPE_H / 2
   local amp = SCOPE_H / 2 - 4
   local L, R = 4, 118
@@ -657,8 +691,24 @@ SCOPES.LFO = function(id)
   screen.line(R, my)
   screen.stroke()
 
+  -- the same eight shapes lfo.value computes, as a pure function of a phase
+  -- so two cycles can be drawn across the block. the two random ones are the
+  -- exception and draw their held value flat: the scope shows one cell's
+  -- past, and lfo.value only knows its present.
+  local function wave(ph)
+    ph = ph % 1
+    if shape == "tri" then return 1 - 4 * math.abs(ph - 0.5) end
+    if shape == "ramp" then return ph * 2 - 1 end
+    if shape == "saw" then return 1 - ph * 2 end
+    if shape == "square" then return (ph < 0.5) and 1 or -1 end
+    if shape == "s+h" or shape == "rand" or shape == lfo.FOLLOW then
+      return lfo.value(id)
+    end
+    return math.sin(ph * 2 * math.pi)
+  end
+
   local function at(t)
-    return my - math.sin((t * 2 + phase) * 2 * math.pi) * amp
+    return my - wave(t * 2 + phase) * amp
   end
 
   screen.level(13)
@@ -822,7 +872,7 @@ local INTERACTION_DESC = {
   ["voice|O"] = "the voice is heard, panned to where this output sits",
   ["voice|D"] = "the pulse strikes the voice, which then answers with a pulse",
   ["voice|R"] = "the changed pulse strikes the voice, which answers in turn",
-  ["voice|TM"] = "the pulse clocks the pattern and strikes the voice, and also tunes it",
+  ["voice|TM"] = "the pattern tunes the voice, and the voice's strike steps it",
   ["voice|C"] = "the clock pulse strikes the voice",
   ["voice|E"] = "the exciter drives the voice's mod path. Balance sets what it does",
   ["voice|F"] = "the field tunes the voice, as far as its own Range knob allows",
@@ -846,22 +896,22 @@ local INTERACTION_DESC = {
   ["F|GVOICE"] = "the drum's answering pulse steps the field",
   ["GVOICE|GVOICE"] = "one drum's answering pulse strikes the next",
   ["GVOICE|O"] = "the drum is heard, panned to where this output sits",
-  -- §2.3b a register is a pulse cell like a trigger or a rule, but has no
-  -- rhythm of its own: every pulse in is one step, and its own pulse out is
-  -- gated by whichever bit its Tap knob is reading.
-  ["D|TM"] = "the pulse steps the pattern, which answers with a pulse of its own",
-  ["R|TM"] = "the changed pulse steps the pattern, which answers in turn",
-  ["E|TM"] = "the pattern's answering pulse fires one grain of the exciter",
+  -- §2.3b a register takes a pulse in and answers with a NOTE, not with
+  -- another pulse. every pulse in is one step of its pattern; what comes back
+  -- out is a number, and the only cell that can hear one is a voice.
+  ["D|TM"] = "the pulse steps the pattern to its next note",
+  ["R|TM"] = "the changed pulse steps the pattern to its next note",
+  ["E|TM"] = "nothing. a register sends notes, and an exciter takes a trigger",
   ["F|TM"] = "nothing. a register takes a trigger, not a note",
-  ["TM|GVOICE"] = "the pattern's answering pulse strikes the drum, which answers in turn",
-  ["TM|TM"] = "each pattern steps the other. a loop that keeps changing",
+  ["TM|GVOICE"] = "nothing. a drum takes a trigger, and a register sends notes",
+  ["TM|TM"] = "nothing. neither one clocks the other",
   -- clock cells: pure sources, in time with the transport at their own ratio.
   ["C|C"] = "nothing. a clock cell only ever sends",
   ["R|C"] = "the clock pulse goes through this rule on its way out",
   ["C|GVOICE"] = "the clock pulse strikes the drum, which answers with a pulse",
   ["E|C"] = "the clock pulse cuts the exciter into a short grain",
   ["F|C"] = "each clock pulse steps the field to a new note",
-  ["C|TM"] = "the clock pulse steps the pattern",
+  ["C|TM"] = "the clock pulse steps the pattern to its next note",
   ["C|GUST"] = "the clock pulse plays the gust's note",
   -- §2.11 the gusts. a pulse plays the note and the gust answers with a pulse
   -- the way a drum does. a continuous cable lands on its cross modulation
@@ -869,7 +919,7 @@ local INTERACTION_DESC = {
   -- fold. that is why two gusts cabled together read as modulation.
   ["D|GUST"] = "the pulse plays the gust's note, which answers with a pulse of its own",
   ["R|GUST"] = "the changed pulse plays the note, which answers in turn",
-  ["TM|GUST"] = "the pattern's answering pulse plays the gust's note",
+  ["TM|GUST"] = "nothing. a gust takes its pitch from the Scale, not a register",
   ["GVOICE|GUST"] = "the drum's answering pulse plays the gust's note",
   ["GUST|GUST"] = "the two gusts FM each other. turn up Cross on both to hear it",
   ["voice|GUST"] = "the gust drives the voice's mod path, and the voice bends the gust",
@@ -882,7 +932,7 @@ local INTERACTION_DESC = {
   ["D|SMP"] = "the pulse plays the sample from the top",
   ["R|SMP"] = "the changed pulse plays the sample from the top",
   ["C|SMP"] = "the clock pulse plays the sample from the top",
-  ["TM|SMP"] = "the pattern's answering pulse plays the sample",
+  ["TM|SMP"] = "nothing. a sample takes a trigger, and a register sends notes",
   ["GVOICE|SMP"] = "the drum's answering pulse plays the sample",
   ["voice|SMP"] = "the voice's own strike plays the sample",
   ["E|SMP"] = "nothing continuous. only a pulse plays a sample",
@@ -901,7 +951,7 @@ local INTERACTION_DESC = {
   ["D|O"] = "nothing. an output carries sound, and a trigger makes pulses",
   ["R|O"] = "nothing. an output carries sound, and a rule makes pulses",
   ["C|O"] = "nothing. an output carries sound, and a clock makes pulses",
-  ["TM|O"] = "nothing. an output carries sound, and a register makes pulses",
+  ["TM|O"] = "nothing. an output carries sound, and a register makes notes",
   ["F|O"] = "nothing. an output carries sound, and a field makes notes",
   -- a drum answers its own strike with a pulse a tick later, so it can drive
   -- a voice the way a trigger does.
@@ -921,10 +971,49 @@ local INTERACTION_DESC = {
   ["LFO|O"] = "heard directly. turn Speed up into the audio range for a plain tone",
 }
 
+-- §2.13 the FM and VA cells are the same cable endpoint as each other in
+-- every direction: same tap out, same mod input, same strike, same pitch
+-- route. so the lines are written once, as a synth-shaped counterpart to
+-- whatever is at the other end, and installed under both keys -- rather than
+-- as twenty-six entries in the table above, half of which would be the other
+-- half retyped and one of which would eventually drift.
+local SYNTH_DESC = {
+  D = "the pulse plays a note on the synth, which answers with a pulse of its own",
+  R = "the changed pulse plays a note, which answers in turn",
+  C = "the clock pulse plays a note on the synth",
+  TM = "the register tunes the synth. cable a trigger in to play it",
+  F = "the field tunes the synth, as far as its own Range knob allows",
+  E = "the exciter bends the synth, and the synth rides the exciter's colour",
+  GVOICE = "the drum's answering pulse plays a note, and its sound bends the synth",
+  GUST = "the two cross modulate. turn up Cross on both to hear it",
+  voice = "the synth drives the voice's mod path, and the voice bends the synth",
+  SMP = "the sample bends the synth. nothing plays a note either way",
+  LFO = "open the LFO's page to pick which of the synth's knobs it moves",
+  O = "the synth is heard, panned to where this output sits",
+}
+
 local TYPE_ORDER = {
   LFO = 0, voice = 1, D = 2, R = 3, E = 4, F = 6, C = 7, TM = 8,
-  GVOICE = 9, GUST = 10, SMP = 11, O = 12,
+  GVOICE = 9, GUST = 10, FM = 10.3, VA = 10.6, SMP = 11, O = 12,
 }
+
+for _, synth_type in ipairs({"FM", "VA"}) do
+  for other, text in pairs(SYNTH_DESC) do
+    local a, b = other, synth_type
+    if (TYPE_ORDER[a] or 99) > (TYPE_ORDER[b] or 99) then a, b = b, a end
+    INTERACTION_DESC[a .. "|" .. b] = text
+  end
+end
+
+-- the two of them cabled to each other, and each to its own kind. one line
+-- rather than three, because it is one answer: they modulate each other.
+INTERACTION_DESC["FM|FM"] = "the two FM voices cross modulate. Cross on both decides how deeply"
+INTERACTION_DESC["VA|VA"] = "the two VA voices cross modulate. Cross on both decides how deeply"
+INTERACTION_DESC["FM|VA"] = "the two cross modulate. Cross on each decides how deeply"
+
+-- §2.9b a High clock reaching one of them holds the note open, the same way
+-- it does for a voice or a gust.
+local SYNTH_HIGH = "the synth holds its note open for as long as this is high"
 
 -- §2.9b a Clock cell set to High is a different cable from the same seat: it
 -- sends no pulse at all and holds the far end open instead, so every "the
@@ -934,6 +1023,8 @@ local TYPE_ORDER = {
 -- a High cell cabled to a field or a register does exactly what it says
 -- there, which is nothing.
 local HIGH_DESC = {
+  FM = SYNTH_HIGH,
+  VA = SYNTH_HIGH,
   voice = "the voice is held open and rings continuously, never struck",
   GVOICE = "the drum is held open and rings continuously, never struck",
   GUST = "the gust swells in and stays there for as long as this is high",
@@ -1040,6 +1131,8 @@ function screenui.redraw()
     screenui.draw_gusts()
   elseif state.view == "mixer" then
     screenui.draw_mixer()
+  elseif state.view == "send" then
+    screenui.draw_send()
   elseif state.view == "colour" then
     screenui.draw_colour()
   elseif state.view == "map" then

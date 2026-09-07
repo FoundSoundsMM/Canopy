@@ -16,13 +16,16 @@ state.cell_edit = nil
 state.vparam_focus = 1
 
 -- §5.2b which full-screen page the encoders and the screen are on when no
--- cell page is open. there are five now, on one linear stack K3 walks
+-- cell page is open. there are six now, on one linear stack K3 walks
 -- forward and K2 walks back (Canopy.lua's VIEW_ORDER):
 --
 --   "global"  the patch-wide macros (lib/gparam.lua)
 --   "gusts"   one set of knobs over all twelve gust cells at once, plus the
 --             delay line they share (lib/gust.lua's macro page)
 --   "mixer"   one fader per active output (lib/mixer.lua)
+--   "send"    the one delay effect every source can reach, and its four
+--             knobs (lib/send.lua). how much of a given cell goes there is
+--             that cell's own Send row, not anything on this page
 --   "colour"  the master colour chain -- tape, crush, alias, loss, chorus,
 --             transient and compressor (lib/colour.lua)
 --   "map"     every cell, lit if it is cabled
@@ -33,6 +36,7 @@ state.view = "global"
 state.mparam_focus = 1
 state.guparam_focus = 1
 state.cparam_focus = 1
+state.sparam_focus = 1
 
 -- §4.1/§5.2 the global param page (nothing held, no voice page open): E1
 -- walks gparam.PARAMS, E2/E3 nudge coarse/fine. replaced the network/wires
@@ -78,9 +82,11 @@ state.global = {
   -- them up with everything else. it owns the defaulting, so this starts
   -- empty rather than naming sixteen cells up front.
   out_level = {},    -- Out cell id -> that output's level. 1.0 by default.
-  -- §2.11 the gusts' one shared delay line -- mix / time / feedback. same
-  -- arrangement: lib/gust.lua owns the defaults and the ranges, this only
-  -- holds the numbers so a PSET picks them up with everything else.
+  -- §2.11c the shared send effect -- mix / time / feedback / tone. it was
+  -- the gusts' own delay line and lib/gust.lua owned its defaults; every
+  -- family can reach it now and lib/send.lua does. the KEY is unchanged on
+  -- purpose: it is the same four numbers in the same place, and renaming it
+  -- would silently discard them out of every patch saved before the move.
   gust_space = nil,
   -- §2.11b the gust family's unified knobs -- one Pitch/Timbre/Attack/Cross/
   -- Level over all twelve at once, on their own page. offsets around a
@@ -115,16 +121,19 @@ state.rooted = {}      -- D id -> locked to the norns clock? (the Clock row)
 state.rule = {}        -- R id -> weave rule key (the Rule row)
 state.mode = {}        -- F id -> pitch-field mode key (the Mode row)
 state.snap = {}        -- F id -> quantised to the scale? (the Snap row)
-state.vparam = {}      -- voice/GVOICE/TM/GUST/LFO/SMP id -> {key -> 0..1}
+state.vparam = {}      -- any cell with a page -> {key -> 0..1}
 
--- §2.12 an LFO's destination: which of the cells it is cabled to it moves a
--- knob on, and which knob (lib/lfo.lua's Target and Param rows). stored by
--- id and by key rather than by list position, so adding a cable somewhere
--- else does not silently re-aim an LFO that was already pointed at
--- something. `lfo_param` holds lfo.SIGNAL, or nothing at all, for an LFO
--- left as a plain audio-rate cable.
-state.lfo_target = {}  -- LFO id -> destination cell id
-state.lfo_param = {}   -- LFO id -> that cell's param key, or "signal"
+-- §2.12 an LFO's destinations: which cells it moves a knob on, which knob,
+-- and how far (lib/lfo.lua's Slot / Target / Param / Depth rows). four slots
+-- per cell, each `{target = cell id or "off", param = key, depth = 0..1}`,
+-- stored by id and by key rather than by list position -- so adding a cable
+-- somewhere else does not silently re-aim a slot that was already pointed at
+-- something. an empty slot is an empty table and costs nothing.
+--
+-- this replaced a single lfo_target/lfo_param pair per cell. one modulator
+-- moving one knob is a patch cable with extra steps; what a modulator is FOR
+-- is moving several things at once, at different depths.
+state.lfo_slots = {}   -- LFO id -> {slot -> {target=, param=, depth=}}
 
 -- 0.5 is "whatever this sound's own default is"; the knob is symmetrical
 -- around it in both directions. voice.lua and exciter.lua own the mapping
@@ -143,8 +152,11 @@ end
 -- a number nothing reads. a GVOICE cell is a sound of its own, same as a
 -- voice or an E cell -- and so are a GUST cell and a SMP cell, whose Decay
 -- rows are the fall half of their envelopes (§2.11, §2.5).
+-- §2.13 the two new synth families are struck sounds with an envelope of
+-- their own, so their Decay rows live here with everything else's -- which is
+-- also what puts them under the global Decay macro (§4.1).
 local DECAY_TYPES = {voice = true, GVOICE = true, E = true, GUST = true,
-                     SMP = true}
+                     SMP = true, FM = true, VA = true}
 
 function state.decay_target(cell)
   if not cell or not DECAY_TYPES[cell.type] then return nil end

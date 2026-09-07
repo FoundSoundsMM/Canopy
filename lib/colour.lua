@@ -100,8 +100,11 @@ function colour.swirl_hz()
 end
 
 colour.PARAMS = {
-  -- Tape: soft saturation with a little of what a machine does around it --
-  -- top end coming off as it is driven, and a slow wow on the wet path.
+  -- Tape: soft saturation and the top end coming off as it is driven, and
+  -- nothing else. it used to carry a slow wow as well, on a delayed wet path
+  -- crossfaded against the dry one -- which is a comb filter, so the knob
+  -- swept a phaser across the mix instead of driving it into tape. the delay
+  -- went with it (see \woodland_fx's own note).
   -- `knee` because the parameter is the shape of the bend, not an amount of
   -- anything, which is exactly what that glyph draws.
   row("tape", "Tape", "knee"),

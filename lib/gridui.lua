@@ -171,10 +171,16 @@ local function reaches_output(id)
 end
 
 -- the cells whose "fire it once" is a pulse out of their own door rather than
--- something landing on them: a trigger, a transform, a register, a clock.
+-- something landing on them: a trigger, a transform, a clock.
 -- rambler.emit_from is the one door every pulse on this panel leaves by, so
 -- this is the same event the scheduler would have produced on its own.
-local EMITTERS = {D = true, R = true, TM = true, C = true}
+--
+-- a TM cell used to be in here and is not any more. it no longer emits a
+-- pulse of its own (lib/tm.lua -- the trigger half of the module is gone),
+-- so "fire it" for a register means the thing a cable does to one: clock it,
+-- and let the next note fall out. that lands on dispatch's own TM handler
+-- below, which is the same call the inbox makes.
+local EMITTERS = {D = true, R = true, C = true}
 
 -- K1 + tap: do the thing this cell does. a synthetic full-gain cable stands
 -- in for the pulse's source, so a voice, a drum, an exciter, a field and a
@@ -200,7 +206,10 @@ function gridui.act(id, cell)
   -- rather than the confusing one this warning exists for. a sample cell
   -- used to be the other one and is cabled like everything else now (§2.5),
   -- which is exactly why it needs the warning.
-  if (cell.type == "voice" or cell.type == "GVOICE" or cell.type == "SMP")
+  -- §2.13 the two new synth families need this warning for the same reason a
+  -- voice does: they are heard through an Output cable or not at all.
+  if (cell.type == "voice" or cell.type == "GVOICE" or cell.type == "SMP"
+      or cell.type == "FM" or cell.type == "VA")
      and not reaches_output(id) then
     state.set_event(cell.name .. ": no output cable", 2.0)
   else
@@ -324,6 +333,10 @@ function gridui.brightness(id, cell)
     return gust.level_at(id, 2)
   elseif cell.type == "LFO" then
     return wl("lfo").level_at(id, 2)
+  elseif cell.type == "FM" or cell.type == "VA" then
+    -- §2.13 the same indicator a drum and a gust get: open page brightest,
+    -- cabled next, idle dim, with the strike flash on top.
+    return wl("synth").level_at(id, 2)
   end
   return 0
 end

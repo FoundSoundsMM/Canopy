@@ -549,9 +549,12 @@ do
         screenui.page_of(M.voice.PARAM_COUNT) == 2,
         tostring(M.voice.PARAM_COUNT))
 
-  -- and everything else lands on one, which is the point of eight rather
-  -- than the Digitakt's ten: the only list on the panel long enough to
-  -- paginate is a voice's twelve.
+  -- and every other page on the panel lands on one, which is the point of
+  -- eight rather than the Digitakt's ten. three lists are long enough to
+  -- paginate and all three are instruments with a full sound page: a modal
+  -- voice's thirteen, and the two new synth families' (§2.13) nine and
+  -- twelve. nothing else may join them without someone deciding to let it.
+  local PAGINATED_OK = {voice = true, FM = true, VA = true}
   local paginated = {}
   for id, cell in M.topology.each() do
     local page = cellparam.page(id)
@@ -561,10 +564,12 @@ do
   end
   local extra = {}
   for t, n in pairs(paginated) do
-    if t ~= "voice" then table.insert(extra, t .. "(" .. n .. ")") end
+    if not PAGINATED_OK[t] then table.insert(extra, t .. "(" .. n .. ")") end
   end
-  check("and it is the only one that does", #extra == 0,
+  check("and only the full sound pages do", #extra == 0,
         table.concat(extra, ","))
+  check("all three of which do", paginated.voice and paginated.FM
+        and paginated.VA)
   -- the global page is back to exactly one screen: the gusts' three
   -- delay-line rows went to the gusts' own page and the seat they left is the
   -- Drums switch, so it is eight rows and eight widgets with no seam.
@@ -578,12 +583,19 @@ do
         screenui.page_of(M.colour.PARAM_COUNT) == 1
         and M.colour.PARAM_COUNT == screenui.PARAMS_PER_PAGE,
         tostring(M.colour.PARAM_COUNT))
-  -- and so is the gusts page: five family offsets and the delay's three,
-  -- which is the discipline that keeps the whole family in one look.
-  check("and so is the gusts page",
+  -- the gusts page and the Send page are both under a screen rather than
+  -- exactly one. the gusts page used to be exactly eight -- five family
+  -- offsets and the delay's three -- and lost the three when the delay became
+  -- a send every family could reach (§2.11c); the Send page is the four knobs
+  -- that went with it. what matters for both is that neither scrolls.
+  check("the gusts page is one screen",
         screenui.page_of(M.gust.MACRO_COUNT) == 1
-        and M.gust.MACRO_COUNT == screenui.PARAMS_PER_PAGE,
+        and M.gust.MACRO_COUNT <= screenui.PARAMS_PER_PAGE,
         tostring(M.gust.MACRO_COUNT))
+  check("and so is the Send page",
+        screenui.page_of(M.send.PARAM_COUNT) == 1
+        and M.send.PARAM_COUNT <= screenui.PARAMS_PER_PAGE,
+        tostring(M.send.PARAM_COUNT))
   -- the mixer is built from the patch, so its length is the player's rather
   -- than ours: empty it is one page, and a full Output row is exactly two.
   check("an empty mixer is one page",
