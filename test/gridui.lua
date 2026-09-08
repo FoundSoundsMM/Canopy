@@ -2,8 +2,9 @@
 -- vocabulary that now runs on every cell of it.
 --
 -- covers: (1) the panel matches the sketch it was drawn from -- in particular
--- that all four modal voices sit together on row 2 and that both gust rows,
--- and the LFO row above them, are centred; (2) a tap toggles any cell's
+-- that all four modal voices sit together on row 2, that both gust rows are
+-- centred, and that the eight LFOs mirror each other across the two
+-- diagonals; (2) a tap toggles any cell's
 -- settings page, whatever its type; (3) K1+tap fires the cell -- a voice or
 -- drum strikes, a gust sounds, an exciter grains, a trigger pulses; (4) the
 -- hold/tap cable gesture still
@@ -39,10 +40,10 @@ do
     "OOOOOOOOOOOOOOOO",
     "MMMM.FFFNNN.XXVV",
     "................",
-    "S..ffCTTTTCff..S",
-    ".S...CTTTTC...S.",
-    "E.S...LLLL...S.R",
-    "EE.S.GGGGGG.S.RR",
+    "L..ffCTTTTCff..L",
+    ".L...CTTTTC...L.",
+    "E.L...SSSS...L.R",
+    "EE.L.GGGGGG.L.RR",
     "EEE..GGGGGG..RRR",
   }
   -- the letter each type prints on the map above. lower case "f" for FILL
@@ -106,20 +107,18 @@ do
   check("with equal margins either side", (bottom[1] - 1) == (16 - bottom[6]),
         (bottom[1] - 1) .. " vs " .. (16 - bottom[6]))
 
-  -- §2.12 the four LFOs sit on the row right above the gusts, centred inside
-  -- their six-column span.
-  local lrow = {}
+  -- §2.12 eight LFOs now, spread across the two diagonals the sample
+  -- players' row used to mirror -- four columns short of each edge, mirror
+  -- images of each other.
+  local lxs = {}
   for id, cell in M.topology.each() do
-    if cell.type == "LFO" then table.insert(lrow, cell.coords[1][1]) end
+    if cell.type == "LFO" then table.insert(lxs, cell.coords[1][1]) end
   end
-  table.sort(lrow)
-  check("the LFO row is four wide, above the gusts",
-        #lrow == 4 and lrow[1] == 7 and lrow[4] == 10, table.concat(lrow, ","))
-  local ly
-  for id, cell in M.topology.each() do
-    if cell.type == "LFO" then ly = cell.coords[1][2] end
-  end
-  check("and sits one row above the top gust row", ly == 6, tostring(ly))
+  table.sort(lxs)
+  check("there are eight LFOs", #lxs == 8, tostring(#lxs))
+  check("four run in from the left edge, four from the right",
+        lxs[1] == 1 and lxs[4] == 4 and lxs[5] == 13 and lxs[8] == 16,
+        table.concat(lxs, ","))
 end
 
 -- 2: a tap toggles the page, on every type -----------------------------------

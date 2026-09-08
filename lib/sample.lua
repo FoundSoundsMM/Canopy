@@ -269,9 +269,13 @@ function sample.decay_seconds(id)
                     sample.DECAY_MIN, sample.DECAY_MAX)
 end
 
+-- the octaves knob plus whatever turing register (weave.lua) is cabled to
+-- this cell -- its offset comes out in semitones, the unit everything else on
+-- the panel already uses, so it folds in here as a twelfth of an octave.
 function sample.speed_ratio(id)
   local v = state.get_vparam(id, "speed", 0.5)
-  return 2 ^ ((v - 0.5) * 2 * sample.SPEED_OCTAVES)
+  local oct = (v - 0.5) * 2 * sample.SPEED_OCTAVES + wl("weave").offset(id) / 12
+  return 2 ^ oct
 end
 
 function sample.level(id)
@@ -466,6 +470,15 @@ end
 
 function sample.push_all(id)
   for _, p in ipairs(sample.PARAMS) do p.push(id) end
+end
+
+-- a register cabled to this cell just stepped, or its last one was just
+-- unpatched: re-send the speed alone, the same one-row push a turing step
+-- gives a gust's held note or a GVOICE drum's pitch. grove.lua's push_voice
+-- calls this for an SMP cell rather than walking the whole page.
+function sample.repush_speed_one(id)
+  local cell = topology.get(id)
+  if cell then bridge.smp_speed(cell.index, sample.speed_ratio(id)) end
 end
 
 function sample.each()

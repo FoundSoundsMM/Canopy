@@ -19,24 +19,31 @@
 --  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
 --  2    M   M   M   M   .   F   F   F   N   N   N   .   X   X   V   V
 --  3    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
---  4    S   .   .  FL  FL   C   T   T   T   T   C  FL  FL   .   .   S
---  5    .   S   .   .   .   C   T   T   T   T   C   .   .   .   S   .
---  6    E   .   S   .   .   .   L   L   L   L   .   .   .   S   .   R
---  7    E   E   .   S   .   G   G   G   G   G   G   .   S   .   R   R
+--  4    L   .   .  FL  FL   C   T   T   T   T   C  FL  FL   .   .   L
+--  5    .   L   .   .   .   C   T   T   T   T   C   .   .   .   L   .
+--  6    E   .   L   .   .   .   S   S   S   S   .   .   .   L   .   R
+--  7    E   E   .   L   .   G   G   G   G   G   G   .   L   .   R   R
 --  8    E   E   E   .   .   G   G   G   G   G   G   .   .   R   R   R
 --
 --   O  output (16)     M  modal voice (4)  F  percussion-ping (3)
 --   N  percussion-noise FL fill (4)        C  clock (4)
---   T  trigger source (8, was D)           S  sample player (8)
+--   T  trigger source (8, was D)           S  sample player (4)
 --   E  exciter (6, was S)                  R  weave (6)
---   G  gust (12, drone synths)             L  LFO (4, sine modulators)
+--   G  gust (12, drone synths)             L  LFO (8, sine modulators)
 --   X  2-op FM synth (2)                   V  wavefolding VA synth (2)
 --   .  unregistered, dark and inert
 --
--- the grove's four pitch fields used to sit on the left-hand diagonal. that
--- family is gone (§2.6): a second diagonal of sample players is there now,
--- mirroring the first, and every one of the eight can be pointed at any
--- recording in the script's audio/ folder.
+-- the grove's four pitch fields used to sit on the left-hand diagonal, and a
+-- second diagonal of sample players mirrored it on the right -- eight of
+-- them in all, once the grove's own family was retired. the diagonals swap
+-- again here: the LFOs, which used to share one row above the gusts, spread
+-- out onto both diagonals instead (eight cells now, not four), and the
+-- sample players fall back to four, taking the row the LFOs left behind.
+-- the four LFOs that were already on the panel (Flood, Ebb, Neap, Spring)
+-- keep their ids, their engine indices and their four-destination pages,
+-- just at a new address; the four new ones (Surge, Swell, Bore, Slack) are
+-- plainer -- one destination each, so their Slot row never has anything to
+-- pick between.
 --
 -- row 2 is the instrument row and reads left to right as one sentence: the
 -- four modal voices, a gap, the six drums, a gap, the four new synths. it
@@ -215,10 +222,12 @@ for i, c in ipairs(CLOCK_CELLS) do
   reg("C", id, "Clock " .. i, {{c.x, c.y}}, {counterpart = "clk." .. c.counterpart})
 end
 
--- 2.5 sample players -- S (8, internally type "SMP") ------------------------
+-- 2.5 sample players -- S (4, internally type "SMP") ------------------------
 -- what used to be the heartwood diffusion lattice, and -- since the fields
--- came off the panel -- what used to be the grove as well. two mirrored
--- diagonals of four, one running in from each edge.
+-- came off the panel -- what used to be the grove as well: two mirrored
+-- diagonals of four, one running in from each edge, eight cells in all.
+-- the diagonals are the LFOs' now (below); the four that remain sit in a
+-- single row instead, on the seats the LFOs used to hold above the gusts.
 --
 -- a pulse (or K1+tap) plays that cell's recording under an envelope with a
 -- slow attack and a slow fall the player sets per cell, so the same
@@ -254,26 +263,22 @@ end
 -- named by number rather than by their recordings, for the reason the clocks
 -- and the gusts are: "Rain" named a .wav that seat no longer permanently
 -- owns, and the File row on the page says which one it is holding now. the
--- ids keep the old spellings so saved patches still load.
+-- ids keep the old spellings so saved patches still load -- these four kept
+-- their names from the original set of eight; Fen, Mire, Carr and Holt (the
+-- grove's old seats) are the four that gave their row up to the LFOs.
 --
 -- unlike a gust, this family carries no pan of its own -- dead centre for all
--- eight, whichever seat they sit in. eight field-recording beds spread across
--- the stereo image by seat alone were eight sources you could not move
--- independently of where they happened to be patched from; centred, the only
--- way to place one in the image is the deliberate one, an Output cable.
+-- four, whichever seat they sit in. field-recording beds spread across the
+-- stereo image by seat alone were sources you could not move independently
+-- of where they happened to be patched from; centred, the only way to place
+-- one in the image is the deliberate one, an Output cable.
 
 local SMP_CELLS = {
-  -- the left diagonal, running in from the edge -- the four seats the grove's
-  -- pitch fields used to have.
-  {id = "fen",     x = 1,  y = 4, attack = 1.2, decay = 6.0},
-  {id = "mire",    x = 2,  y = 5, attack = 2.0, decay = 8.0},
-  {id = "carr",    x = 3,  y = 6, attack = 0.8, decay = 10.0},
-  {id = "holt",    x = 4,  y = 7, attack = 2.5, decay = 9.0},
-  -- the right diagonal, the original four.
-  {id = "rain",    x = 16, y = 4, attack = 1.2, decay = 6.0},
-  {id = "cicada",  x = 15, y = 5, attack = 2.0, decay = 8.0},
-  {id = "thunder", x = 14, y = 6, attack = 0.8, decay = 10.0},
-  {id = "sea",     x = 13, y = 7, attack = 2.5, decay = 9.0},
+  -- one row, the seats the four LFOs used to hold above the gusts.
+  {id = "rain",    x = 7,  y = 6, attack = 1.2, decay = 6.0},
+  {id = "cicada",  x = 8,  y = 6, attack = 2.0, decay = 8.0},
+  {id = "thunder", x = 9,  y = 6, attack = 0.8, decay = 10.0},
+  {id = "sea",     x = 10, y = 6, attack = 2.5, decay = 9.0},
 }
 
 for i, sm in ipairs(SMP_CELLS) do
@@ -484,26 +489,40 @@ for i, gu in ipairs(GUST_CELLS) do
   })
 end
 
--- 2.12 the LFOs -- L (4, internally type "LFO") -----------------------------
--- four free-running modulators, sitting on the row right above the gusts.
--- each is a plain continuous point, patched like anything else -- what a
--- cable out of one bends is decided entirely by the cell at its other end
--- (dispatch.lua), same as an E cell's stream; the cable's own gain decides
--- how much. the cell's own page carries eight shapes (including a
--- sample-and-hold and an envelope follower on the Output row) and four
--- destination slots, each with its own Target, Param and Depth. see
--- lib/lfo.lua.
+-- 2.12 the LFOs -- L (8, internally type "LFO") -----------------------------
+-- free-running modulators, one per cell, on the two diagonals the sample
+-- players' row used to mirror. each is a plain continuous point, patched
+-- like anything else -- what a cable out of one bends is decided entirely by
+-- the cell at its other end (dispatch.lua), same as an E cell's stream; the
+-- cable's own gain decides how much. the cell's own page carries eight
+-- shapes (including a sample-and-hold and an envelope follower on the
+-- Output row). see lib/lfo.lua.
+--
+-- `slots` is new: how many independent (Target, Param, Depth) destinations
+-- the cell's page offers. the four that were already here (Flood, Ebb, Neap,
+-- Spring, on the left diagonal) keep the full four they always had, and keep
+-- the ids and the 0..3 engine indices any saved patch already knows them by
+-- -- only their seat moved. the four new ones (Surge, Swell, Bore, Slack, on
+-- the right diagonal) get one destination each: a modulator that only ever
+-- needs to move a single knob has no use for a Slot cursor to page through,
+-- and one is the plainer default for a cell nobody has asked more of yet.
 local LFO_CELLS = {
-  {id = "flood",  x = 7,  y = 6},
-  {id = "ebb",    x = 8,  y = 6},
-  {id = "neap",   x = 9,  y = 6},
-  {id = "spring", x = 10, y = 6},
+  -- the left diagonal -- the four already-patched LFOs, relocated.
+  {id = "flood",  x = 1,  y = 4, slots = 4},
+  {id = "ebb",    x = 2,  y = 5, slots = 4},
+  {id = "neap",   x = 3,  y = 6, slots = 4},
+  {id = "spring", x = 4,  y = 7, slots = 4},
+  -- the right diagonal -- four new, single-destination LFOs.
+  {id = "surge",  x = 16, y = 4, slots = 1},
+  {id = "swell",  x = 15, y = 5, slots = 1},
+  {id = "bore",   x = 14, y = 6, slots = 1},
+  {id = "slack",  x = 13, y = 7, slots = 1},
 }
 
 for i, l in ipairs(LFO_CELLS) do
   local id = "lfo." .. l.id
   local name = l.id:sub(1, 1):upper() .. l.id:sub(2)
-  reg("LFO", id, name, {{l.x, l.y}}, {index = i - 1})
+  reg("LFO", id, name, {{l.x, l.y}}, {index = i - 1, slots = l.slots})
 end
 
 -- what kind of thing this is, in a word ---------------------------------

@@ -31,13 +31,16 @@ local bridge = {}
 --
 -- §2.12's LFOs add one more: `lfo_out` is a cell's own sine tap, the only bus
 -- the family needs -- an LFO has no mod input of its own, so unlike a gust it
--- is a pure source (the same shape a Clock cell is on the pulse side).
+-- is a pure source (the same shape a Clock cell is on the pulse side). there
+-- are eight of them now, on the two diagonals the sample players used to
+-- mirror across (see topology.lua's §2.12 note).
 --
 -- the two heartwood families (`heart_in` / `heart_out`) are gone with the
--- lattice itself (§2.5), and so is the grove. the eight Sample cells on
--- those seats reach the mix on their own panned path inside the engine, the
--- way a gust does -- but they still need a tap here, because a cable OUT of
--- one still means something: a second copy at an Output cell, a helping into
+-- lattice itself (§2.5), and so is the grove. the four Sample cells that
+-- remain -- down from eight, having given their diagonals to the LFOs above
+-- -- reach the mix on their own panned path inside the engine, the way a
+-- gust does -- but they still need a tap here, because a cable OUT of one
+-- still means something: a second copy at an Output cell, a helping into
 -- the send, a modulator on a synth.
 bridge.BUS = {
   exc        = {base = 0,  n = 6},  -- E cell raw outputs
@@ -48,8 +51,8 @@ bridge.BUS = {
   out        = {base = 26, n = 16}, -- the Output row's 16 fixed-pan buses
   gust_out   = {base = 42, n = 12}, -- per-GUST audio tap
   gust_mod   = {base = 54, n = 12}, -- per-GUST cross-mod input sum
-  lfo_out    = {base = 66, n = 4},  -- per-LFO sine tap
-  smp_out    = {base = 70, n = 8},  -- per-SMP (sample cell) audio tap
+  lfo_out    = {base = 66, n = 8},  -- per-LFO sine tap
+  smp_out    = {base = 74, n = 4},  -- per-SMP (sample cell) audio tap
   -- §2.13 the two new synth families, each the same shape a gust already
   -- has: one mono tap out per cell, and one summed mod input per cell that
   -- the cell's own Cross knob scales.

@@ -438,4 +438,85 @@ do
         #r.tm_bits == 0, tostring(#r.tm_bits))
 end
 
+-- a turing register's pitch offset now reaches the three families that used
+-- to be untouchable by any register: a gust holds its note between presses,
+-- a sample's Speed is a pitch by another name, and a GVOICE drum has always
+-- had a straight semitones-to-Hz Pitch row. same shape as the voice test
+-- above, one per family.
+print("\n-- cabling a turing R cell to a gust tunes its held note too --")
+do
+  local M = fresh(27)
+  M.state.global.scale_i = 0
+  M.weave.set_rule(TROD, "turing")
+  M.state.set_vparam(TROD, "prob", 0) -- fresh coin every step: guaranteed movement
+  M.patch.add(TROD, "gu.gale", 1.0)
+  local seen = {}
+  for i = 1, 12 do
+    M.weave.pulse_in(TROD, 1, nil, 0)
+    seen[i] = M.gust.note_hz("gu.gale")
+  end
+  local lo, hi = seen[1], seen[1]
+  for _, hz in ipairs(seen) do lo, hi = math.min(lo, hz), math.max(hi, hz) end
+  check("the gust's note actually moves as the register steps", hi > lo,
+        string.format("%.2f..%.2f Hz", lo, hi))
+end
+
+print("\n-- cabling a turing R cell to a sample tunes its speed --")
+do
+  local M = fresh(28)
+  M.state.global.scale_i = 0
+  M.weave.set_rule(TROD, "turing")
+  M.state.set_vparam(TROD, "prob", 0)
+  M.patch.add(TROD, "smp.rain", 1.0)
+  local seen = {}
+  for i = 1, 12 do
+    M.weave.pulse_in(TROD, 1, nil, 0)
+    seen[i] = M.sample.speed_ratio("smp.rain")
+  end
+  local lo, hi = seen[1], seen[1]
+  for _, ratio in ipairs(seen) do lo, hi = math.min(lo, ratio), math.max(hi, ratio) end
+  check("the sample's speed actually moves as the register steps", hi > lo,
+        string.format("x%.3f..x%.3f", lo, hi))
+end
+
+print("\n-- cabling a turing R cell to a GVOICE drum tunes it too --")
+do
+  local M = fresh(29)
+  M.state.global.scale_i = 0
+  M.weave.set_rule(TROD, "turing")
+  M.state.set_vparam(TROD, "prob", 0)
+  M.patch.add(TROD, "gv.yaffle", 1.0)
+  local seen = {}
+  for i = 1, 12 do
+    M.weave.pulse_in(TROD, 1, nil, 0)
+    seen[i] = M.gvoice.pitch_hz("gv.yaffle")
+  end
+  local lo, hi = seen[1], seen[1]
+  for _, hz in ipairs(seen) do lo, hi = math.min(lo, hz), math.max(hi, hz) end
+  check("the drum's pitch actually moves as the register steps", hi > lo,
+        string.format("%.2f..%.2f Hz", lo, hi))
+end
+
+-- §2.7's Spread row: a detuner below a semitone, so cents are the right
+-- resolution there, but a tune above it, where a fractional semitone ("12.1
+-- st") reads as noise rather than as a number anyone asked for.
+print("\n-- turing's Spread snaps to a whole semitone once it is wide enough to be one --")
+do
+  local M = fresh(30)
+  M.weave.set_rule(TROD, "turing")
+  local saw_wide, all_whole = false, true
+  for i = 0, 40 do
+    M.state.character_b[TROD] = i / 40
+    local span, text = M.weave.RULES.turing.read2(M.weave.get(TROD))
+    if span >= 1 then
+      saw_wide = true
+      if math.abs(span - math.floor(span + 0.5)) > 1e-9 then all_whole = false end
+      if text:match("%.%d") then all_whole = false end
+    end
+  end
+  check("the sweep actually reaches the whole-semitone range", saw_wide)
+  check("every span at or above a semitone is a whole number, text included",
+        all_whole)
+end
+
 report()

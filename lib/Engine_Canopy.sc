@@ -29,12 +29,14 @@
 //
 // the four field recordings (rain, cicada, thunder, sea) used to run as
 // always-on loops with a fader each. they are playable cells now (\wl_smp x
-// nSmp, §2.5) -- eight of them, on the seats the heartwood lattice and the
-// grove's pitch fields used to have, and each pointed at any file in the
-// script's audio/ folder rather than at one fixed .wav. nothing sounds until
-// a pulse triggers it, and what it does then is swell in under an attack and
-// out under a fall the player sets per cell -- once, or round and round until
-// the next pulse lets it go (`loop`/`gate`).
+// nSmp, §2.5), each pointed at any file in the script's audio/ folder rather
+// than at one fixed .wav. nothing sounds until a pulse triggers it, and what
+// it does then is swell in under an attack and out under a fall the player
+// sets per cell -- once, or round and round until the next pulse lets it go
+// (`loop`/`gate`). they briefly grew to eight, on the seats the heartwood
+// lattice and the grove's pitch fields used to have; those two diagonals are
+// the LFOs' now (below), and the four sample cells sit in a row instead, on
+// the seats the LFOs used to hold.
 //
 // each writes TWO outputs: a mono tap into its own patchBus slot (smpOutBase),
 // which is what a cable out of it carries, and a panned copy into a shared
@@ -120,9 +122,9 @@ Engine_Canopy : CroneEngine {
 		\wl_g_noise, \wl_g_noise, \wl_g_noise
 	];
 
-	classvar nVoices = 4, nExc = 6, nG = 6, nOut = 16, nSmp = 8,
+	classvar nVoices = 4, nExc = 6, nG = 6, nOut = 16, nSmp = 4,
 		nGust = 12,
-		nLfo = 4,
+		nLfo = 8,
 		// §2.13 the two new synth families on the right of the instrument
 		// row: two two-operator FM voices and two wavefolding VA voices.
 		nFm = 2, nVa = 2;
@@ -161,14 +163,15 @@ Engine_Canopy : CroneEngine {
 	// any more except through an ordinary patch cable into one of these
 	// sixteen fixed-pan buses). `lfoOutBase` is one sine tap per LFO cell, no
 	// mod-input bus of its own since the family is a pure source (see
-	// bridge.lua's BUS comment). the heartwood's two bus families are gone
-	// with the lattice itself, and so is the grove; `smpOutBase` is one tap
-	// per sample cell, and there are eight of them on those two families'
-	// seats now (§2.5). a sample cell reaches the speakers on a panned path
-	// of its own (smpBus, below) the way a gust does, so this tap is not what
-	// makes it audible -- it is what a cable OUT of one carries: a second
-	// copy at an Output cell, a helping into the send, a modulator on a
-	// synth.
+	// bridge.lua's BUS comment) -- there are eight of them now (§2.12), on
+	// the two diagonals the sample players used to mirror across. the
+	// heartwood's two bus families are gone with the lattice itself, and so
+	// is the grove; `smpOutBase` is one tap per sample cell, and there are
+	// four of them now, on the row the LFOs gave up to make room. a sample
+	// cell reaches the speakers on a panned path of its own (smpBus, below)
+	// the way a gust does, so this tap is not what makes it audible -- it is
+	// what a cable OUT of one carries: a second copy at an Output cell, a
+	// helping into the send, a modulator on a synth.
 	// §2.13 adds two families of the same shape a gust already had -- one
 	// mono tap out per cell and one summed mod input per cell -- and §2.11c
 	// adds one more channel on the end: `sendBase`, the single mono bus every
@@ -179,7 +182,7 @@ Engine_Canopy : CroneEngine {
 	classvar excBase = 0, colourModBase = 6, modInBase = 12,
 		voiceOutBase = 16, gvoiceOutBase = 20, outBase = 26,
 		gustOutBase = 42, gustModBase = 54, lfoOutBase = 66,
-		smpOutBase = 70,
+		smpOutBase = 74,
 		fmOutBase = 78, fmModBase = 80, vaOutBase = 82, vaModBase = 84,
 		sendBase = 86,
 		patchTotal = 87;
@@ -1279,7 +1282,8 @@ Engine_Canopy : CroneEngine {
 			Out.kr(out, Amplitude.kr(sig * lvls, 0.005, 0.4));
 		}).add;
 
-		// §2.5 one sample cell. eight of them now, on the seats the
+		// §2.5 one sample cell. four of them now, in a row above the gusts --
+		// the seats the LFOs gave up when they spread onto the diagonals the
 		// heartwood lattice and the grove's pitch fields used to have. the
 		// four recordings that ship with the script used to be always-on
 		// loops with a fader each; they are PLAYED now, any file in the

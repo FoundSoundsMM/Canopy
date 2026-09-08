@@ -51,16 +51,19 @@ function gvoice.decay_seconds(id)
 end
 
 -- Pitch: ±2 octaves off the cell's own root/cutoff (topology's `root`),
--- straight semitones -> Hz, no separate glide -- there is no field able to
--- reach a G cell to make one matter. `extra` is the per-strike detune
--- (Plonks) when there is one; the global transpose is folded in here rather
--- than at the call site so every path to the engine carries it.
+-- straight semitones -> Hz, no separate glide -- a field once could not reach
+-- a G cell, but a turing register (weave.lua) now can, cabled in the same way
+-- it reaches a voice, and folds in here unconditionally: that is a direct,
+-- deliberate cable, not the Drums row's macro below. `extra` is the
+-- per-strike detune (Plonks) when there is one; the global transpose is
+-- folded in here rather than at the call site so every path to the engine
+-- carries it.
 gvoice.PITCH_RANGE_ST = 24
 
 function gvoice.pitch_hz(id, extra)
   local cell = topology.get(id)
   local v = state.get_vparam(id, "pitch", 0.5)
-  local st = (v - 0.5) * 2 * gvoice.PITCH_RANGE_ST + (extra or 0)
+  local st = (v - 0.5) * 2 * gvoice.PITCH_RANGE_ST + (extra or 0) + wl("weave").offset(id)
   if gvoice.follows_global() then
     st = st + (state.global.pitch_offset or 0)
   end
@@ -92,14 +95,21 @@ function gvoice.on_strike(id)
   if cell then bridge.g_pitch(cell.index - 1, gvoice.pitch_hz(id, d)) end
 end
 
--- the global Pitch macro, or the Drums row itself, has moved: a drum holds
--- its pitch between strikes the way a gust holds its note, so all six have
--- to be re-pushed rather than left until something hits them.
+-- one drum's held pitch moved -- a register cabled to it just stepped, or its
+-- last one was just unpatched -- and a drum holds its pitch between strikes
+-- the way a gust holds its note, so this has to reach it directly rather than
+-- wait for the next hit. grove.lua's push_voice calls this for a GVOICE cell
+-- the same way it pushes a modal voice for one of its own.
+function gvoice.repush_pitch_one(id)
+  local cell = topology.get(id)
+  if cell then bridge.g_pitch(cell.index - 1, gvoice.pitch_hz(id)) end
+end
+
+-- the global Pitch macro, or the Drums row itself, has moved: all six have to
+-- be re-pushed at once.
 function gvoice.repush_pitch()
   for id, cell in topology.each() do
-    if cell.type == "GVOICE" then
-      bridge.g_pitch(cell.index - 1, gvoice.pitch_hz(id))
-    end
+    if cell.type == "GVOICE" then gvoice.repush_pitch_one(id) end
   end
 end
 
@@ -115,13 +125,14 @@ gvoice.PARAMS = {
   {
     key = "pitch", label = "Pitch", glyph = "marker", default = 0.5,
     get = vp_get("pitch", 0.5), set = vp_set("pitch"),
-    -- the transpose this cell is actually sounding at, which with the Drums
-    -- row on is the knob plus the global Pitch macro rather than the knob
-    -- alone. same rule the gust page's Pitch row follows: the reading is
-    -- where the cell has landed, not where the knob was left.
+    -- the transpose this cell is actually sounding at, which is the knob
+    -- plus whatever turing register is cabled in, plus, with the Drums row
+    -- on, the global Pitch macro too -- never the knob alone. same rule the
+    -- gust page's Pitch row follows: the reading is where the cell has
+    -- landed, not where the knob was left.
     text = function(id)
       local v = state.get_vparam(id, "pitch", 0.5)
-      local st = (v - 0.5) * 2 * gvoice.PITCH_RANGE_ST
+      local st = (v - 0.5) * 2 * gvoice.PITCH_RANGE_ST + wl("weave").offset(id)
       if gvoice.follows_global() then
         st = st + (state.global.pitch_offset or 0)
       end

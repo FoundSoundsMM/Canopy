@@ -96,8 +96,8 @@ local ok, err = pcall(function()
   -- re-cut added (O, GVOICE/E rename, C-as-clock) and the gusts (§2.11) that
   -- replaced the step-sequencer lanes -- one from each of their two rows.
   for _, id in ipairs({"oak", "d.hob", "fill.ratchet", "clk.toll", "smp.rain",
-                       "smp.fen", "r.thicket", "gv.yaffle", "e.bracken",
-                       "o.1", "gu.sough", "gu.squall", "lfo.flood",
+                       "r.thicket", "gv.yaffle", "e.bracken",
+                       "o.1", "gu.sough", "gu.squall", "lfo.flood", "lfo.surge",
                        "fm.1", "va.1"}) do
     local c = M.topology.get(id)
     gridobj.key(c.coords[1][1], c.coords[1][2], 1); redraw()

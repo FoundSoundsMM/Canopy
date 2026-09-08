@@ -217,15 +217,17 @@ function gust.root_semitones(id)
 end
 
 -- the note a press actually sounds: the cell's own seat, plus its Pitch
--- knob, plus the global transpose -- and then the whole sum quantised, so
--- the Scale decides the note rather than merely colouring it. with Scale on
--- "free" (index 0) grove.quantise_semitones is the identity and a gust plays
--- exactly where it was put.
+-- knob, plus whatever turing register (weave.lua) is cabled to it, plus the
+-- global transpose -- and then the whole sum quantised, so the Scale decides
+-- the note rather than merely colouring it. with Scale on "free" (index 0)
+-- grove.quantise_semitones is the identity and a gust plays exactly where it
+-- was put.
 function gust.note_semitones(id)
   local v = state.get_vparam(id, "pitch", 0.5)
   local st = gust.root_semitones(id)
            + (v - 0.5) * 2 * gust.PITCH_RANGE_ST
            + gust.macro("pitch")
+           + wl("weave").offset(id)
            + (state.global.pitch_offset or 0)
   return wl("grove").quantise_semitones(st)
 end
@@ -659,13 +661,20 @@ state.on_decay_change(function(id)
   end
 end)
 
--- a Scale or global-Pitch change moves every gust's note, and unlike a voice
--- a gust holds its pitch between presses -- so re-push them all rather than
--- waiting for the next key.
+-- one cell's held note moved -- a register cabled to it just stepped, or its
+-- last one was just unpatched -- and unlike a voice a gust holds its pitch
+-- between presses, so this has to reach it directly rather than waiting for
+-- the next key. grove.lua's push_voice calls this for a GUST cell the same
+-- way it pushes a modal voice for one of its own.
+function gust.repush_pitch_one(id)
+  local cell = topology.get(id)
+  if cell then bridge.gust_pitch(cell.index - 1, gust.note_hz(id)) end
+end
+
+-- a Scale or global-Pitch change moves every gust's note at once.
 function gust.repush_pitch()
   for _, id in ipairs(gust.each()) do
-    local cell = topology.get(id)
-    bridge.gust_pitch(cell.index - 1, gust.note_hz(id))
+    gust.repush_pitch_one(id)
   end
 end
 

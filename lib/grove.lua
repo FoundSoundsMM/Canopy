@@ -231,11 +231,27 @@ local PITCHED = {
 
 grove.PITCHED = PITCHED
 
+-- the other three pitched families: a gust, a sample and a GVOICE drum each
+-- already own a complete pitch/speed calculation of their own (gust.lua's
+-- note_hz, sample.lua's speed_ratio, gvoice.lua's pitch_hz) -- built before a
+-- register could reach them, and not worth folding into PITCHED's tune/
+-- depth/push shape, which assumes a `cell.root` a sample cell does not even
+-- have. so rather than teach push_voice their maths, each just gets a one-
+-- line re-push here, called wherever this file would otherwise have called
+-- push_voice: turing_degree's own contribution (weave.offset) is added
+-- inside each family's own function, and this is what re-sends the result
+-- when the register steps or the cabling changes.
+local EXTRA_REPUSH = {
+  GUST   = function(id) wl("gust").repush_pitch_one(id) end,
+  SMP    = function(id) wl("sample").repush_speed_one(id) end,
+  GVOICE = function(id) wl("gvoice").repush_pitch_one(id) end,
+}
+
 -- is this a cell a register can tune? asked by weave.lua's own turing-rule
 -- link rebuild and by everything that walks the panel looking for something
 -- to push.
 function grove.is_pitched(cell)
-  return (cell and PITCHED[cell.type]) and true or false
+  return (cell and (PITCHED[cell.type] or EXTRA_REPUSH[cell.type])) and true or false
 end
 
 
@@ -275,7 +291,13 @@ end
 -- to land on the attack rather than swoop into it.
 local function push_voice(voice_id, glide, extra)
   local cell = topology.get(voice_id)
-  if not cell or not cell.root then return end
+  if not cell then return end
+  -- these three have no `cell.root` to check below (a sample cell has none
+  -- at all) and no glide or per-strike `extra` to thread through -- they
+  -- just want their own re-push called.
+  local extra_fn = EXTRA_REPUSH[cell.type]
+  if extra_fn then extra_fn(voice_id); return end
+  if not cell.root then return end
   local kind = PITCHED[cell.type]
   if not kind then return end
 

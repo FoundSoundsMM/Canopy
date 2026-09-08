@@ -1,12 +1,13 @@
--- topology.lua §2.12 / lib/lfo.lua: the four LFO cells above the gusts.
+-- topology.lua §2.12 / lib/lfo.lua: the eight LFO cells on the two diagonals.
 --
--- covers: (1) four cells, one row, above the gust rows; (2) the Speed page
--- reaches the engine, log-mapped end to end; (3) it is a pure continuous
--- source -- cabled to a voice, an exciter, a gust or an Output cell it lands
--- on that cell's usual continuous bus, and a pulse landing on it does
--- nothing; (4) cellparam hands out the module's own page; (5) the four
--- destination slots are independent, and (6) the eight shapes are the eight
--- the engine knows, in the same order.
+-- covers: (1) eight cells, mirrored across the two diagonals the sample
+-- players' row used to run; (2) the Speed page reaches the engine,
+-- log-mapped end to end; (3) it is a pure continuous source -- cabled to a
+-- voice, an exciter, a gust or an Output cell it lands on that cell's usual
+-- continuous bus, and a pulse landing on it does nothing; (4) cellparam
+-- hands out the module's own page; (5) the four original cells' destination
+-- slots are independent and the four newer ones have exactly one; and
+-- (6) the eight shapes are the eight the engine knows, in the same order.
 local SP = os.getenv("SP")
 local ROOT = os.getenv("ROOT")
 arg = {ROOT}
@@ -14,22 +15,27 @@ dofile(SP .. "/harness.lua")
 
 print("== lfo ==")
 
-print("\n-- four cells, indexed 0..3, one row above the gusts --")
+print("\n-- eight cells, indexed 0..7, across the two diagonals --")
 do
   local M = fresh(1)
   local ids = M.lfo.each()
-  check("there are four", #ids == 4, tostring(#ids))
+  check("there are eight", #ids == 8, tostring(#ids))
 
   local seen = {}
   for _, id in ipairs(ids) do
     local cell = M.topology.get(id)
     seen[cell.index] = true
-    check("row 6, above the top gust row", cell.coords[1][2] == 6,
-          tostring(cell.coords[1][2]))
   end
-  for i = 0, 3 do
+  for i = 0, 7 do
     check("index " .. i .. " is used", seen[i] == true)
   end
+
+  check("Flood keeps its four slots and its old index",
+        M.lfo.slot_count("lfo.flood") == 4
+        and M.topology.get("lfo.flood").index == 0,
+        M.lfo.slot_count("lfo.flood") .. " " .. M.topology.get("lfo.flood").index)
+  check("Surge, the new kind, gets exactly one",
+        M.lfo.slot_count("lfo.surge") == 1, tostring(M.lfo.slot_count("lfo.surge")))
 end
 
 print("\n-- Speed is log-mapped and reaches the engine --")
@@ -215,7 +221,7 @@ print("\n-- init pushes every cell once --")
 do
   local M = fresh(3)
   M.lfo.init()
-  check("all four rates went out", #CALLS.lfo_rate == 4, tostring(#CALLS.lfo_rate))
+  check("all eight rates went out", #CALLS.lfo_rate == 8, tostring(#CALLS.lfo_rate))
 end
 
 print("\n-- a pure continuous source: no mod input, no reaction to a pulse --")
@@ -346,6 +352,32 @@ do
         tostring(M.lfo.slot(L)))
   check("and Target follows it", M.lfo.target(L) == "oak",
         tostring(M.lfo.target(L)))
+end
+
+print("\n-- one slot: the newer LFOs never leave it --")
+do
+  local M = fresh(22)
+  local L = "lfo.surge"
+  check("one destination only", M.lfo.slot_count(L) == 1, tostring(M.lfo.slot_count(L)))
+  M.patch.add(L, "gu.gale", 0.5)
+  M.patch.add(L, "oak", 0.5)
+
+  -- the Slot knob is still a plain 0..1 row -- with one slot to land on it
+  -- just never moves off it, wherever it is turned.
+  M.state.set_vparam(L, "slot", 0)
+  check("slot reads 1 at the bottom of the row", M.lfo.slot(L) == 1)
+  M.state.set_vparam(L, "slot", 1)
+  check("and still 1 at the top", M.lfo.slot(L) == 1)
+
+  M.lfo.set_target(L, "gu.gale", 1)
+  M.lfo.set_param_key(L, "timbre", 1)
+  M.lfo.set_depth(L, 0.4, 1)
+  check("its one slot still moves a knob",
+        M.lfo.target(L, 1) == "gu.gale" and M.lfo.param_key(L, 1) == "timbre")
+
+  local timbre_before = #CALLS.gust_timbre
+  M.lfo.apply()
+  check("and a pass on it reaches the engine", #CALLS.gust_timbre > timbre_before)
 end
 
 print("\n-- eight shapes, and the engine is told which --")

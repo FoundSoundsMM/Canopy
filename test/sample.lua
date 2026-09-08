@@ -1,9 +1,9 @@
--- topology.lua §2.5 / lib/sample.lua: the eight Sample cells -- two mirrored
--- diagonals of four, on the seats the heartwood lattice and the grove's pitch
--- fields used to have.
+-- topology.lua §2.5 / lib/sample.lua: the four Sample cells -- one row above
+-- the gusts, on the seats the LFOs used to hold before they spread onto the
+-- two diagonals (§2.12).
 --
--- what this file is actually checking, in order: that eight cells took those
--- seats and that nothing of type "H" or "F" is left anywhere on the panel;
+-- what this file is actually checking, in order: that four cells took that
+-- row and that nothing of type "H" or "F" is left anywhere on the panel;
 -- that the folder is scanned into a File row and that the row moves a cell
 -- from one recording to another without disturbing its other knobs; that one
 -- shot and loop mean what they say and that the loop toggles; that init loads
@@ -18,9 +18,10 @@ dofile((os.getenv("SP") or "test") .. "/harness.lua")
 
 print("== sample ==")
 
--- the ids keep their old spellings so saved patches still load; the names on
--- the panel are Sample 1..8, in registration order.
-local FEN, MIRE, CARR, HOLT = "smp.fen", "smp.mire", "smp.carr", "smp.holt"
+-- these four kept their spellings from the original set of eight (the other
+-- four -- Fen, Mire, Carr, Holt -- gave their diagonal to the LFOs, §2.12),
+-- so saved patches cabled to them still load. the names on the panel are
+-- Sample 1..4, in registration order.
 local RAIN, CICADA, THUNDER, SEA =
   "smp.rain", "smp.cicada", "smp.thunder", "smp.sea"
 
@@ -32,11 +33,11 @@ local function ids_of(M)
   return ids
 end
 
-print("\n-- eight cells, on two mirrored diagonals --")
+print("\n-- four cells, in a row above the gusts --")
 do
   local M = fresh(1)
   local ids = ids_of(M)
-  check("there are eight of them", #ids == 8, tostring(#ids))
+  check("there are four of them", #ids == 4, tostring(#ids))
 
   check("no H cell is left on the panel", (function()
     for _, cell in M.topology.each() do
@@ -54,10 +55,9 @@ do
     return true
   end)())
 
-  -- in from the left edge, then in from the right.
-  local want = {{1, 4}, {2, 5}, {3, 6}, {4, 7},
-                {16, 4}, {15, 5}, {14, 6}, {13, 7}}
-  check("in from the left edge, then in from the right", (function()
+  -- the row the four LFOs used to hold, right above the gusts.
+  local want = {{7, 6}, {8, 6}, {9, 6}, {10, 6}}
+  check("the row the LFOs left behind", (function()
     for i, id in ipairs(ids) do
       local c = M.topology.get(id).coords[1]
       if c[1] ~= want[i][1] or c[2] ~= want[i][2] then return false end
@@ -65,7 +65,7 @@ do
     return true
   end)())
 
-  check("indexed 0..7 in that order", (function()
+  check("indexed 0..3 in that order", (function()
     for i, id in ipairs(ids) do
       if M.topology.get(id).index ~= i - 1 then return false end
     end
@@ -73,13 +73,13 @@ do
   end)())
 
   -- named by number, not by a recording: a seat does not own one any more.
-  check("named Sample 1..8",
-        M.topology.get(FEN).name == "Sample 1"
-        and M.topology.get(SEA).name == "Sample 8",
-        M.topology.get(FEN).name .. " / " .. M.topology.get(SEA).name)
+  check("named Sample 1..4",
+        M.topology.get(RAIN).name == "Sample 1"
+        and M.topology.get(SEA).name == "Sample 4",
+        M.topology.get(RAIN).name .. " / " .. M.topology.get(SEA).name)
 
   -- this family mixes itself, but carries no pan of its own -- every cell
-  -- centred, whichever diagonal it sits on.
+  -- centred, whichever seat it sits in.
   check("every cell is centred, no pan of its own", (function()
     for _, id in ipairs(ids) do
       if M.topology.get(id).pan ~= 0 then return false end
@@ -103,17 +103,17 @@ do
   check("and the row prints them without their extension",
         files[1].label == "Cicada", files[1].label)
 
-  -- the eight seats spread across whatever is in the folder rather than all
-  -- landing on the first entry.
+  -- the four seats spread across whatever is in the folder rather than all
+  -- landing on the first entry -- one seat per file, with four of each.
   local seen = {}
   for _, id in ipairs(ids_of(M)) do
     seen[M.sample.file_name(id)] = (seen[M.sample.file_name(id)] or 0) + 1
   end
-  check("the eight cells spread across the four files", (function()
+  check("the four cells spread across the four files", (function()
     local n = 0
     for _, count in pairs(seen) do
       n = n + 1
-      if count ~= 2 then return false end
+      if count ~= 1 then return false end
     end
     return n == 4
   end)())
@@ -123,22 +123,22 @@ do
   -- gait bank and a Clock cell's ratio ladder have, and the reason a folder
   -- of four files is not twenty detents an entry.
   local before = #CALLS.smp_load
-  local page = M.cellparam.page(FEN)
-  local was = M.sample.file_name(FEN)
-  for _ = 1, 3 do page.nudge(FEN, 1, 1 / 80) end
+  local page = M.cellparam.page(RAIN)
+  local was = M.sample.file_name(RAIN)
+  for _ = 1, 3 do page.nudge(RAIN, 1, 1 / 80) end
   check("three detents move it one entry along",
-        M.sample.file_name(FEN) ~= was,
-        tostring(was) .. " -> " .. tostring(M.sample.file_name(FEN)))
+        M.sample.file_name(RAIN) ~= was,
+        tostring(was) .. " -> " .. tostring(M.sample.file_name(RAIN)))
   check("and loaded exactly that one, once",
         #CALLS.smp_load == before + 1
         and CALLS.smp_load[#CALLS.smp_load].path
-            == "/tmp/audio/" .. M.sample.file_name(FEN),
+            == "/tmp/audio/" .. M.sample.file_name(RAIN),
         tostring(#CALLS.smp_load - before))
 
   -- a Buffer.read frees and restarts the cell's synth, so a row that re-sent
   -- the same path every detent would be re-reading a 12 MB file per click.
   local at = #CALLS.smp_load
-  page.nudge(FEN, 1, 1 / 8000)
+  page.nudge(RAIN, 1, 1 / 8000)
   check("and does not re-load the one it is already holding",
         #CALLS.smp_load == at, tostring(#CALLS.smp_load - at))
 
@@ -151,12 +151,12 @@ do
     if f.name == "Rain.wav" then rain_i = i end
     if f.name == "Cicada.wav" then cicada_i = i end
   end
-  M2.state.set_vparam(FEN, "file", (rain_i - 0.5) / 4)
-  local on_rain = M2.sample.amp(FEN)
-  M2.state.set_vparam(FEN, "file", (cicada_i - 0.5) / 4)
+  M2.state.set_vparam(RAIN, "file", (rain_i - 0.5) / 4)
+  local on_rain = M2.sample.amp(RAIN)
+  M2.state.set_vparam(RAIN, "file", (cicada_i - 0.5) / 4)
   check("the trim follows the recording, not the seat",
-        M2.sample.amp(FEN) > on_rain,
-        on_rain .. " -> " .. M2.sample.amp(FEN))
+        M2.sample.amp(RAIN) > on_rain,
+        on_rain .. " -> " .. M2.sample.amp(RAIN))
 end
 
 print("\n-- a folder that cannot be read falls back to what ships --")
@@ -168,7 +168,7 @@ do
   check("the four shipped recordings stand in", #M.sample.files() == 4,
         tostring(#M.sample.files()))
   check("and every cell still has something to load",
-        #CALLS.smp_load == 8, tostring(#CALLS.smp_load))
+        #CALLS.smp_load == 4, tostring(#CALLS.smp_load))
   SCANDIR_FILES = was
 end
 
@@ -230,7 +230,7 @@ do
   M.sample.init("/tmp/audio/")
 
   -- the automatic route: one pan per cell, pushed once, from its seat.
-  check("every cell's pan reached the engine", #CALLS.smp_pan == 8,
+  check("every cell's pan reached the engine", #CALLS.smp_pan == 4,
         tostring(#CALLS.smp_pan))
 
   -- K1+tap an uncabled one and nothing warns, because nothing is wrong: this
@@ -261,7 +261,7 @@ do
   local M = fresh(4)
   M.sample.init("/tmp/audio/")
 
-  check("eight loads", #CALLS.smp_load == 8, tostring(#CALLS.smp_load))
+  check("four loads", #CALLS.smp_load == 4, tostring(#CALLS.smp_load))
   check("one per slot, each on its own default file", (function()
     for i, c in ipairs(CALLS.smp_load) do
       if c.index ~= i - 1 then return false end
@@ -271,11 +271,11 @@ do
   end)())
 
   check("and every knob on the page reached the engine",
-        #CALLS.smp_attack == 8 and #CALLS.smp_decay == 8
-        and #CALLS.smp_speed == 8 and #CALLS.smp_loop == 8
+        #CALLS.smp_attack == 4 and #CALLS.smp_decay == 4
+        and #CALLS.smp_speed == 4 and #CALLS.smp_loop == 4
         -- Level goes out twice per cell: the File row pushes it too, because
         -- the trim it carries belongs to the recording.
-        and #CALLS.smp_level == 16,
+        and #CALLS.smp_level == 8,
         table.concat({#CALLS.smp_attack, #CALLS.smp_decay, #CALLS.smp_speed,
                       #CALLS.smp_loop, #CALLS.smp_level}, " "))
 end
@@ -339,7 +339,7 @@ do
   local pushed = #CALLS.smp_decay
   M.gparam.nudge(i, 40, true)
 
-  check("it pushed every sample cell", #CALLS.smp_decay - pushed >= 8,
+  check("it pushed every sample cell", #CALLS.smp_decay - pushed >= 4,
         tostring(#CALLS.smp_decay - pushed))
   check("and the fall actually got longer",
         M.sample.decay_seconds(SEA) > before,

@@ -124,8 +124,9 @@ weave.char2 = char2
 -- the way through; this rule ALWAYS passes the pulse -- unchanged, like the
 -- plain wire a cable used to be before any rule touched it -- and, on top of
 -- that, is a pitch source for whatever pitched cell (a voice, an FM or a VA
--- cell) is cabled to this same R cell, exactly the way a TM cell used to be
--- (grove.lua's PITCHED table, weave.offset below). one cable pair, a
+-- cell, a gust, a sample or a GVOICE drum) is cabled to this same R cell,
+-- exactly the way a TM cell used to be (grove.lua's PITCHED table and its
+-- three extra families, weave.offset below). one cable pair, a
 -- trigger into this cell and this cell into a voice, both strikes the voice
 -- AND tunes it -- where a TM cell needed three (a trigger to the register, a
 -- trigger to the voice, and the register to the voice), because the trigger
@@ -145,7 +146,7 @@ local TURING_PENTATONIC = {0, 3, 5, 7, 10}
 
 local function turing_span_text(span)
   if span < 1 then return string.format("%.0f cents", span * 100) end
-  return string.format("%.1f st", span)
+  return string.format("%.0f st", span)
 end
 
 -- nearest tone of `scale` to `x` semitones -- the same small pure routine
@@ -206,9 +207,15 @@ local function turing_loop(r) return char(r) end
 -- Spread, in semitones: how wide the distribution the register is read out
 -- into is. log-mapped, same as a TM cell's own Range row, because the useful
 -- half of it is at the narrow end, where this is a detuner rather than a
--- tune.
+-- tune. snapped to a whole semitone once it is wide enough to read as one --
+-- "12 st" is a fifth of pitch reaching for a Scale to land on, "12.1 st" is
+-- the same gesture undermined by a number nobody asked for -- and left
+-- fractional (as cents) below that, where the whole point is finer than a
+-- semitone.
 local function turing_spread(r)
-  return TURING_SPAN_MIN * ((TURING_SPAN_MAX / TURING_SPAN_MIN) ^ char2(r))
+  local raw = TURING_SPAN_MIN * ((TURING_SPAN_MAX / TURING_SPAN_MIN) ^ char2(r))
+  if raw < 1 then return raw end
+  return math.floor(raw + 0.5)
 end
 
 -- the register's current pitch offset in semitones -- a pure read, same
@@ -830,8 +837,9 @@ local function rebuild_voice_links()
       -- a one-way cable a->b only sends from a (§3), the same rule grove.lua
       -- and rambler.lua apply.
       local can_send = (not edge.oneway) or (edge.a == r.id)
-      -- "a voice" here means any pitched cell -- the four modal voices and
-      -- the two synth families alike (grove.is_pitched).
+      -- "a voice" here means any pitched cell -- the four modal voices, the
+      -- two synth families, the twelve gusts, the four samples and the six
+      -- GVOICE drums alike (grove.is_pitched).
       if other and can_send and wl("grove").is_pitched(other) then
         table.insert(r.voices, {id = other_id, gain = edge.gain})
         voice_links[other_id] = voice_links[other_id] or {}

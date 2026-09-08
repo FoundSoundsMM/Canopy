@@ -76,18 +76,14 @@ local DESC = {
   ["e.mistle"]   = "Pitched chirps, shaped like a bird call.",
   ["e.wisp"]     = "A slow random wander. Too slow to hear, use it to modulate.",
 
-  -- sample players / S, internally SMP (§2.5). eight seats, two mirrored
-  -- diagonals of four, and none of them owns a recording any more -- the File
-  -- row picks one out of the script's audio/ folder -- so what these say is
-  -- what the SEAT is: how it swells, and where it lands in the image.
-  ["smp.fen"]     = "Plays a sample. File picks it; Attack and Decay swell it.",
-  ["smp.mire"]    = "Plays a sample, slower to arrive. Hard left of centre.",
-  ["smp.carr"]    = "Plays a sample. The quickest swell of the eight.",
-  ["smp.holt"]    = "Plays a sample. The slowest to arrive, left of centre.",
+  -- sample players / S, internally SMP (§2.5). four seats in a row above the
+  -- gusts -- the LFOs' old row -- and none of them owns a recording any more:
+  -- the File row picks one out of the script's audio/ folder, so what these
+  -- say is what the SEAT is: how it swells.
   ["smp.rain"]    = "Plays a sample. File picks it; Attack and Decay swell it.",
-  ["smp.cicada"]  = "Plays a sample, slower to arrive. Right of centre.",
-  ["smp.thunder"] = "Plays a sample. The quickest swell of the eight.",
-  ["smp.sea"]     = "Plays a sample. The slowest to arrive, right of centre.",
+  ["smp.cicada"]  = "Plays a sample, slower to arrive.",
+  ["smp.thunder"] = "Plays a sample. The quickest swell of the four.",
+  ["smp.sea"]     = "Plays a sample. The slowest to arrive.",
 
   -- the gusts / G (§2.11). twelve of one instrument, so twelve of one line:
   -- what differs between them is the seat, and the panel already shows that.
@@ -104,11 +100,17 @@ local DESC = {
   ["gu.buffet"]  = "A drone. Press it to play its note. Broad and slow.",
   ["gu.haar"]    = "A drone. Press it to play its note. The slowest of the twelve.",
 
-  -- the LFOs / L (§2.12)
+  -- the LFOs / L (§2.12). eight now, on the two diagonals the sample players
+  -- used to run -- the original four keep their full four destinations, and
+  -- the newer four move just the one thing each.
   ["lfo.flood"]  = "A sine that never stops. Cable it out, then pick what it moves.",
   ["lfo.ebb"]    = "A sine that never stops. Cable it out, then pick what it moves.",
   ["lfo.neap"]   = "A sine that never stops. Cable it out, then pick what it moves.",
   ["lfo.spring"] = "A sine that never stops. Cable it out, then pick what it moves.",
+  ["lfo.surge"]  = "A sine that never stops. Cable it out; it moves one thing.",
+  ["lfo.swell"]  = "A sine that never stops. Cable it out; it moves one thing.",
+  ["lfo.bore"]   = "A sine that never stops. Cable it out; it moves one thing.",
+  ["lfo.slack"]  = "A sine that never stops. Cable it out; it moves one thing.",
 
   -- the two new synth families / X and V (§2.13)
   ["fm.1"] = "Two operator FM. Ratio and Index make the tone. Strike it.",

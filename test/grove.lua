@@ -145,8 +145,11 @@ end
 print("\n-- which cells have a pitch at all --")
 do
   local M = fresh(4)
-  local want = {voice = true, FM = true, VA = true}
-  check("the four modal voices and the two synth families, and nothing else",
+  local want = {
+    voice = true, FM = true, VA = true,
+    GUST = true, SMP = true, GVOICE = true,
+  }
+  check("the four modal voices, the two synth families, the gusts, the samples and the drums",
         (function()
           for _, cell in M.topology.each() do
             local is = M.grove.is_pitched(cell)

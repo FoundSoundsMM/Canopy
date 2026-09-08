@@ -51,19 +51,19 @@ end
 
 print("\n-- the recordings load once each, at the engine's own slots --")
 do
-  -- these used to be the mixer's four always-on loops. they are the eight
+  -- these used to be the mixer's four always-on loops. they are the four
   -- Sample cells now (§2.5, lib/sample.lua) and the mixer knows nothing about
   -- them -- but they still have to be loaded exactly once at init, at the
   -- indices the .sc file expects, which is what this checks.
-  check("init loaded exactly one sample per cell", #CALLS.smp_load == 8,
+  check("init loaded exactly one sample per cell", #CALLS.smp_load == 4,
         tostring(#CALLS.smp_load))
   local seen, paths_ok = {}, true
   for _, c in ipairs(CALLS.smp_load) do
     seen[c.index] = true
     if not c.path:match("/audio/[A-Za-z]+%.wav$") then paths_ok = false end
   end
-  check("at indices 0..7", (function()
-    for i = 0, 7 do if not seen[i] then return false end end
+  check("at indices 0..3", (function()
+    for i = 0, 3 do if not seen[i] then return false end end
     return true
   end)())
   check("each an absolute path under audio/", paths_ok,
@@ -151,7 +151,7 @@ do
         mixer.PARAM_COUNT == 1, tostring(mixer.PARAM_COUNT))
   -- named for the SEAT, not for a recording: the File row decides which one
   -- the seat is holding, and it can be any file in the folder.
-  check("named for the cell", mixer.PARAMS[1].label == "Sample 7",
+  check("named for the cell", mixer.PARAMS[1].label == "Sample 3",
         mixer.PARAMS[1].label)
   patch.clear()
 end

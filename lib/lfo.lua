@@ -16,13 +16,19 @@
 --
 -- two things changed after that, and they are what this file is now.
 --
--- FOUR DESTINATIONS, not one. one modulator moving one knob is a patch cable
--- with extra steps; the useful thing a modulator does is move several things
--- at once, at different depths, so that turning one knob opens a filter AND
--- lengthens a decay AND pulls a pitch. so an LFO carries four SLOTS, each
--- with its own Target, Param and Depth, and the page has a Slot row saying
--- which of the four the three rows under it are describing. an empty slot
+-- MULTIPLE DESTINATIONS, not always one. one modulator moving one knob is a
+-- patch cable with extra steps; the useful thing a modulator can do is move
+-- several things at once, at different depths, so that turning one knob
+-- opens a filter AND lengthens a decay AND pulls a pitch. so an LFO carries
+-- SLOTS, each with its own Target, Param and Depth, and the page has a Slot
+-- row saying which the three rows under it are describing. an empty slot
 -- costs nothing and shows "-".
+--
+-- how many slots is per cell now (§2.12, topology.lua's `slots` field): the
+-- four LFOs already on the panel keep the full four they always had, and the
+-- four newer ones get one apiece -- a single-destination modulator has
+-- nothing for a Slot cursor to page through, so its Slot row simply never
+-- moves off "1".
 --
 -- IN TIME, or not. an LFO has a Sync row now, and with it on the cell stops
 -- keeping its own time and reads its phase straight off the transport, at a
@@ -191,10 +197,22 @@ function lfo.shape(id)
 end
 
 -- slots -----------------------------------------------------------------------
--- four destinations per LFO, each with its own Target, Param and Depth. the
--- page shows one at a time, chosen by the Slot row.
-
+-- up to four destinations per LFO, each with its own Target, Param and
+-- Depth. the page shows one at a time, chosen by the Slot row.
+--
+-- how many a given cell actually has is topology.lua's `slots` field, not a
+-- constant any more (§2.12): the four LFOs already on the panel keep the
+-- full four, and the four newer ones get one apiece. lfo.SLOTS is what is
+-- left of the old constant -- the most any cell can have, used as a fallback
+-- for a cell topology doesn't say otherwise about.
 lfo.SLOTS = 4
+
+-- how many destinations THIS cell's page offers -- 4 for the original four
+-- LFOs, 1 for the newer four, topology.lua's `slots` field either way.
+function lfo.slot_count(id)
+  local cell = topology.get(id)
+  return (cell and cell.slots) or lfo.SLOTS
+end
 
 -- the first entry of the Param row: "leave the cable alone". with this
 -- selected the LFO modulates no knob and dispatch.lua's ordinary audio-rate
@@ -222,7 +240,8 @@ end
 -- a plain 0..1 knob, same as Shape.
 function lfo.slot(id)
   local v = state.get_vparam(id, "slot", 0)
-  return util.clamp(math.floor(v * lfo.SLOTS) + 1, 1, lfo.SLOTS)
+  local n = lfo.slot_count(id)
+  return util.clamp(math.floor(v * n) + 1, 1, n)
 end
 
 -- where every cell sits in registration order, built once. the panel is
@@ -352,7 +371,7 @@ end
 function lfo.modulates(lfo_id, cell_id)
   local cell = topology.get(lfo_id)
   if not cell or cell.type ~= "LFO" then return false end
-  for i = 1, lfo.SLOTS do
+  for i = 1, lfo.slot_count(lfo_id) do
     if lfo.target(lfo_id, i) == cell_id
        and lfo.param_key(lfo_id, i) ~= lfo.SIGNAL then
       return true
@@ -536,7 +555,7 @@ function lfo.apply()
     end
 
     local swing = lfo.value(id)
-    for i = 1, lfo.SLOTS do
+    for i = 1, lfo.slot_count(id) do
       local p, target = slot_row(id, i, dests, first)
       local k = id .. "\0" .. i
       local prev = held[k]
@@ -675,7 +694,7 @@ lfo.PARAMS = {
       if not t then return i .. " off" end
       return i .. " on"
     end,
-    glyph_data = function(id) return {n = lfo.SLOTS, lit = lfo.slot(id)} end,
+    glyph_data = function(id) return {n = lfo.slot_count(id), lit = lfo.slot(id)} end,
     push = function() end,
   },
   stepped_row("target", "Target",
