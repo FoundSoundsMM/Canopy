@@ -33,6 +33,7 @@ local gust       = wl("gust")
 local weave      = wl("weave")
 local cellparam  = wl("cellparam")
 local mixer      = wl("mixer")
+local fill       = wl("fill")
 
 local gridui = {}
 
@@ -67,8 +68,17 @@ function gridui.on_grid_key(x, y, z, keystate)
     -- cell's page on the way up, and holding it still glances at that page.
     -- it also means auditioning a gust while patching it is free: you hear
     -- the cell you are holding.
+    --
+    -- §2.3b a Fill cell is the other exception, and a plainer one: it is
+    -- engaged the instant it goes down, for as long as it stays down, and
+    -- nothing about the release toggles a page -- there is no page (see the
+    -- z == 0 branch below).
     local down = topology.get(id)
-    if down and down.type == "GUST" then gust.press(id) end
+    if down and down.type == "GUST" then
+      gust.press(id)
+    elseif down and down.type == "FILL" then
+      fill.engage(id)
+    end
   else
     local press_t = state.held_t[id]
     local held_dur = press_t and (util.time() - press_t) or math.huge
@@ -91,10 +101,24 @@ function gridui.on_grid_key(x, y, z, keystate)
 
     local cell = topology.get(id)
 
+    -- §2.3b letting go of a Fill cell disengages it and nothing else -- no
+    -- cable (a Fill cell isn't a patchable endpoint at all), no page (it has
+    -- none). checked before the generic tap/cable branches below so neither
+    -- of them ever sees a Fill cell's release.
+    if cell and cell.type == "FILL" then
+      fill.release(id)
+      gridui.check_sever_combo(keystate)
+      return
+    end
+
     -- every cell is a cable endpoint and every cell has a page, so this
     -- branch is type-free: with something else held the tap draws a cable,
-    -- on its own it works the page.
-    if anchor and held_dur < gridui.TAP_THRESHOLD then
+    -- on its own it works the page. except a Fill cell held as the anchor --
+    -- it released its own engagement the moment IT was let go, above, and it
+    -- still isn't a cable endpoint, so a tap landing on something else while
+    -- one is held draws no cable either.
+    if anchor and held_dur < gridui.TAP_THRESHOLD
+       and topology.get(anchor).type ~= "FILL" then
       local anchor_cell = topology.get(anchor)
       local oneway = keystate and keystate.k1
       local result, _, replaced = patch.toggle(anchor, id, oneway, 0.6)
@@ -174,11 +198,10 @@ end
 -- rambler.emit_from is the one door every pulse on this panel leaves by, so
 -- this is the same event the scheduler would have produced on its own.
 --
--- a TM cell used to be in here and is not any more. it no longer emits a
--- pulse of its own (lib/tm.lua -- the trigger half of the module is gone),
--- so "fire it" for a register means the thing a cable does to one: clock it,
--- and let the next note fall out. that lands on dispatch's own TM handler
--- below, which is the same call the inbox makes.
+-- an R cell running the weave's turing rule (§2.3b, the old TM cells'
+-- mechanic) is not a special case here: firing it clocks its register the
+-- same way any other pulse landing on it would, and lets the next note fall
+-- out -- it needs no entry of its own because R is already in this table.
 local EMITTERS = {D = true, R = true, C = true}
 
 -- K1 + tap: do the thing this cell does. a synthetic full-gain cable stands
@@ -334,10 +357,11 @@ function gridui.brightness(id, cell)
     -- so it carries its own.
     local base = (state.cell_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
     return state.flash_level(id, base)
-  elseif cell.type == "TM" then
-    -- §2.3b: same idea as a GVOICE cell's indicator.
-    local base = (state.cell_edit == id) and 10 or (patch.degree(id) > 0 and 4 or 2)
-    return state.flash_level(id, base)
+  elseif cell.type == "FILL" then
+    -- §2.3b a plain button: full while held, dim otherwise -- no cable to
+    -- brighten toward and no page to sit on, so neither of a GVOICE cell's
+    -- two other levels means anything here.
+    return fill.is_engaged(id) and 15 or 3
   elseif cell.type == "E" then
     local base = patch.degree(id) > 0 and 5 or 3
     return state.flash_level(id, base)

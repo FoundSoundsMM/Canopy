@@ -19,14 +19,14 @@
 --  1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
 --  2    M   M   M   M   .   F   F   F   N   N   N   .   X   X   V   V
 --  3    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .
---  4    S   .   .  TM  TM   C   T   T   T   T   C  TM  TM   .   .   S
+--  4    S   .   .  FL  FL   C   T   T   T   T   C  FL  FL   .   .   S
 --  5    .   S   .   .   .   C   T   T   T   T   C   .   .   .   S   .
 --  6    E   .   S   .   .   .   L   L   L   L   .   .   .   S   .   R
 --  7    E   E   .   S   .   G   G   G   G   G   G   .   S   .   R   R
 --  8    E   E   E   .   .   G   G   G   G   G   G   .   .   R   R   R
 --
 --   O  output (16)     M  modal voice (4)  F  percussion-ping (3)
---   N  percussion-noise TM Turing Machine  C  clock (4)
+--   N  percussion-noise FL fill (4)        C  clock (4)
 --   T  trigger source (8, was D)           S  sample player (8)
 --   E  exciter (6, was S)                  R  weave (6)
 --   G  gust (12, drone synths)             L  LFO (4, sine modulators)
@@ -68,14 +68,23 @@ end
 
 -- 2.1 the output row -- O (16) ---------------------------------------------
 -- nothing reaches a speaker by default. position along the row sets pan,
--- hard left at column 1 to hard right at column 16 -- cabling a voice or any
--- other source cell to one of these is the only way it is ever heard.
+-- widest left at column 1 to widest right at column 16 -- cabling a voice or
+-- any other source cell to one of these is the only way it is ever heard.
+--
+-- OUT_PAN_MAX keeps the outermost pair short of the hard edges, the same
+-- "leave the image somewhere to go" reasoning SMP_PAN_MAX and GUST_PAN_MAX
+-- carry below -- a cable pushed out to an O cell's own extreme, or an LFO
+-- riding one, still has 15% of headroom before it hits a wall. keep this
+-- identical to Engine_Canopy.sc's `woodland_fx` panPos array, which mirrors
+-- this formula rather than reading it (the sixteen channels are fixed pans
+-- baked into the SC synth, not values Lua pushes).
+local OUT_PAN_MAX = 0.85
 
 for x = 1, 16 do
   local id = "o." .. x
   reg("O", id, "Out " .. x, {{x, 1}}, {
     index = x - 1,
-    pan = -1 + 2 * (x - 1) / 15,
+    pan = (-1 + 2 * (x - 1) / 15) * OUT_PAN_MAX,
   })
 end
 
@@ -154,23 +163,35 @@ for _, d in ipairs(D_CELLS) do
   })
 end
 
--- 2.3b Turing Machine cells -- TM (4) ---------------------------------------
--- independent shift-register voltage sources -- the right-hand side of a
--- Marbles. no phase of their own, moved only by an incoming pulse, and they
--- answer with a number rather than with a pulse of their own. see lib/tm.lua.
+-- 2.3b the fills -- FILL (4) --------------------------------------------------
+-- the Turing Machine cells used to sit in these four seats (the right-hand
+-- side of a Marbles, tuning a voice on a cable). that mechanic did not leave
+-- the panel -- it is Turing, one of the weave's own rules now (lib/weave.lua),
+-- reachable on any R cell -- so a register no longer needs a seat of its own,
+-- and these four are something else entirely: unpatched, momentary
+-- performance buttons. hold one and every pulse currently moving through the
+-- panel is punched through this cell's own flavour of fill -- a ratchet, an
+-- echo, a double, a thinning-out -- for as long as it is held, and it lets go
+-- the instant you do. see lib/fill.lua.
+--
+-- no cable endpoint (gridui.lua refuses to patch one), no settings page, no
+-- knob: four fixed flavours, one per cell, the same way a GVOICE cell's kind
+-- is fixed rather than chosen.
 
-local TM_CELLS = {
-  {id = "padfoot",    x = 4,  y = 4, counterpart = "tatterfoal"},
-  {id = "barghest",   x = 5,  y = 4, counterpart = "puck"},
-  {id = "puck",       x = 12, y = 4, counterpart = "barghest"},
-  {id = "tatterfoal", x = 13, y = 4, counterpart = "padfoot"},
+local FILL_CELLS = {
+  {id = "ratchet", x = 4,  y = 4, flavor = "roll"},
+  {id = "haunt",   x = 5,  y = 4, flavor = "ghost"},
+  {id = "volley",  x = 12, y = 4, flavor = "double"},
+  {id = "lull",    x = 13, y = 4, flavor = "skip"},
 }
 
-for _, t in ipairs(TM_CELLS) do
-  local id = "tm." .. t.id
-  local name = t.id:sub(1, 1):upper() .. t.id:sub(2)
-  reg("TM", id, name, {{t.x, t.y}}, {counterpart = "tm." .. t.counterpart})
+for _, f in ipairs(FILL_CELLS) do
+  local id = "fill." .. f.id
+  local name = f.id:sub(1, 1):upper() .. f.id:sub(2)
+  reg("FILL", id, name, {{f.x, f.y}}, {flavor = f.flavor})
 end
+
+topology.FILLS = FILL_CELLS
 
 -- 2.9 clock cells -- C (4, new) ----------------------------------------------
 -- Climate is gone; the letter is reused for something unrelated. a clock
@@ -221,25 +242,25 @@ end
 --
 -- and, like a gust and unlike everything else that makes a sound here, a
 -- sample cell is heard without being cabled: it is routed to the main mix by
--- the engine, panned by the column it sits in (`pan` below). it spent one
--- build cabled to an Output cell like a voice, on the principle that one rule
--- about what is audible beats two -- but a field recording is a bed, the
--- thing you reach for it to do is fill the room underneath a patch, and
--- spending an Output seat and a cable on each of eight of them to get there
--- was a tax on the one family that never wanted the placement. a cable to an
--- Output cell is still allowed and still means what it means; it just places
--- a second copy rather than being the only way to hear the first.
+-- the engine. it spent one build cabled to an Output cell like a voice, on
+-- the principle that one rule about what is audible beats two -- but a field
+-- recording is a bed, the thing you reach for it to do is fill the room
+-- underneath a patch, and spending an Output seat and a cable on each of
+-- eight of them to get there was a tax on the one family that never wanted
+-- the placement. a cable to an Output cell is still allowed and still means
+-- what it means; it just places a second copy rather than being the only way
+-- to hear the first.
 --
 -- named by number rather than by their recordings, for the reason the clocks
 -- and the gusts are: "Rain" named a .wav that seat no longer permanently
 -- owns, and the File row on the page says which one it is holding now. the
 -- ids keep the old spellings so saved patches still load.
 --
--- pan comes from the column and nothing else, spread across the whole panel
--- rather than the family's own span (which is both edges and would put all
--- eight hard left or hard right). SMP_PAN_MAX keeps the outermost pair short
--- of the edge so the image still has somewhere to go.
-local SMP_PAN_MAX = 0.8
+-- unlike a gust, this family carries no pan of its own -- dead centre for all
+-- eight, whichever seat they sit in. eight field-recording beds spread across
+-- the stereo image by seat alone were eight sources you could not move
+-- independently of where they happened to be patched from; centred, the only
+-- way to place one in the image is the deliberate one, an Output cable.
 
 local SMP_CELLS = {
   -- the left diagonal, running in from the edge -- the four seats the grove's
@@ -261,7 +282,7 @@ for i, sm in ipairs(SMP_CELLS) do
     index = i - 1,
     attack = sm.attack,
     decay = sm.decay,
-    pan = (((sm.x - 1) / 15) * 2 - 1) * SMP_PAN_MAX,
+    pan = 0,
   })
 end
 
@@ -502,13 +523,13 @@ local FAMILY = {
   VA     = "VA",
   D      = "Trigger",
   R      = "Process",   -- a trigger processor: the weave's rules
-  TM     = "Register",
   C      = "Clock",
   E      = "Exciter",
   SMP    = "Sample",
   GUST   = "Gust",
   LFO    = "LFO",
   O      = "Output",
+  FILL   = "Fill",
 }
 
 -- the percussion cells are two families sharing one mechanic, and the panel
@@ -557,15 +578,18 @@ function topology.each()
   end
 end
 
--- the types that carry a pulse of their own -- a phase (D), a rule (R) or a
--- register (TM). traffic between two of them is deferred a scheduler tick so
--- a cycle in the patch cannot recurse, which rambler.lua and heartwood.lua
--- both need to know about. a CLOCK cell is deliberately not a member: it is
--- a pure source, never a pulse target, the same shape climate used to be.
--- neither is a GUST cell: it answers a pulse with a sound, exactly the way a
--- voice or a GVOICE cell does, so it is dispatch's business and not the
--- scheduler's.
-topology.PULSE_TYPES = {D = true, R = true, TM = true}
+-- the types that carry a pulse of their own -- a phase (D) or a rule (R).
+-- traffic between two of them is deferred a scheduler tick so a cycle in the
+-- patch cannot recurse, which rambler.lua and heartwood.lua both need to
+-- know about. a CLOCK cell is deliberately not a member: it is a pure
+-- source, never a pulse target, the same shape climate used to be. neither
+-- is a GUST cell: it answers a pulse with a sound, exactly the way a voice
+-- or a GVOICE cell does, so it is dispatch's business and not the
+-- scheduler's. a FILL cell isn't a member either -- it carries no cable at
+-- all (§2.3b, lib/fill.lua): what it does to a pulse happens at
+-- rambler.emit_from, the shared door every pulse already leaves by, not by
+-- sitting in the pulse-cell graph itself.
+topology.PULSE_TYPES = {D = true, R = true}
 
 function topology.is_pulse_cell(cell)
   return (cell and topology.PULSE_TYPES[cell.type]) and true or false

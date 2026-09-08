@@ -144,6 +144,22 @@
 -- Decay reach a swell rather than stopping at a strike; every Pitch row reads
 -- as a NOTE rather than in hertz (§5.2e); and the master chorus comes up at
 -- 0.44 Hz, which is a drift instead of a wobble.
+-- the register moves house, and the seats it left become something new.
+-- the TM cells are gone as a family: what they did -- a shift register
+-- answering a clock with a pitch -- is a rule now, turing, reachable on any
+-- R cell the same way ghost or hocket are (§2.7, lib/weave.lua), and because
+-- an R cell already forwards the pulse it steps its register with, a trigger
+-- cabled through one to a voice both plays it and tunes it -- one cable pair
+-- where a TM cell needed three. the four seats that used to hold it (§2.3b)
+-- are Fill buttons instead: unpatched, momentary, held rather than cabled --
+-- Ratchet, Haunt, Volley and Lull each punch their own flavour into every
+-- pulse moving through the panel for as long as they are held, and let go
+-- the instant you do (lib/fill.lua). and three smaller things: a modal
+-- voice's Tune row reads as a NOTE now, the same rule §5.2e already gave
+-- every other Pitch row; the Output row's pan is capped at 85% either way
+-- rather than running to the hard edge; and the sample players lost the pan
+-- their seat used to give them and sit dead centre, so placing one in the
+-- image is only ever the deliberate act of an Output cable.
 
 engine.name = "Canopy"
 
@@ -176,7 +192,7 @@ local gust     = wl("gust")   -- §2.11: the twelve drone cells on the bottom ro
 local synth    = wl("synth")  -- §2.13: the two FM and two VA cells, right of the drums
 local lfo      = wl("lfo")    -- §2.12: the four sine LFOs above the gusts
 local sample   = wl("sample") -- §2.5: the eight sample cells, two diagonals
-local tm       = wl("tm") -- §2.3b: four TM cells, loaded for their patch/state listeners
+local fill     = wl("fill") -- §2.3b: four unpatched Fill buttons, loaded for gridui/rambler
 local gparam   = wl("gparam")
 local mixer    = wl("mixer")
 local colour   = wl("colour") -- §4.4 the master colour chain, one page past the mixer
@@ -236,6 +252,10 @@ local REGROW_RULES = {
   {"accent", 0.70}, {"swing", 0.50}, {"blur", 0.30}, {"flam", 0.40},
   {"ghost", 0.50},  {"mult", 0.15},  {"divide", 0.20}, {"mask", 0.80},
   {"shift", 0.85},  {"swell", 0.40}, {"fill", 0.30}, {"echo", 0.40},
+  -- §2.3b the turing rule turns UP as a transform here just like any other
+  -- -- a fairly sticky loop (0.70), so a Regrow that lands on one plays a
+  -- recognisable little pattern rather than pure noise.
+  {"turing", 0.70},
 }
 
 local function ids_of(kind, filter)
@@ -293,10 +313,6 @@ local function do_regrow()
   local rcells  = shuffled(ids_of("R"))
   local ecells  = shuffled(ids_of("E"))
   local smcells = shuffled(ids_of("SMP"))
-  -- the melody source. it used to be an F cell here; the fields are gone
-  -- (§2.6) and a register is what tunes a voice now, so the one list is
-  -- shared between this and the synth block further down.
-  local tmcells = shuffled(ids_of("TM"))
   local ocells  = shuffled(ids_of("O"))
 
   local n_voices = math.min(#voices, 2 + math.random(3))
@@ -333,15 +349,19 @@ local function do_regrow()
     end
 
     -- and now and then a register, which is the difference between a drum
-    -- part and a tune. cabled to the voice's own point, and clocked by the
-    -- same pulse-maker that strikes it -- a TM answers a trigger with a note
-    -- and has no clock of its own, so a register nothing steps is a register
-    -- holding one note forever.
+    -- part and a tune -- an R cell forced onto the weave's turing rule
+    -- (§2.3b, the old TM cells' mechanic), drawn from the same `rcells` pool
+    -- the transform above did (a voice that already landed one still gets a
+    -- shot at a second, independent R cell here). cabled to the voice's own
+    -- point, and clocked by the same pulse-maker that strikes it -- a
+    -- register answers a trigger with a note and has no clock of its own, so
+    -- one nothing steps is one holding a single note forever.
     if math.random() < 0.45 then
-      local tm_id = take(tmcells)
-      if tm_id then
-        patch.add(d, tm_id, gain(0.6, 1.0), false)
-        patch.add(tm_id, v, gain(0.4, 0.9), false)
+      local reg = take(rcells)
+      if reg then
+        weave.set_rule(reg, "turing")
+        patch.add(d, reg, gain(0.6, 1.0), false)
+        patch.add(reg, v, gain(0.4, 0.9), false)
       end
     end
 
@@ -424,11 +444,10 @@ local function do_regrow()
   -- whether it is AUDIBLE are seeded: a short envelope so it reads as a note
   -- rather than a pad, and a modest level.
   --
-  -- a register on it about a third of the time. that pairing is the whole
-  -- point of the two changes that arrived together -- a TM is a pitch source
-  -- and nothing else now, and these four take a pitch the same way a modal
-  -- voice does -- so a Regrow that never showed it would be hiding the thing
-  -- worth showing.
+  -- a register on it about a third of the time -- an R cell forced onto the
+  -- weave's turing rule, exactly the voice loop's own trick above. these four
+  -- take a pitch the same way a modal voice does, so a Regrow that never
+  -- showed a register tuning one would be hiding the thing worth showing.
   local syncells = shuffled(ids_of("FM"))
   for _, id in ipairs(shuffled(ids_of("VA"))) do table.insert(syncells, id) end
   if #used_d > 0 and math.random() < 0.6 then
@@ -449,12 +468,13 @@ local function do_regrow()
       end
       patch.add(sy, o, gain(0.6, 1.0), false)
       if math.random() < 0.35 then
-        local tm_id = take(tmcells)
-        if tm_id then
+        local reg = take(rcells)
+        if reg then
+          weave.set_rule(reg, "turing")
           -- the same clock that plays it also steps the register, so the note
           -- has moved by the time the strike lands.
-          patch.add(d, tm_id, gain(0.6, 1.0), false)
-          patch.add(tm_id, sy, gain(0.5, 0.9), false)
+          patch.add(d, reg, gain(0.6, 1.0), false)
+          patch.add(reg, sy, gain(0.5, 0.9), false)
         end
       end
     end

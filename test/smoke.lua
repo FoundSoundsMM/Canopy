@@ -45,9 +45,9 @@ do
   -- for its Send row; §2.13 added synth.lua, the FM and VA cells.
   local WANT = {
     "bridge", "cellparam", "clockcell", "colour", "dispatch", "exciter",
-    "glyph", "gparam", "gridui", "grove", "gust", "gvoice", "lexicon",
+    "fill", "glyph", "gparam", "gridui", "grove", "gust", "gvoice", "lexicon",
     "lfo", "mixer", "patch", "quantise", "rambler", "sample", "screenui",
-    "send", "state", "synth", "tm", "topology", "voice", "weave",
+    "send", "state", "synth", "topology", "voice", "weave",
   }
   check("exactly the expected modules, one copy each",
         table.concat(names, ",") == table.concat(WANT, ","),
@@ -95,7 +95,7 @@ local ok, err = pcall(function()
   -- one representative of every current cell type, including the ones the
   -- re-cut added (O, GVOICE/E rename, C-as-clock) and the gusts (§2.11) that
   -- replaced the step-sequencer lanes -- one from each of their two rows.
-  for _, id in ipairs({"oak", "d.hob", "tm.padfoot", "clk.toll", "smp.rain",
+  for _, id in ipairs({"oak", "d.hob", "fill.ratchet", "clk.toll", "smp.rain",
                        "smp.fen", "r.thicket", "gv.yaffle", "e.bracken",
                        "o.1", "gu.sough", "gu.squall", "lfo.flood",
                        "fm.1", "va.1"}) do

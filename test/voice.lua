@@ -123,15 +123,17 @@ do
   -- fields; they are gone (§2.6) and a register is what tunes a voice now.
   local M = fresh(11)
   M.state.global.scale_i = 0
-  local TM = "tm.padfoot"
+  -- the register is an R cell on the weave's turing rule now (§2.3b).
+  local TM = "r.thicket"
+  M.weave.set_rule(TM, "turing")
   M.patch.add(TM, OAK, 1.0)
 
   -- step it until the register is actually holding the voice off its root,
   -- so what follows is scaling something rather than scaling zero.
   local base
   for _ = 1, 24 do
-    M.tm.pulse_in(TM, 1, nil, 0)
-    base = M.tm.offset(OAK) * M.voice.depth(OAK)
+    M.weave.pulse_in(TM, 1, nil, 0)
+    base = M.weave.offset(OAK) * M.voice.depth(OAK)
     if math.abs(base) > 0.01 then break end
   end
   local full = math.abs(base)
@@ -140,12 +142,12 @@ do
 
   M.state.set_vparam(OAK, "depth", 0)
   check("at depth 0 it does not",
-        M.tm.offset(OAK) * M.voice.depth(OAK) == 0)
+        M.weave.offset(OAK) * M.voice.depth(OAK) == 0)
   M.state.set_vparam(OAK, "depth", 1.0)
   check("and at depth 2 it moves twice as far",
-        math.abs(math.abs(M.tm.offset(OAK) * M.voice.depth(OAK)) - full * 2) < 1e-6,
+        math.abs(math.abs(M.weave.offset(OAK) * M.voice.depth(OAK)) - full * 2) < 1e-6,
         string.format("%.2f vs %.2f",
-                      math.abs(M.tm.offset(OAK) * M.voice.depth(OAK)), full * 2))
+                      math.abs(M.weave.offset(OAK) * M.voice.depth(OAK)), full * 2))
 end
 
 print("\n-- the voice answers with a pulse every time it is struck --")

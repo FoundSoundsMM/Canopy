@@ -36,11 +36,13 @@ local DESC = {
   ["d.hunt"]     = "Speeds up across a cycle, then drops back and starts again.",
   ["d.skriker"]  = "Fires an unpredictable cluster of 2 to 4 hits close together.",
 
-  -- Turing Machine cells / TM (§2.3b)
-  ["tm.padfoot"]    = "An 8 bit pattern that mutates as it runs. Feed it a pulse.",
-  ["tm.barghest"]   = "An 8 bit pattern that mutates as it runs. Feed it a pulse.",
-  ["tm.puck"]       = "An 8 bit pattern that mutates as it runs. Feed it a pulse.",
-  ["tm.tatterfoal"] = "An 8 bit pattern that mutates as it runs. Feed it a pulse.",
+  -- the fills / FILL (§2.3b). unpatched: hold one and it punches its own
+  -- flavour into every pulse moving through the panel, for as long as it
+  -- is held.
+  ["fill.ratchet"] = "Hold: every pulse also fires a fast, decaying ratchet.",
+  ["fill.haunt"]   = "Hold: every pulse also fires one quiet echo behind it.",
+  ["fill.volley"]  = "Hold: every pulse immediately fires a second, full copy.",
+  ["fill.lull"]    = "Hold: thins the panel out, dropping some pulses outright.",
 
   -- clock cells / C
   ["clk.toll"]  = "Pulses in time with the transport, at the ratio you set.",
@@ -123,8 +125,9 @@ end
 
 -- §4.2 "the one thing that matters about that cell" --------------------
 -- a voice has no single one: it has the sound editor instead (§5.5), which
--- is why there is no `voice` row here. GVOICE, TM, GUST, LFO, SMP, FM and VA
--- are the same way.
+-- is why there is no `voice` row here. GVOICE, GUST, LFO, SMP, FM and VA are
+-- the same way. so is FILL, for the opposite reason -- there is nothing to
+-- turn, fixed or otherwise.
 
 local CHARACTER = {
   D = {label = "Rate",  lo = 0, hi = 1, note = "how often it fires"},

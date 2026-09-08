@@ -76,7 +76,12 @@ voice.PARAMS = {
   {
     key = "tune", label = "Tune", glyph = "marker", default = 0.5,
     get = vp_get("tune", 0.5), set = vp_set("tune"),
-    text = function(id) return string.format("%+.1f st", voice.tune_semitones(id)) end,
+    -- the note this voice will actually sound, not the knob's own offset --
+    -- the same reading synth.lua's Pitch row gives an FM or VA cell
+    -- (grove.note_name(grove.hz(id))), so a register cabled in and the global
+    -- Scale both show up here rather than being hidden behind a raw semitone
+    -- count.
+    text = function(id) return wl("grove").note_name(wl("grove").hz(id)) or "-" end,
     push = function(id)
       -- pitch is grove's to send: it is the sum of this offset and every
       -- field cabled into the voice's P socket, and only grove knows the

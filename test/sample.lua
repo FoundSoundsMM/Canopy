@@ -78,19 +78,14 @@ do
         and M.topology.get(SEA).name == "Sample 8",
         M.topology.get(FEN).name .. " / " .. M.topology.get(SEA).name)
 
-  -- this family mixes itself now, so every cell has a pan of its own, taken
-  -- from its column and nothing else -- the left diagonal to the left, the
-  -- right diagonal to the right, none of them hard against the edge.
-  check("each has a pan taken from its column", (function()
+  -- this family mixes itself, but carries no pan of its own -- every cell
+  -- centred, whichever diagonal it sits on.
+  check("every cell is centred, no pan of its own", (function()
     for _, id in ipairs(ids) do
-      local p = M.topology.get(id).pan
-      if type(p) ~= "number" or math.abs(p) > 0.81 then return false end
+      if M.topology.get(id).pan ~= 0 then return false end
     end
     return true
   end)())
-  check("the left diagonal sits left and the right one right",
-        M.topology.get(FEN).pan < -0.5 and M.topology.get(RAIN).pan > 0.5,
-        M.topology.get(FEN).pan .. " / " .. M.topology.get(RAIN).pan)
 end
 
 print("\n-- the folder is a knob: the File row --")

@@ -37,7 +37,6 @@ local dispatch  = wl("dispatch")
 local quantise  = wl("quantise")
 local weave     = wl("weave")
 local clockcell = wl("clockcell")
-local tm        = wl("tm")
 
 local rambler = {}
 
@@ -535,7 +534,16 @@ end
 -- straight back down its own input, which is not coupling, it is a duplicate.
 -- a D cell passes no `except` -- a pulse-maker answering its neighbour *is* the
 -- coupling, and §2.3 wants it.
-function rambler.emit_from(id, weight, only, except)
+--
+-- split into a raw sender and a thin wrapper for §2.3b's fills (lib/fill.lua):
+-- every primary pulse on the panel passes through the wrapper, which is where
+-- a held Fill cell gets its one chance to see it -- suppress it outright
+-- (Lull) or lay extra, delayed calls to the raw sender on top (Ratchet,
+-- Haunt, Volley). those extra calls go straight to `emit_from_raw`, bypassing
+-- the wrapper entirely, so a fill's own echoes are never themselves re-filled
+-- -- without that a held Ratchet would roll its own rolls, geometrically, into
+-- the MAX_EMITS_PER_TICK ceiling within a handful of generations.
+local function emit_from_raw(id, weight, only, except)
   if emits_this_tick >= MAX_EMITS_PER_TICK then return 0 end
   emits_this_tick = emits_this_tick + 1
 
@@ -573,6 +581,17 @@ function rambler.emit_from(id, weight, only, except)
       end
     end
   end
+  return sent, eligible
+end
+
+rambler.emit_from_raw = emit_from_raw
+
+function rambler.emit_from(id, weight, only, except)
+  weight = util.clamp(weight or 1, 0, 1)
+  local fill = wl("fill")
+  if fill.suppress(id) then return 0 end
+  local sent, eligible = emit_from_raw(id, weight, only, except)
+  fill.echo(id, weight, only, except)
   return sent, eligible
 end
 
@@ -629,11 +648,6 @@ local function deliver(msg, now)
 
   if cell.type == "R" then
     weave.pulse_in(msg.id, msg.w, msg.src, now)
-    return
-  end
-
-  if cell.type == "TM" then
-    tm.pulse_in(msg.id, msg.w, msg.src, now)
     return
   end
 
@@ -742,6 +756,10 @@ function rambler.tick()
 
   -- 1. the weave's own scheduled taps (echoes, flams, delays, rolls).
   weave.tick(now)
+
+  -- 1b. §2.3b a held Fill cell's own scheduled echoes (Ratchet, Haunt,
+  --     Volley) -- see lib/fill.lua and rambler.emit_from above.
+  wl("fill").tick(now)
 
   -- 2. scheduled gait taps (quantised emissions, burst ratchets).
   --    due and keep are split *before* anything fires, because firing can
@@ -962,10 +980,11 @@ function rambler.resync()
     r.cycle = 0
     r.abs = nil   -- advance_rooted re-seeds this from the clock, silently
   end
-  -- and the three other files that keep a queue or a beat position of their
-  -- own behind this same tick, for exactly the same reason.
+  -- and the other files that keep a queue or a beat position of their own
+  -- behind this same tick, for exactly the same reason.
   weave.resync()
   clockcell.resync()
+  wl("fill").resync()
 end
 
 function rambler.start()

@@ -191,10 +191,13 @@ do
   -- one representative of every type against one of every other type, both
   -- ways round, so every branch of the edge view's interaction table is
   -- drawn. "node" is gone -- the socket collapse means a voice is one cable
-  -- endpoint, already covered by "voice" -- and GVOICE, TM, GUST, O and LFO
-  -- are new since the re-cut.
+  -- endpoint, already covered by "voice" -- and GVOICE, GUST, O and LFO
+  -- are new since the re-cut. §2.3b: TM is gone (its mechanic is the
+  -- weave's turing rule now, already covered by "R") and FILL is new --
+  -- unpatchable, so every pair including it should draw the same "nothing"
+  -- line (screenui.lua's FILL_TEXT) rather than a real interaction.
   local reps = {}
-  for _, kind in ipairs({"voice", "D", "R", "GVOICE", "E", "SMP", "C", "TM",
+  for _, kind in ipairs({"voice", "D", "R", "GVOICE", "E", "SMP", "C", "FILL",
                          "GUST", "O", "LFO", "FM", "VA"}) do
     local list = ids_of(kind)
     table.insert(reps, list[1])

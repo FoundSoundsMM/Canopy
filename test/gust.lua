@@ -9,7 +9,8 @@
 -- that a pulse down a cable sounds one and that it answers with a pulse of
 -- its own; that a gust<->gust cable produces the mutual cross-mod pair the
 -- Deerhorn reference is here for; and that a cable loop through two of them
--- stays bounded -- the same runaway question test/tm.lua asks of TM<->TM.
+-- stays bounded -- the same runaway question test/weave.lua asks of a
+-- turing<->turing chain (§2.3b).
 
 dofile((os.getenv("SP") or "test") .. "/harness.lua")
 

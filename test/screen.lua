@@ -485,7 +485,7 @@ print("\n-- a heavily cabled cell --")
 do
   local M2 = fresh(2)
   for _, other in ipairs({"o.1", "o.16", "e.bracken", "smp.thunder", "d.hob",
-                          "gu.sough", "tm.padfoot"}) do
+                          "gu.sough", "r.thicket"}) do
     M2.patch.add("oak", other, 0.5)
   end
   M2.state.held = {"oak"}
@@ -522,10 +522,11 @@ do
       end
     end
   end
-  -- and once more with the longest pair of names the panel has, cabled
+  -- and once more with the longest pair of names the panel has, cabled --
+  -- "Exciter: Windfall" and "Trigger: Spriggan", now that Tatterfoal is gone.
   M3.state.held = {}
-  M3.patch.add("tm.tatterfoal", "d.spriggan", 0.5)
-  M3.state.held = {"tm.tatterfoal", "d.spriggan"}
+  M3.patch.add("e.windfall", "d.spriggan", 0.5)
+  M3.state.held = {"e.windfall", "d.spriggan"}
   screenui.redraw()
   local bad = collisions("longest names")
   if #bad > 0 and not worst then worst = "longest names: " .. bad[1] end
@@ -606,11 +607,13 @@ do
         tostring(M.mixer.MAX_CHANNELS))
 
   -- every cell type has a page at all -- "some cells have settings and some
-  -- don't" was half of the inconsistency this replaced.
+  -- don't" was half of the inconsistency this replaced. §2.3b's FILL is the
+  -- one deliberate exception: four fixed flavours and nothing to set, so it
+  -- is excluded here rather than counted as a gap.
   local missing = {}
   local types = {}
   for id, cell in M.topology.each() do
-    if not types[cell.type] then
+    if not types[cell.type] and cell.type ~= "FILL" then
       types[cell.type] = true
       local page = cellparam.page(id)
       if not page or page.PARAM_COUNT < 1 then
@@ -620,6 +623,8 @@ do
   end
   check("every cell type on the panel has a settings page", #missing == 0,
         table.concat(missing, ","))
+  check("except FILL, which has none on purpose",
+        cellparam.page("fill.ratchet") == nil)
 end
 
 -- 6: the glyph vocabulary ----------------------------------------------------

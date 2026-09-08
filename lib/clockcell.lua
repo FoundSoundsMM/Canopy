@@ -14,7 +14,7 @@
 -- dependency note: rambler.lua requires this file at load (its tick() needs
 -- a call site here, exactly where climate.tick used to be), so this one must
 -- not require rambler at load -- fetched lazily inside tick(), same as
--- tm.lua does with grove/rambler.
+-- weave.lua does with grove/rambler.
 
 local topology = wl("topology")
 local state    = wl("state")

@@ -1,7 +1,7 @@
 -- topology.lua §2.9 / lib/clockcell.lua: the four Clock cells. Climate is
 -- gone and this is unrelated to it in every way except the reused letter --
 -- a Clock cell has no gait bank and no phase of its own, the same "no free
--- clock, only moves on the transport" shape test/tm.lua's TM cells have,
+-- clock, only moves on a trigger" shape the weave's turing rule (§2.3b) has,
 -- except a Clock cell's clock is the master transport rather than an
 -- incoming pulse: it tracks clock.get_beats() directly at a multiple or
 -- division of it (Ratio, the one knob, E2) and fires through rambler.emit_from

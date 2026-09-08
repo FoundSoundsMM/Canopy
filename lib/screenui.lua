@@ -608,12 +608,13 @@ end
 -- "what does this cell do", under the grid rather than instead of it: it
 -- only fits when the page on screen right now leaves its whole second row
 -- empty (four rows or fewer -- D, R, E, H, C, O, and a voice's second
--- page all qualify; TM's eight and a voice's first page do not, and a
--- GVOICE/GUST page's six leaves it only half empty, so those stay quiet
--- rather than crowd two free columns). toggle_page (gridui.lua) resets
--- vparam_focus to 1 on every tap, so this is exactly the state a freshly
--- opened cell lands on -- it reads once, up front, and gives way the moment
--- E1 walks onto a page with less room.
+-- page all qualify; a voice's first page does not, and a GVOICE/GUST page's
+-- six leaves it only half empty, so those stay quiet rather than crowd two
+-- free columns; a FILL cell has no page at all, count 0, so it always
+-- qualifies). toggle_page (gridui.lua) resets vparam_focus to 1 on every
+-- tap, so this is exactly the state a freshly opened cell lands on -- it
+-- reads once, up front, and gives way the moment E1 walks onto a page with
+-- less room.
 local DESC_Y0 = 44
 local DESC_LINE_H = 9
 local DESC_MAX_LINES = 3
@@ -1428,6 +1429,11 @@ function screenui.draw_cell(id)
     if slots_used(count, focus) <= PL_COLS then
       draw_cell_scope(id, cell)
     end
+  else
+    -- §2.3b a FILL cell: no page at all, count 0, so the header above is the
+    -- whole of it -- except the one thing worth saying about a cell with no
+    -- knobs, which is what it actually does while held.
+    draw_cell_desc(id)
   end
 end
 
@@ -1489,8 +1495,7 @@ local INTERACTION_DESC = {
   ["voice|voice"] = "each voice's sound modulates the other, and either one answers a strike",
   ["voice|O"] = "the voice is heard, panned to where this output sits",
   ["voice|D"] = "the pulse strikes the voice, which then answers with a pulse",
-  ["voice|R"] = "the changed pulse strikes the voice, which answers in turn",
-  ["voice|TM"] = "the pattern tunes the voice, and the voice's strike steps it",
+  ["voice|R"] = "the changed pulse strikes the voice; on turing it tunes it too",
   ["voice|C"] = "the clock pulse strikes the voice",
   ["voice|E"] = "the exciter drives the voice's mod path. Balance sets what it does",
   ["D|D"] = "the two pull each other into time, and each also triggers the other",
@@ -1508,20 +1513,11 @@ local INTERACTION_DESC = {
   ["E|GVOICE"] = "the drum's answering pulse fires one grain of the exciter",
   ["GVOICE|GVOICE"] = "one drum's answering pulse strikes the next",
   ["GVOICE|O"] = "the drum is heard, panned to where this output sits",
-  -- §2.3b a register takes a pulse in and answers with a NOTE, not with
-  -- another pulse. every pulse in is one step of its pattern; what comes back
-  -- out is a number, and the only cell that can hear one is a voice.
-  ["D|TM"] = "the pulse steps the pattern to its next note",
-  ["R|TM"] = "the changed pulse steps the pattern to its next note",
-  ["E|TM"] = "nothing. a register sends notes, and an exciter takes a trigger",
-  ["TM|GVOICE"] = "nothing. a drum takes a trigger, and a register sends notes",
-  ["TM|TM"] = "nothing. neither one clocks the other",
   -- clock cells: pure sources, in time with the transport at their own ratio.
   ["C|C"] = "nothing. a clock cell only ever sends",
   ["R|C"] = "the clock pulse goes through this rule on its way out",
   ["C|GVOICE"] = "the clock pulse strikes the drum, which answers with a pulse",
   ["E|C"] = "the clock pulse cuts the exciter into a short grain",
-  ["C|TM"] = "the clock pulse steps the pattern to its next note",
   ["C|GUST"] = "the clock pulse plays the gust's note",
   -- §2.11 the gusts. a pulse plays the note and the gust answers with a pulse
   -- the way a drum does. a continuous cable lands on its cross modulation
@@ -1529,7 +1525,6 @@ local INTERACTION_DESC = {
   -- fold. that is why two gusts cabled together read as modulation.
   ["D|GUST"] = "the pulse plays the gust's note, which answers with a pulse of its own",
   ["R|GUST"] = "the changed pulse plays the note, which answers in turn",
-  ["TM|GUST"] = "nothing. a gust takes its pitch from the Scale, not a register",
   ["GVOICE|GUST"] = "the drum's answering pulse plays the gust's note",
   ["GUST|GUST"] = "the two gusts FM each other. turn up Cross on both to hear it",
   ["voice|GUST"] = "the gust drives the voice's mod path, and the voice bends the gust",
@@ -1541,7 +1536,6 @@ local INTERACTION_DESC = {
   ["D|SMP"] = "the pulse plays the sample from the top",
   ["R|SMP"] = "the changed pulse plays the sample from the top",
   ["C|SMP"] = "the clock pulse plays the sample from the top",
-  ["TM|SMP"] = "nothing. a sample takes a trigger, and a register sends notes",
   ["GVOICE|SMP"] = "the drum's answering pulse plays the sample",
   ["voice|SMP"] = "the voice's own strike plays the sample",
   ["E|SMP"] = "nothing continuous. only a pulse plays a sample",
@@ -1553,13 +1547,11 @@ local INTERACTION_DESC = {
   -- position, and cabling it to a second Out cell moves it rather than
   -- adding to it. two Out cells together is not a cable at all -- and a
   -- pulse cell reaching one is not either: an output carries audio, and a
-  -- trigger, a rule, a clock and a register all make pulses and notes rather
-  -- than sound.
+  -- trigger, a rule and a clock all make pulses rather than sound.
   ["O|O"] = "nothing. an output is a destination, never a source",
   ["D|O"] = "nothing. an output carries sound, and a trigger makes pulses",
   ["R|O"] = "nothing. an output carries sound, and a rule makes pulses",
   ["C|O"] = "nothing. an output carries sound, and a clock makes pulses",
-  ["TM|O"] = "nothing. an output carries sound, and a register makes notes",
   -- a drum answers its own strike with a pulse a tick later, so it can drive
   -- a voice the way a trigger does.
   ["voice|GVOICE"] = "the drum's answering pulse strikes the voice, which answers in turn",
@@ -1569,7 +1561,6 @@ local INTERACTION_DESC = {
   ["LFO|E"] = "open the LFO's page to pick which of the exciter's knobs it moves",
   ["LFO|GUST"] = "open the LFO's page to pick which of the gust's knobs it moves",
   ["LFO|GVOICE"] = "open the LFO's page to pick which of the drum's knobs it moves",
-  ["LFO|TM"] = "open the LFO's page to pick which of the register's knobs it moves",
   ["LFO|D"] = "open the LFO's page to pick which of the trigger's knobs it moves",
   ["LFO|R"] = "open the LFO's page to pick which of the rule's knobs it moves",
   ["LFO|C"] = "open the LFO's page to pick which of the clock's knobs it moves",
@@ -1585,9 +1576,8 @@ local INTERACTION_DESC = {
 -- half retyped and one of which would eventually drift.
 local SYNTH_DESC = {
   D = "the pulse plays a note on the synth, which answers with a pulse of its own",
-  R = "the changed pulse plays a note, which answers in turn",
+  R = "the changed pulse plays a note, which answers in turn; on turing it tunes it too",
   C = "the clock pulse plays a note on the synth",
-  TM = "the register tunes the synth. cable a trigger in to play it",
   E = "the exciter bends the synth, and the synth rides the exciter's colour",
   GVOICE = "the drum's answering pulse plays a note, and its sound bends the synth",
   GUST = "the two cross modulate. turn up Cross on both to hear it",
@@ -1598,7 +1588,7 @@ local SYNTH_DESC = {
 }
 
 local TYPE_ORDER = {
-  LFO = 0, voice = 1, D = 2, R = 3, E = 4, C = 7, TM = 8,
+  LFO = 0, voice = 1, D = 2, R = 3, E = 4, C = 7,
   GVOICE = 9, GUST = 10, FM = 10.3, VA = 10.6, SMP = 11, O = 12,
 }
 
@@ -1639,7 +1629,15 @@ local HIGH_DESC = {
   O = "nothing. an output carries sound, and this carries a gate",
 }
 
+-- §2.3b a FILL cell isn't in INTERACTION_DESC at all -- true of every pair it
+-- could be part of, not a gap in the table: gridui.lua refuses to cable one
+-- to anything, so the honest answer for a held pair that happens to include
+-- one is that there is no cable here to describe, worded so it reads as the
+-- deliberate exception it is rather than as a missing entry.
+local FILL_TEXT = "nothing -- a Fill cell isn't cabled. hold it to punch its flavour of fill in"
+
 local function interaction_text(ta, tb)
+  if ta == "FILL" or tb == "FILL" then return FILL_TEXT end
   local a, b = ta, tb
   if (TYPE_ORDER[a] or 99) > (TYPE_ORDER[b] or 99) then a, b = b, a end
   return INTERACTION_DESC[a .. "|" .. b] or "no direct interaction defined"

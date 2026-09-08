@@ -113,8 +113,8 @@ function mixer.channel_name(id)
 end
 
 -- which Output cells are carrying anything, in row order (left to right,
--- which is also hard left to hard right in the stereo field -- so the page
--- reads like the image sounds).
+-- which is also left to right in the stereo field -- so the page reads like
+-- the image sounds).
 function mixer.active_outputs()
   local out = {}
   for id, cell in topology.each() do

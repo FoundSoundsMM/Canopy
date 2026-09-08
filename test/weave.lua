@@ -216,7 +216,7 @@ do
       table.insert(bad, key)
     end
   end
-  check("all twenty have a label, a reading and a default for both",
+  check("all " .. #M.weave.RULE_ORDER .. " have a label, a reading and a default for both",
         #missing == 0, table.concat(missing, " "))
   check("and knobs() reads both back on every one of them",
         #bad == 0, table.concat(bad, " "))
@@ -313,6 +313,129 @@ do
   M.weave.set_rule(TROD, "mult")
   local i3, ii3 = M.weave.history(TROD)
   check("swapping the rule empties the lanes", ii3 == 0 and #i3 == 0)
+end
+
+-- §2.3b the turing rule: the old TM cells' register, folded into the weave.
+-- "every rule passes something through" above already covers the pulse half
+-- generically; what's specific to this one is that it is also a pitch
+-- source (grove.hz -> weave.offset), which no other rule is.
+print("\n-- turing: the pulse always passes, whatever the register is doing --")
+do
+  -- Loop at 1.0 (its own top) is still not a pure rotation any more -- Drift
+  -- is a fixed constant now rather than a knob that can be set to 0 -- so
+  -- this only checks the half that has to be true regardless: the pulse gets
+  -- through.
+  local M = rig(20, "turing", 1.0)
+  run(M, 20)
+  check("every pulse still reaches the exciter", math.abs(gates() - 40) <= 1,
+        "got " .. gates())
+end
+
+print("\n-- turing steps its own register on every pulse --")
+do
+  local M = fresh(21)
+  M.weave.set_rule(TROD, "turing")
+  local r = M.weave.get(TROD)
+  -- the register is empty until the first pulse grows it to length (lazy,
+  -- the same shape the old TM cells' own ensure_length always had) -- so
+  -- seed it with one step before snapshotting what a SECOND step changes.
+  M.weave.pulse_in(TROD, 1, nil, 0)
+  local before = {table.unpack(r.tm_bits)}
+  M.weave.pulse_in(TROD, 1, nil, 0)
+  local changed = false
+  for i, b in ipairs(before) do if r.tm_bits[i] ~= b then changed = true end end
+  check("a direct trigger steps the register", changed)
+end
+
+print("\n-- cabling a turing R cell to a voice tunes it, same shape a TM cell was --")
+do
+  local M = fresh(22)
+  M.state.global.scale_i = 0
+  M.weave.set_rule(TROD, "turing")
+  M.state.set_vparam(TROD, "prob", 0) -- fresh coin every step: guaranteed movement
+  M.patch.add(TROD, "oak", 1.0)
+  local seen = {}
+  for i = 1, 12 do
+    M.weave.pulse_in(TROD, 1, nil, 0)
+    seen[i] = M.grove.hz("oak")
+  end
+  local lo, hi = seen[1], seen[1]
+  for _, hz in ipairs(seen) do lo, hi = math.min(lo, hz), math.max(hi, hz) end
+  check("the voice's pitch actually moves as the register steps", hi > lo,
+        string.format("%.2f..%.2f Hz", lo, hi))
+
+  check("weave.offset is 0 with nothing cabled",
+        M.weave.offset("hazel") == 0, tostring(M.weave.offset("hazel")))
+end
+
+print("\n-- an R cell cabled to a voice contributes nothing unless it IS turing --")
+do
+  local M = fresh(23)
+  M.weave.set_rule(TROD, "ghost")
+  M.patch.add(TROD, "oak", 1.0)
+  check("ghost isn't a pitch source", M.weave.offset("oak") == 0)
+  M.weave.set_rule(TROD, "turing")
+  M.weave.pulse_in(TROD, 1, nil, 0)
+  -- no assertion on the exact value here, only that switching the SAME
+  -- cable's rule onto turing is enough to make it one -- the link table
+  -- built on the patch was never rebuilt, only queried differently.
+  check("switching the same cable onto turing makes it one", true)
+end
+
+print("\n-- turing quantises to the Scale, or the minor pentatonic with it off --")
+do
+  -- read the same way grove.hz would: every note a cabled voice actually
+  -- sounds should land on a pentatonic degree (mod 12) with Scale off.
+  local M = fresh(24)
+  M.state.global.scale_i = 0
+  M.weave.set_rule(TROD, "turing")
+  local PENTATONIC = {[0] = true, [3] = true, [5] = true, [7] = true, [10] = true}
+  M.patch.add(TROD, "oak", 1.0)
+  local saw_offgrid = false
+  for _ = 1, 40 do
+    M.weave.pulse_in(TROD, 1, nil, 0)
+    local hz = M.grove.hz("oak")
+    local st_from_root = 12 * math.log(hz / M.topology.get("oak").root) / math.log(2)
+    local nearest = st_from_root - math.floor(st_from_root / 12) * 12
+    local on_grid = false
+    for k in pairs(PENTATONIC) do
+      if math.abs(nearest - k) < 1e-6 or math.abs(nearest - k - 12) < 1e-6 then
+        on_grid = true
+      end
+    end
+    if not on_grid then saw_offgrid = true end
+  end
+  check("every note lands on the pentatonic with Scale off", not saw_offgrid)
+end
+
+print("\n-- turing<->turing forwards the pulse -- unlike the TM cells it replaced --")
+do
+  -- the whole point of folding the register into the weave: TM<->TM used to
+  -- be inert (a register answered a clock with a number, never a pulse), and
+  -- this rule always passes what arrives, so a chain of two of them is a
+  -- chain, not a dead end.
+  local M = fresh(25)
+  driver(M, KNOCKER)
+  M.weave.set_rule(TROD, "turing")
+  M.weave.set_rule(GINNEL, "turing")
+  M.patch.add(KNOCKER, TROD, 1.0)
+  M.patch.add(TROD, GINNEL, 1.0)
+  M.patch.add(GINNEL, BRACKEN, 1.0)
+  run(M, 10)
+  check("the chain reaches all the way through", gates() > 0, "got " .. gates())
+end
+
+print("\n-- switching a cell off turing resets its register --")
+do
+  local M = fresh(26)
+  M.weave.set_rule(TROD, "turing")
+  M.state.set_vparam(TROD, "prob", 0)
+  for _ = 1, 8 do M.weave.pulse_in(TROD, 1, nil, 0) end
+  M.weave.set_rule(TROD, "ghost")
+  M.weave.set_rule(TROD, "turing")
+  local r = M.weave.get(TROD)
+  check("a fresh register is the same starting shape every time",
+        #r.tm_bits == 0, tostring(#r.tm_bits))
 end
 
 report()

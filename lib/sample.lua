@@ -41,9 +41,10 @@
 -- same argument one level down.
 --
 -- IT IS HEARD WITHOUT A CABLE, like a gust and unlike everything else that
--- makes a sound here: the engine routes it to the main mix, panned by the
--- column the cell sits in. it spent one build cabled to an Output cell like a
--- voice, on the principle that one rule about what is audible beats two --
+-- makes a sound here: the engine routes it to the main mix, dead centre --
+-- unlike a gust, this family carries no pan of its own. it spent one build
+-- cabled to an Output cell like a voice, on the principle that one rule
+-- about what is audible beats two --
 -- and the principle is right, but a field recording is a bed. the thing you
 -- reach for one to do is fill the room under a patch, and spending an Output
 -- seat and a cable on each of eight of them to get there was a tax on the one
@@ -485,9 +486,9 @@ function sample.init(d)
   sample.scan(d)
   for _, id in ipairs(sample.each()) do
     local cell = topology.get(id)
-    -- pan is fixed by where the cell sits and is the only thing here the
-    -- player cannot move, so it is pushed once and never again -- exactly as
-    -- a gust's is.
+    -- always centre now (topology.lua's SMP_CELLS carry no pan of their
+    -- own) -- pushed once and never again, the same shape a gust's fixed pan
+    -- has, in case a future build gives this row something to move.
     bridge.smp_pan(cell.index, cell.pan or 0)
     sample.push_all(id)
   end

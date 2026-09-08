@@ -39,15 +39,16 @@ do
     "OOOOOOOOOOOOOOOO",
     "MMMM.FFFNNN.XXVV",
     "................",
-    "S..ttCTTTTCtt..S",
+    "S..ffCTTTTCff..S",
     ".S...CTTTTC...S.",
     "E.S...LLLL...S.R",
     "EE.S.GGGGGG.S.RR",
     "EEE..GGGGGG..RRR",
   }
-  -- the letter each type prints on the map above. lower case only to keep the
-  -- two-character family (TM) to one column each.
-  local LETTER = {O = "O", voice = "M", GVOICE = nil, D = "T", TM = "t",
+  -- the letter each type prints on the map above. lower case "f" for FILL
+  -- keeps it distinct from "F" (percussion-ping) in this case-sensitive
+  -- comparison, the same trick "t" (D cells are "T") used to play for TM.
+  local LETTER = {O = "O", voice = "M", GVOICE = nil, D = "T", FILL = "f",
                   C = "C", SMP = "S", E = "E", R = "R", GUST = "G",
                   LFO = "L", FM = "X", VA = "V"}
   local rows_ok = true
@@ -130,7 +131,10 @@ do
   local seen, missed = {}, {}
   local n = 0
   for id, cell in M.topology.each() do
-    if not seen[cell.type] then
+    -- §2.3b a FILL cell is the one deliberate exception: no page at all, so
+    -- a press engages its flavour instead of opening one -- see the
+    -- dedicated section below rather than this generic loop.
+    if not seen[cell.type] and cell.type ~= "FILL" then
       seen[cell.type] = true
       n = n + 1
       local x, y = xy(M, id)
@@ -147,6 +151,56 @@ do
   check("every type opens and closes on a tap", #missed == 0,
         table.concat(missed, ","))
   check("and that was every type on the panel", n >= 10, tostring(n))
+end
+
+-- §2.3b a FILL cell: held, not tapped -- no page, no cable ------------------
+
+print("\n-- a Fill cell is engaged on press and released on let-go, not tapped open --")
+do
+  local M = fresh(21)
+  local gridui = wl("gridui")
+  local fill = wl("fill")
+  local x, y = xy(M, "fill.ratchet")
+
+  gridui.on_grid_key(x, y, 1, NONE)
+  check("pressing it engages immediately", fill.is_engaged("fill.ratchet"))
+  check("and opens no settings page", M.state.cell_edit == nil,
+        tostring(M.state.cell_edit))
+
+  T = T + 0.05
+  gridui.on_grid_key(x, y, 0, NONE)
+  check("letting go disengages it", not fill.is_engaged("fill.ratchet"))
+  check("still no page", M.state.cell_edit == nil, tostring(M.state.cell_edit))
+end
+
+print("\n-- a Fill cell cannot be cabled, held as the anchor or as the target --")
+do
+  local M = fresh(22)
+  local gridui = wl("gridui")
+  local ax, ay = xy(M, "fill.haunt")
+  local bx, by = xy(M, "oak")
+
+  -- hold the Fill cell, tap a voice: no cable either way round.
+  gridui.on_grid_key(ax, ay, 1, NONE)
+  T = T + 0.05
+  gridui.on_grid_key(bx, by, 1, NONE)
+  T = T + 0.05
+  gridui.on_grid_key(bx, by, 0, NONE)
+  gridui.on_grid_key(ax, ay, 0, NONE)
+  check("holding a Fill cell and tapping a voice draws no cable",
+        M.patch.degree("fill.haunt") == 0, tostring(M.patch.degree("fill.haunt")))
+  check("and the voice stayed uncabled too",
+        M.patch.degree("oak") == 0, tostring(M.patch.degree("oak")))
+
+  -- and the other way round: hold the voice, tap the Fill cell.
+  gridui.on_grid_key(bx, by, 1, NONE)
+  T = T + 0.05
+  gridui.on_grid_key(ax, ay, 1, NONE)
+  T = T + 0.05
+  gridui.on_grid_key(ax, ay, 0, NONE)
+  gridui.on_grid_key(bx, by, 0, NONE)
+  check("holding a voice and tapping a Fill cell draws no cable either",
+        M.patch.degree("fill.haunt") == 0 and M.patch.degree("oak") == 0)
 end
 
 print("\n-- a slow tap still counts as a tap --")

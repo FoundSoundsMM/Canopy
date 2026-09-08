@@ -1,6 +1,6 @@
 arg = {os.getenv("ROOT")}
 dofile(os.getenv("SP") .. "/harness.lua")
--- the population: 16 O + 4 voice + 8 D + 4 TM + 4 C(clock) + 4 SMP +
+-- the population: 16 O + 4 voice + 8 D + 4 FILL + 4 C(clock) + 4 SMP +
 -- 4 F(grove) + 6 R + 6 GVOICE + 6 E + 12 GUST + 4 LFO = 78 live cells
 -- (Climate and its 8 cells are gone entirely; the ten cells that were the
 -- Q4/Q6 step lanes are the gusts now, §2.11; and the heartwood lattice's four
@@ -52,14 +52,18 @@ end)
 -- this used to be the grove's continuous half -- four fields cabled to the
 -- voices and to each other, moving on every tick -- and that family is gone
 -- (§2.6). a register moves only when something clocks it, so all four are
--- cabled to a voice each and driven off one trigger.
+-- cabled to a voice each and driven off one trigger. §2.3b: a register is an
+-- R cell on the weave's turing rule now, not a TM cell -- four of the six
+-- forced onto it here, the same way the old four TM cells were the whole
+-- family.
 bench("registers, all 4 clocked and tuning", function(M)
-  local tms, voices = {}, {}
+  local regs, voices = {}, {}
   for id, c in M.topology.each() do
-    if c.type == "TM" then table.insert(tms, id) end
+    if c.type == "R" and #regs < 4 then table.insert(regs, id) end
     if c.type == "voice" then table.insert(voices, id) end
   end
-  for i, id in ipairs(tms) do
+  for i, id in ipairs(regs) do
+    M.weave.set_rule(id, "turing")
     M.patch.add("d.gabriel", id, 0.9)
     M.patch.add(id, voices[((i - 1) % #voices) + 1], 0.8)
   end

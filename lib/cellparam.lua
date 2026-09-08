@@ -1,14 +1,18 @@
 -- cellparam.lua
 -- a settings page for every cell type that did not already have one.
 --
--- voice/GVOICE/TM cells each kept their own PARAMS list (voice.lua,
--- gvoice.lua, tm.lua) because each is a real instrument with its own units.
--- everything else on the panel -- T, R, E, C, Out -- used to
--- have its settings scattered across gestures instead: E2 for "the one knob",
--- K1+E2 to cycle a bank, K1+tap to flip a boolean, E3-with-nothing-focused
--- for decay. that meant the same physical gesture did a different thing (or
--- nothing at all) depending on which cell you were holding, which is exactly
--- the inconsistency this file removes.
+-- voice/GVOICE cells each kept their own PARAMS list (voice.lua, gvoice.lua)
+-- because each is a real instrument with its own units. everything else on
+-- the panel -- T, R, E, C, Out -- used to have its settings scattered across
+-- gestures instead: E2 for "the one knob", K1+E2 to cycle a bank, K1+tap to
+-- flip a boolean, E3-with-nothing-focused for decay. that meant the same
+-- physical gesture did a different thing (or nothing at all) depending on
+-- which cell you were holding, which is exactly the inconsistency this file
+-- removes.
+--
+-- a FILL cell (§2.3b) has no page at all -- cellparam.page returns nil for
+-- one, the same nil it would for any type with nothing registered -- because
+-- it has nothing to set: four fixed flavours, no knob, no cable.
 --
 -- now every cell type answers `page(id)`, and every page is the same object:
 -- a PARAMS list, E1 to pick a row, E2/E3 to move it coarse/fine. what used to
@@ -345,10 +349,9 @@ local function build(kind)
   return page
 end
 
--- the one entry point. voice/GVOICE/TM/GUST/LFO/SMP/FM/VA keep their own
--- modules;
--- everything else lands here. returns nil only for a type with nothing at
--- all to show, which no registered type currently is.
+-- the one entry point. voice/GVOICE/GUST/LFO/SMP/FM/VA keep their own
+-- modules; everything else lands here. returns nil for a type with nothing
+-- at all to show -- currently only FILL (§2.3b).
 function cellparam.page(id)
   local cell = topology.get(id)
   if not cell then return nil end
@@ -362,7 +365,6 @@ function cellparam.page(id)
   end
   if cell.type == "LFO" then return wl("lfo") end
   if cell.type == "SMP" then return wl("sample") end
-  if cell.type == "TM" then return wl("tm") end
   local p = pages[cell.type]
   if p == nil then
     p = build(cell.type) or false

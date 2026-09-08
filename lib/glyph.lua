@@ -364,8 +364,8 @@ function DRAW.steps(x, y, w, h, v, on, _, d)
   local n = (d and d.n) or 13
   local step = w / n
   local bw = math.max(1, math.floor(step) - 1)
-  -- a row that knows its own count (tm.length, an Out cell's feeds) hands it
-  -- over; everything else derives it from the fraction.
+  -- a row that knows its own count (an Out cell's feeds, an LFO's Slot) hands
+  -- it over; everything else derives it from the fraction.
   local lit = (d and d.lit) or math.max(1, math.floor(v * n + 0.5))
   local base = y + h - 1
   local on_r, off_r = {}, {}
@@ -411,10 +411,13 @@ function DRAW.stack(x, y, w, h, v, on, _, d)
   screen.level(hi(on)); fill_all(on_r)
 end
 
--- register: the register, and the bit being read. Tap. this is the one shape
--- that draws another module's live state rather than its own parameter --
--- d.bits is tm.get(id).bits -- because "bit 4" is meaningless without the
--- eight bits next to it, and with them it needs no caption at all.
+-- register: a shift register, and the bit being read. Tap. this is the one
+-- shape that draws another module's live state rather than its own
+-- parameter -- `d.bits` is the owning cell's own bit array (the old TM
+-- cells' shape; the weave's turing rule, §2.3b, keeps the same eight bits
+-- under a different name and no PARAMS row currently wires this glyph up to
+-- them) -- because "bit 4" is meaningless without the eight bits next to it,
+-- and with them it needs no caption at all.
 function DRAW.register(x, y, w, h, v, on, _, d)
   local n, bw, gap = 8, 2, 1
   local x0 = x + math.floor((w - (n * (bw + gap) - gap)) / 2 + 0.5)

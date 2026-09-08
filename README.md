@@ -30,13 +30,13 @@ short:
   is what "one shot" has to mean, and is not what the buffer did before. Loop
   wraps and *holds*: the first pulse swells it in and leaves it running, the
   next lets it go;
-- **and all eight are heard with no cable at all**, panned by the column they
-  sit in, the way a gust is. They spent one build cabled to an Output cell
-  like a voice, on the principle that one rule about what is audible beats
-  two — but a field recording is a bed, and spending an Output seat and a
-  cable on each of eight of them to get there was a tax on the one family
-  that never wanted the placement. A cable to an Output cell still works and
-  still places a second copy.
+- **and all eight are heard with no cable at all**, dead centre — unlike a
+  gust, this family carries no pan of its own. They spent one build cabled to
+  an Output cell like a voice, on the principle that one rule about what is
+  audible beats two — but a field recording is a bed, and spending an Output
+  seat and a cable on each of eight of them to get there was a tax on the one
+  family that never wanted the placement. A cable to an Output cell still
+  works and still places a second copy.
 
 Seven smaller changes came with it:
 
@@ -240,7 +240,7 @@ needs (spec §2.11b, §4.1c, §4.4):
 1    O   O   O   O   O   O   O   O   O   O   O   O   O   O   O   O
 2    M   M   M   M   ·   F   F   F   N   N   N   ·   X   X   V   V
 3    ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·   ·
-4    S   ·   ·  TM  TM   C   T   T   T   T   C  TM  TM   ·   ·   S
+4    S   ·   ·  FL  FL   C   T   T   T   T   C  FL  FL   ·   ·   S
 5    ·   S   ·   ·   ·   C   T   T   T   T   C   ·   ·   ·   S   ·
 6    E   ·   S   ·   ·   ·   L   L   L   L   ·   ·   ·   S   ·   R
 7    E   E   ·   S   ·   G   G   G   G   G   G   ·   S   ·   R   R
@@ -248,21 +248,25 @@ needs (spec §2.11b, §4.1c, §4.4):
 ```
 
 `O` output · `M` modal voice · `F`/`N` percussion (ping / noise) ·
-`X` 2-op FM synth · `V` wavefolding VA synth · `TM` register · `C` clock ·
+`X` 2-op FM synth · `V` wavefolding VA synth · `FL` fill (unpatched
+performance button) · `C` clock ·
 `T` trigger · `S` sample player (two mirrored diagonals of four) ·
-`E` exciter · `R` weave · `G` gust · `L` LFO.
+`E` exciter · `R` weave (includes `turing`, the old TM register, as a rule) ·
+`G` gust · `L` LFO.
 
 `·` is dark and inert — an unregistered coordinate, not a cell you can
 reach. The shape of what is left is what makes the panel readable.
 
 - **Nothing is heard by default** — with two exceptions. The top row is
-  sixteen Output cells; position sets pan, hard left to hard right. Cabling a
-  voice, a percussion cell or an exciter to one is the only way it's ever
-  audible: the fixed automatic panning every voice used to get for free is
-  gone, along with the always-on mix that used to carry it. The gusts and the
-  sample cells are the two families that route themselves, each panned by the
-  column it sits in — one is a key you press and one is a bed you lay down,
-  and neither wants an Output seat spent on it to make a sound.
+  sixteen Output cells; position sets pan, widest left to widest right,
+  capped at 85% of the way to either edge rather than run out to the hard
+  wall. Cabling a voice, a percussion cell or an exciter to one is the only
+  way it's ever audible: the fixed automatic panning every voice used to get
+  for free is gone, along with the always-on mix that used to carry it. The
+  gusts and the sample cells are the two families that route themselves —
+  one is a key you press and one is a bed you lay down, and neither wants an
+  Output seat spent on it to make a sound — but only the gusts carry a pan of
+  their own, by the column each sits in; the sample cells sit dead centre.
 - **One cable point per voice, not four.** The old T/P/M/O socket cluster is
   gone; each voice (Oak, Hazel, Alder, Rowan) is now a single **M** cell that
   is simultaneously the tap-to-open-settings-page target and the sole cable
@@ -273,9 +277,11 @@ reach. The shape of what is left is what makes the panel readable.
   the other end: a pulse always strikes it now (discrete choke is gone —
   there's no socket left to carry the difference); a stream (an exciter, a
   gust, an LFO) always drives its mod path, per the sound page's own new
-  **Balance** knob; a Turing Machine cell tunes it, per the new
-  **Depth** knob; cabling to another voice is fully symmetric — each side's
-  audio feeds the other's mod path, and either can strike the other.
+  **Balance** knob; an R cell on the weave's `turing` rule tunes it, per the
+  new **Depth** knob, and the same cable strikes it too since the rule always
+  passes the pulse through; cabling to another voice is fully symmetric —
+  each side's audio feeds the other's mod path, and either can strike the
+  other.
   **Hardness**, **Depth** and **Balance** — the old sockets' own knobs — now
   live as three extra rows on the voice's sound page.
 - **Climate is gone; Clock is new.** The eight slow C-cell modulators
@@ -293,7 +299,7 @@ reach. The shape of what is left is what makes the panel readable.
   (noise) on the panel instead of **G**.
 - **The bottom two rows are twelve gusts.** Two step-sequencer lanes (Q4 and
   Q6) sat here briefly and are gone: what the panel wanted there was not
-  another way to make a pulse — it already has T, C, R and TM — but something
+  another way to make a pulse — it already has T, C and R — but something
   to *play*. A gust is a small drone synth, loosely a Ciat-Lonbarde Deerhorn:
   a folded triangle under a slow swell and a slow fall you set per cell.
   Press one and it sounds; a pulse cabled in sounds it too. It is the one
@@ -361,8 +367,10 @@ panel has a gesture that only it responds to any more.
   everything else drops to a floor — so the grid is showing the same one
   thing the screen is. Close the page and the panel comes back.
 - **`K1` + tap fires the cell**, whatever it is: a voice or a percussion cell
-  strikes, an exciter fires one grain, a T / R / TM / C cell sends one pulse
-  out of its own door, and a gust or a sample cell plays. This is how you
+  strikes, an exciter fires one grain, a T / R / C cell sends one pulse
+  out of its own door (an R cell on `turing` clocks its register the same
+  way), and a gust or a sample cell plays. A FILL cell is the one exception —
+  hold it rather than tapping it (§2.3b). This is how you
   audition a voice without patching anything — and if nothing it makes can
   reach an Output cell, directly or down the chain, it says **no output
   cable** rather than leaving you wondering. Gusts and sample cells are the
@@ -417,10 +425,10 @@ panel has a gesture that only it responds to any more.
   — no code, no rebuild. **Mode** is one shot or loop: one shot plays it
   once and stops, loop wraps and holds until the next pulse on that cell lets
   it go. One shot is the default. All eight are heard **with no cable at
-  all**, panned by the column they sit in, the way a gust is — a cable to an
-  Output cell still works and places a second copy. There is no path from one
-  into a voice's resonator; the six E cells are still the panel's excitation
-  sources.
+  all**, dead centre — unlike a gust, this family carries no pan of its own —
+  and a cable to an Output cell still works and places a second copy. There
+  is no path from one into a voice's resonator; the six E cells are still the
+  panel's excitation sources.
 - **An LFO picks what it moves.** Cable one anywhere and its page gains
   **Target** (which of the cells it is cabled to) and **Param** (which row of
   *that cell's* own settings page). It then moves exactly that knob, by
@@ -548,12 +556,18 @@ to actually render audio.
   play the counts they claim, Kuramoto locking at positive and negative
   gain, Still, and a densely cross-patched graph (including a voice-out
   loop) staying bounded.
-- `weave.lua` — every one of the six surviving rules emits, divide/mult/mask
-  produce the exact counts they promise (still reachable by cycling even
-  though nothing defaults to them any more), sift gates on weight, accent
-  reshapes without dropping, hocket round-robins its cables, delay is
-  musical rather than millisecond, a chain of the multiplying rules with a
-  voice loop in it stays bounded.
+- `weave.lua` — every rule emits, divide/mult/mask produce the exact counts
+  they promise (still reachable by cycling even though nothing defaults to
+  them any more), sift gates on weight, accent reshapes without dropping,
+  hocket round-robins its cables, delay is musical rather than millisecond, a
+  chain of the multiplying rules with a voice loop in it stays bounded; and
+  `turing` (§2.3b, the old TM cells' mechanic) always passes its pulse
+  through regardless of what the register is doing, steps the register on
+  every arrival, tunes a cabled voice through `weave.offset`, contributes
+  nothing when the same cell is on any other rule, quantises to the Scale or
+  the minor pentatonic with it off, forwards through a turing→turing chain
+  (unlike the TM↔TM pair it replaced, which was inert), and resets its
+  register whenever the rule is set, on or off it.
 - `clockcell.lua` — Mode: High stops a cell clocking and holds every family
   at the far end of its cables open instead — at that family's own engine
   index, which the drums' and the gusts' gates got wrong for a while (their
@@ -676,13 +690,15 @@ to actually render audio.
   clamp, print and reach the engine; the ranges and the state are the gusts'
   delay line's own, unchanged; and an LFO can move a Send knob like any other
   row.
-- `tm.lua` — the four Turing Machine cells at their coordinates, register
-  stepping, pitch feeding a voice directly (no more P socket to route
-  through), and the Marbles rework: no outgoing pulse under any circumstance,
-  K1+tap clocking the register rather than firing one, Bias moving the whole
-  line by an octave rather than skewing the coin, the Steps ladder walking
-  from continuous to one locked note, and a register cabled downstream of
-  another register being inert.
+- `fill.lua` — the four unpatched Fill cells at the seats the TM cells used
+  to hold, one flavour each; idle, nothing changes; each flavour engaged
+  changes every primary pulse crossing `rambler.emit_from` while held and
+  nothing once released (Ratchet layers a fast decaying burst, Haunt one
+  quiet echo, Volley one full-weight copy, Lull thins the panel out
+  instead); two flavours held together layer rather than cancelling; an
+  echo is never itself re-filled, so holding two stays bounded rather than
+  compounding geometrically; and an external transport Start drops every
+  echo still in flight.
 - `gparam.lua` — the global param page: eight rows on exactly one screen, E1
   clamped at both ends, BPM's coarse/fine steps and clock/floor/ceiling
   clamping, Scale's one-entry-per-flick detent, Plonks widening the per-strike

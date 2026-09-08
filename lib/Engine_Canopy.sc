@@ -923,10 +923,11 @@ Engine_Canopy : CroneEngine {
 		// is a fade rather than a step; squared, so the bottom of the fader's
 		// travel is usable rather than jumping straight to loud.
 		//
-		// each of the sixteen channels has a FIXED pan position, hard left
-		// at channel 0 to hard right at channel 15 (keep this identical to
-		// topology.lua's `pan = -1 + 2*(i-1)/15` for O cell i) -- position
-		// along the row is what sets pan, not a knob. cabling one source to
+		// each of the sixteen channels has a FIXED pan position, widest left
+		// at channel 0 to widest right at channel 15, short of the hard edges
+		// by the same 0.85 ceiling topology.lua's OUT_PAN_MAX applies (keep
+		// this identical to `pan = (-1 + 2*(i-1)/15) * 0.85` for O cell i) --
+		// position along the row is what sets pan, not a knob. cabling one source to
 		// several O cells sums it at each position it reaches, each at that
 		// cable's own gain (patch.lua's ordinary bipolar gain), the same way
 		// several cables landing on one mod-path bus already sum.
@@ -964,7 +965,7 @@ Engine_Canopy : CroneEngine {
 				chorus=0, swirl=0.113, shape=0.5, comp=0;
 			var chans = In.ar(outBus, nOut);
 			var lvls = Lag.kr(In.kr(lvlBus, nOut).clip(0, 1).squared, 0.08);
-			var panPos = Array.fill(nOut, { |i| -1 + (2 * i / (nOut - 1)) });
+			var panPos = Array.fill(nOut, { |i| (-1 + (2 * i / (nOut - 1))) * 0.85 });
 			var dry = Mix.ar(Array.fill(nOut, { |i|
 				Pan2.ar(chans[i] * lvls[i], panPos[i]);
 			}));

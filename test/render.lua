@@ -218,9 +218,18 @@ shot("05-voice-p1")
 M.state.vparam_focus = 11
 shot("06-voice-p2")
 
--- the shift register
-M.state.cell_edit = cell_of("TM"); M.state.vparam_focus = 7
+-- the shift register -- §2.3b, an R cell on the weave's turing rule now,
+-- rather than a TM cell of its own.
+local TROD = cell_of("R")
+M.weave.set_rule(TROD, "turing")
+M.state.cell_edit = TROD
 shot("07-turing")
+
+-- §2.3b a Fill cell: no page, no cable -- just its own header and the
+-- one-line description of what it does while held.
+M.state.cell_edit = cell_of("FILL")
+shot("07b-fill")
+M.state.cell_edit = nil
 
 -- §5.2c the scopes. these draw a HISTORY, so an idle rasteriser shows nine
 -- empty lanes and proves nothing -- the patch has to have been playing. cable

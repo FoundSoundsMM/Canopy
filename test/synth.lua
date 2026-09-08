@@ -180,14 +180,15 @@ print("\n-- pitched the same way a modal voice is --")
 do
   -- a register cabled in tunes it, exactly as it would a voice -- which is
   -- the pairing the Marbles rework was for, and the only pitch source there
-  -- is now that the fields are gone (§2.6).
+  -- is now that the fields are gone (§2.6). the register itself is an R cell
+  -- on the weave's turing rule now (§2.3b), not a TM cell.
   local M2 = fresh(8)
   M2.state.global.scale_i = 0
-  M2.state.set_vparam("tm.padfoot", "steps", 0)
-  M2.patch.add("tm.padfoot", VA1, 1.0)
+  M2.weave.set_rule("r.thicket", "turing")
+  M2.patch.add("r.thicket", VA1, 1.0)
   local seen = {}
   for i = 1, 10 do
-    M2.tm.pulse_in("tm.padfoot", 1, nil, 0)
+    M2.weave.pulse_in("r.thicket", 1, nil, 0)
     seen[i] = last(CALLS.va_pitch) and last(CALLS.va_pitch).hz
   end
   local moved = false

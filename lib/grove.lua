@@ -8,10 +8,11 @@
 -- here is the half of it every other family depended on.
 --
 -- why the fields went. a field was a melody generator you patched, and the
--- panel has grown two others that do the job better and more legibly: a
--- Turing machine (§2.3b) answers a clock with a number you can see the shape
--- of, hold, and set the length of, and the global Scale decides what that
--- number lands on. a field did the same thing through eight named modes,
+-- panel has grown two others that do the job better and more legibly: the
+-- weave's own turing rule (§2.7, lib/weave.lua) answers a clock with a
+-- number you can see the shape of, hold, and set the length of, and the
+-- global Scale decides what that number lands on. a field did the same thing
+-- through eight named modes,
 -- none of which was visible on the grid as anything but a brightness, and
 -- four of which were variations on "randomly". nothing that was reachable
 -- with a field is unreachable with a register and a scale; what was lost was
@@ -230,8 +231,9 @@ local PITCHED = {
 
 grove.PITCHED = PITCHED
 
--- is this a cell a register can tune? asked by tm.lua's own link rebuild and
--- by everything that walks the panel looking for something to push.
+-- is this a cell a register can tune? asked by weave.lua's own turing-rule
+-- link rebuild and by everything that walks the panel looking for something
+-- to push.
 function grove.is_pitched(cell)
   return (cell and PITCHED[cell.type]) and true or false
 end
@@ -248,19 +250,20 @@ function grove.depth(voice_id)
   return kind and kind.depth(voice_id) or 1
 end
 
--- root, plus the sound editor's Tune (§5.5), plus whatever the TM cells
--- (§2.3b, lib/tm.lua) cabled to this cell are doing -- scaled by the same
--- depth knob the old P socket had -- plus the global Pitch macro, plus
--- whatever per-strike detune the caller passes in, and then, if Scale has
--- selected one, quantised AS A WHOLE. voice.lua owns Tune; this is the only
--- place all of them are ever summed, and quantising the sum rather than any
--- term of it is what makes the Scale the last word on the note.
+-- root, plus the sound editor's Tune (§5.5), plus whatever R cells running
+-- the weave's turing rule (§2.7, lib/weave.lua) cabled to this cell are
+-- doing -- scaled by the same depth knob the old P socket had -- plus the
+-- global Pitch macro, plus whatever per-strike detune the caller passes in,
+-- and then, if Scale has selected one, quantised AS A WHOLE. voice.lua owns
+-- Tune; this is the only place all of them are ever summed, and quantising
+-- the sum rather than any term of it is what makes the Scale the last word
+-- on the note.
 function grove.hz(voice_id, extra_semitones)
   local cell = topology.get(voice_id)
   if not cell or not cell.root then return nil end
   local kind = PITCHED[cell.type]
   if not kind then return nil end
-  local st = wl("tm").offset(voice_id) * grove.depth(voice_id)
+  local st = wl("weave").offset(voice_id) * grove.depth(voice_id)
              + kind.tune(voice_id)
              + (state.global.pitch_offset or 0) + (extra_semitones or 0)
   st = grove.quantise_semitones(st)
@@ -356,9 +359,10 @@ function grove.init()
   end
 end
 
--- a cable moved. tm.lua rebuilds its own links off the same hook and pushes
--- on its own steps, but nothing there re-pushes a cell whose LAST register
--- cable has just been pulled -- so this is what returns it to its root.
+-- a cable moved. weave.lua rebuilds its own turing links off the same hook
+-- and pushes on its own steps, but nothing there re-pushes a cell whose LAST
+-- register cable has just been pulled -- so this is what returns it to its
+-- root.
 patch.on_change(function()
   for id, cell in topology.each() do
     if grove.is_pitched(cell) then push_voice(id) end

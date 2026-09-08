@@ -101,7 +101,7 @@ local RULES = {}
 weave.RULE_ORDER = {
   "divide", "mult", "delay", "echo", "chance", "accent", "sift", "meet",
   "hocket", "swing", "blur", "latch", "fill", "rest", "flam", "ghost",
-  "roll", "swell", "mask", "shift",
+  "roll", "swell", "mask", "shift", "turing",
 }
 
 local function char2(r)
@@ -109,6 +109,148 @@ local function char2(r)
   return state.base_character_b(r.id, R and R.d2 or 0.5)
 end
 weave.char2 = char2
+
+-- turing: the register a TM cell used to be (§2.3b's history), folded into
+-- the weave as a rule rather than a family of its own. a TM cell had eight
+-- rows -- Length, Deja, Drift, Spread, Bias, Steps -- and a rule gets two, so
+-- this keeps the pair that actually decides what you hear (the loop and how
+-- far it wanders) and fixes the rest at the settings that made a fresh TM
+-- cell sit in tune by default: Bias centred, Steps locked to the global
+-- Scale (the minor pentatonic when Scale itself is "free"), Drift a small
+-- constant, Length the classic eight bits.
+--
+-- unlike every other rule here, this one does two jobs at once. every rule
+-- above is silent until you cable it in and decides what a pulse becomes on
+-- the way through; this rule ALWAYS passes the pulse -- unchanged, like the
+-- plain wire a cable used to be before any rule touched it -- and, on top of
+-- that, is a pitch source for whatever pitched cell (a voice, an FM or a VA
+-- cell) is cabled to this same R cell, exactly the way a TM cell used to be
+-- (grove.lua's PITCHED table, weave.offset below). one cable pair, a
+-- trigger into this cell and this cell into a voice, both strikes the voice
+-- AND tunes it -- where a TM cell needed three (a trigger to the register, a
+-- trigger to the voice, and the register to the voice), because the trigger
+-- this rule already forwards on its way through covers the second of those
+-- for free.
+--
+-- Loop and Spread take effect on the register's NEXT step, the same way a TM
+-- cell's own Deja and Spread rows worked -- a rule's two knobs have no `push`
+-- of their own to re-read the register early (§4.2b's shape is one knob
+-- meaning one thing, not one knob plus a callback), so a nudge sits and
+-- waits for the next pulse exactly the way turning Deja on a live TM cell
+-- always did.
+local TURING_LENGTH = 8
+local TURING_DRIFT = 0.15
+local TURING_SPAN_MIN, TURING_SPAN_MAX = 0.25, 24.0
+local TURING_PENTATONIC = {0, 3, 5, 7, 10}
+
+local function turing_span_text(span)
+  if span < 1 then return string.format("%.0f cents", span * 100) end
+  return string.format("%.1f st", span)
+end
+
+-- nearest tone of `scale` to `x` semitones -- the same small pure routine
+-- grove.lua keeps its own copy of; every module here owns the copies it
+-- needs rather than importing one shared helper.
+local function turing_snap(x, scale)
+  local oct = math.floor(x / 12)
+  local rem = x - oct * 12
+  local best, bd = 0, math.huge
+  for _, s in ipairs(scale) do
+    local d = math.abs(rem - s)
+    if d < bd then bd, best = d, s end
+  end
+  if math.abs(rem - 12) < bd then return (oct + 1) * 12 end
+  return oct * 12 + best
+end
+
+-- Steps, fixed at "scale": the global Scale has the last word, or the minor
+-- pentatonic when Scale itself is "free" -- a TM cell's own default grid,
+-- and the one that needs no knob of its own to ask for.
+local function turing_quantise(x)
+  if (state.global.scale_i or 0) <= 0 then return turing_snap(x, TURING_PENTATONIC) end
+  return wl("grove").quantise_semitones(x)
+end
+
+-- keeps `r.tm_bits` at exactly TURING_LENGTH entries -- lazy, so a cell that
+-- has never run this rule pays nothing for the bits it does not have yet.
+local function turing_ensure_length(r)
+  local n = TURING_LENGTH
+  if #r.tm_bits == n then return end
+  if #r.tm_bits < n then
+    for i = #r.tm_bits + 1, n do r.tm_bits[i] = (i % 2 == 0) and 1 or 0 end
+  else
+    for _ = n + 1, #r.tm_bits do table.remove(r.tm_bits) end
+  end
+end
+
+-- one clock edge: the bit about to fall off the end is kept (looped) -- with
+-- its own small chance of flipping anyway, Drift -- or thrown away for a
+-- fresh coin flip, at a rate Loop decides.
+local function turing_step(r, prob)
+  turing_ensure_length(r)
+  local n = TURING_LENGTH
+  local old = r.tm_bits[n]
+  local new_bit
+  if math.random() < prob then
+    new_bit = old
+    if math.random() < TURING_DRIFT then new_bit = 1 - new_bit end
+  else
+    new_bit = (math.random() < 0.5) and 1 or 0
+  end
+  for i = n, 2, -1 do r.tm_bits[i] = r.tm_bits[i - 1] end
+  r.tm_bits[1] = new_bit
+end
+
+local function turing_loop(r) return char(r) end
+
+-- Spread, in semitones: how wide the distribution the register is read out
+-- into is. log-mapped, same as a TM cell's own Range row, because the useful
+-- half of it is at the narrow end, where this is a detuner rather than a
+-- tune.
+local function turing_spread(r)
+  return TURING_SPAN_MIN * ((TURING_SPAN_MAX / TURING_SPAN_MIN) ^ char2(r))
+end
+
+-- the register's current pitch offset in semitones -- a pure read, same
+-- shape grove.lua's field degree and the old TM cells' own tm.degree always
+-- were: the register read out binary-weighted into -1..+1, scaled by
+-- Spread, snapped onto whatever Steps is asking for (fixed here at "scale").
+local function turing_degree(r)
+  turing_ensure_length(r)
+  local n = TURING_LENGTH
+  local sum, wsum = 0, 0
+  for i = 1, n do
+    local wgt = 2 ^ (i - 1)
+    if r.tm_bits[i] == 1 then sum = sum + wgt end
+    wsum = wsum + wgt
+  end
+  local norm = (wsum > 0) and (sum / wsum) or 0
+  return turing_quantise(norm * 2 * turing_spread(r))
+end
+
+RULES.turing = {
+  label = "Loop", d1 = 0.65, label2 = "Spread", d2 = 0.5,
+  read = function(r)
+    local p = turing_loop(r)
+    return p, string.format("%.0f%% loop", p * 100)
+  end,
+  read2 = function(r)
+    local s = turing_spread(r)
+    return s, turing_span_text(s)
+  end,
+  pulse_in = function(r, w)
+    turing_step(r, turing_loop(r))
+    -- every voice cabled to this cell needs to hear the new value the
+    -- instant the register steps, exactly the way grove.lua's own
+    -- state.on_character_change listener re-pushes a field's voices when its
+    -- Range knob moves -- otherwise the note would sit silent until the
+    -- voice's own next strike asked for it.
+    for _, l in ipairs(r.voices) do wl("grove").push_voice_now(l.id) end
+    -- and always: the pulse that stepped the register keeps going, the same
+    -- as it would through a cell running no rule at all.
+    weave.out(r, w)
+  end,
+}
 
 -- a pulse this rule decided not to pass. the scope draws the hole (§5.2c) --
 -- "a hole in a part is as much a part of the part as a hit is" is a claim the
@@ -637,6 +779,13 @@ local function reset_rule_state(r)
   r.recent = {}
   r.last_fire = 0
   r.src = nil
+  -- the turing rule's own register: fresh every time E1 lands on it (or
+  -- leaves it), the same "a rule left at its defaults does exactly what it
+  -- did before" reasoning the rest of this reset already runs on. `.voices`
+  -- is NOT reset here -- it is not rule state, it is which pitched cells this
+  -- R cell is cabled to, and it is rebuilt on a patch change (see
+  -- rebuild_voice_links below), not on a rule change.
+  r.tm_bits = {}
 end
 
 for id, cell in topology.each() do
@@ -651,11 +800,68 @@ for id, cell in topology.each() do
       ins = {}, ii = 0,
       outs = {}, oi = 0,
       drops = {}, di = 0,
+      voices = {},
     }
     reset_rule_state(r)
     cells[id] = r
     table.insert(order, id)
   end
+end
+
+-- pitch linking (the turing rule only) ---------------------------------------
+-- same shape the old TM cells' own rebuild_links used before this mechanic
+-- moved in here: a cable from an R cell to a pitched cell makes the R cell a
+-- pitch source for it, summed with whatever fields are also cabled there. built
+-- for every R cell regardless of which rule it currently runs -- cheap, only
+-- recomputed on a patch change -- and weave.offset below is what filters to
+-- the ones actually running turing at read time, so switching a cell onto or
+-- off of turing needs no rebuild of its own.
+local voice_links = {}  -- voice_id -> {{m=r_id, gain=}, ...}
+
+local function rebuild_voice_links()
+  voice_links = {}
+  for _, id in ipairs(order) do cells[id].voices = {} end
+
+  for _, id in ipairs(order) do
+    local r = cells[id]
+    for _, edge in ipairs(patch.edges_at(r.id)) do
+      local other_id = patch.other(edge, r.id)
+      local other = topology.get(other_id)
+      -- a one-way cable a->b only sends from a (§3), the same rule grove.lua
+      -- and rambler.lua apply.
+      local can_send = (not edge.oneway) or (edge.a == r.id)
+      -- "a voice" here means any pitched cell -- the four modal voices and
+      -- the two synth families alike (grove.is_pitched).
+      if other and can_send and wl("grove").is_pitched(other) then
+        table.insert(r.voices, {id = other_id, gain = edge.gain})
+        voice_links[other_id] = voice_links[other_id] or {}
+        table.insert(voice_links[other_id], {m = r.id, gain = edge.gain})
+      end
+    end
+  end
+end
+
+patch.on_change(rebuild_voice_links)
+rebuild_voice_links()
+
+-- a voice's total turing offset: every R cell currently running the turing
+-- rule and cabled to it, weighted by cable gain and normalised -- the same
+-- shape the old TM cells' own tm.offset always was. an R cell cabled in but
+-- running any other rule contributes nothing, which is what lets the link
+-- table above stay built for everyone rather than needing a rebuild every
+-- time a rule changes.
+function weave.offset(voice_id)
+  local links = voice_links[voice_id]
+  if not links or #links == 0 then return 0 end
+  local sum, wsum = 0, 0
+  for _, l in ipairs(links) do
+    local r = cells[l.m]
+    if r and r.rule == "turing" then
+      sum = sum + turing_degree(r) * l.gain
+      wsum = wsum + math.abs(l.gain)
+    end
+  end
+  return (wsum > 0) and (sum / wsum) or 0
 end
 
 -- delivery ----------------------------------------------------------------------

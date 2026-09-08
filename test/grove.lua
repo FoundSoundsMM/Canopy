@@ -284,12 +284,14 @@ print("\n-- pulling the cable hands the cell back its own root --")
 do
   local M = fresh(29)
   M.state.global.scale_i = 0
-  -- a register is the pitch source now. steps 0 is the fully locked end of
-  -- the ladder, so the line it plays repeats rather than wandering off.
-  local edge = M.patch.add("tm.padfoot", "oak", 1.0)
+  -- a register is the pitch source now -- an R cell on the weave's turing
+  -- rule (§2.3b), which always quantises to the Scale, or the minor
+  -- pentatonic with Scale off, exactly like the TM cells it replaced.
+  M.weave.set_rule("r.thicket", "turing")
+  local edge = M.patch.add("r.thicket", "oak", 1.0)
   local moved = false
   for _ = 1, 12 do
-    M.tm.pulse_in("tm.padfoot", 1, nil, 0)
+    M.weave.pulse_in("r.thicket", 1, nil, 0)
     if math.abs(M.grove.hz("oak") - OAK_ROOT) > 1e-6 then moved = true end
   end
   check("the register has the voice somewhere else", moved,

@@ -22,9 +22,10 @@
 -- the voice socket collapse: four sockets (T/P/M/O) become one cable
 -- endpoint per voice, and what a cable does is decided entirely by what's at
 -- the other end -- a pulse always strikes; a stream (an exciter, a gust, an
--- LFO on "signal") always feeds the mod path; a field or TM cabled in tunes
--- it (unchanged, handled in grove.lua/tm.lua, never through here); and cabling to an Output row cell
--- is the only way a voice's own audio is ever heard. discrete choke is gone
+-- LFO on "signal") always feeds the mod path; a field or a turing-rule R
+-- cell cabled in tunes it (handled in grove.lua/weave.lua, never through
+-- here); and cabling to an Output row cell is the only way a voice's own
+-- audio is ever heard. discrete choke is gone
 -- -- there is no socket left to carry the distinction -- but the voice
 -- answers into whatever it's cabled to the instant it's struck, same as
 -- always, and that is still how voice<->voice pulse feedback happens.
@@ -215,17 +216,11 @@ HANDLERS["O"] = function() end
 -- there is nothing here for a pulse arriving down a cable to do.
 HANDLERS["LFO"] = function() end
 
--- -> a TM cell: one clock edge. an ordinary cabled pulse never comes through
--- here -- a register is in topology.PULSE_TYPES, so rambler's inbox delivers
--- to tm.pulse_in a tick later and a cycle in the patch cannot recurse. this
--- entry is for the one path that is not a cable: K1+tap on the cell itself
--- (gridui.act), which stands a synthetic full-gain edge up and calls straight
--- in here. it used to be handled by emitting a pulse OUT of the register,
--- which is the half of the module that no longer exists.
-HANDLERS["TM"] = function(source_id, target_id, edge, weight)
-  wl("tm").pulse_in(target_id, util.clamp(weight or 1, 0, 1), source_id,
-                    util.time())
-end
+-- -> a FILL cell: nothing. it carries no cable at all (§2.3b, lib/fill.lua)
+-- -- gridui.lua refuses to patch one -- so this entry exists only so a pulse
+-- that somehow lands on one anyway falls through as quietly as it does on an
+-- O, C or LFO cell, rather than as an unhandled case.
+HANDLERS["FILL"] = function() end
 
 -- §2.9b the gates. a Clock cell set to High (lib/clockcell.lua) does not
 -- pulse; it holds every cell it is cabled to open for as long as it is set

@@ -270,7 +270,7 @@ function fresh(seed)
   for _, n in ipairs({"topology", "patch", "state", "bridge", "quantise",
                       "lexicon", "sample", "grove", "clockcell", "weave",
                       "dispatch", "voice", "gvoice", "rambler", "exciter",
-                      "gparam", "mixer", "colour", "tm", "gust", "lfo",
+                      "gparam", "mixer", "colour", "fill", "gust", "lfo",
                       "send", "synth", "cellparam"}) do
     M[n] = wl(n)
   end
