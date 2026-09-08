@@ -249,7 +249,7 @@ end
 -- checking is that the walk is a walk: strictly one page per press, in one
 -- fixed order, stopping dead at both ends.
 
-local VIEWS = {"global", "gusts", "mixer", "send", "colour", "map"}
+local VIEWS = {"global", "gusts", "blend", "mixer", "send", "colour", "map"}
 
 print("\n-- K3 forward, K2 back, one page at a time --")
 do

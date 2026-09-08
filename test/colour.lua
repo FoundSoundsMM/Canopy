@@ -164,10 +164,12 @@ do
   M.state.view = "global"
   M.state.cell_edit = nil
   M.state.held = {}
-  -- §2.11c the Send page sits between the mixer and Colour, so Colour is one
-  -- press further along than it was.
-  press(3); press(3); press(3); press(3)
-  check("four K3s from the main screen land on Colour",
+  -- §2.11c the Send page sits between the mixer and Colour, and the Blend
+  -- page sits between the gusts and the mixer, so Colour is two presses
+  -- further along than it once was: global -> gusts -> blend -> mixer ->
+  -- send -> colour.
+  press(3); press(3); press(3); press(3); press(3)
+  check("five K3s from the main screen land on Colour",
         M.state.view == "colour", M.state.view)
 
   -- the encoders follow the screen: E1 walks this page's own cursor and E2
