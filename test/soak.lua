@@ -149,7 +149,7 @@ do
 
   -- and every other full-screen page, each reached the way a player reaches
   -- it: one K3 per step down the stack, drawing at each stop.
-  for _, view in ipairs({"gusts", "mixer", "send", "colour", "map"}) do
+  for _, view in ipairs({"gusts", "blend", "mixer", "send", "colour", "map"}) do
     ok = true
     key(3, 1); key(3, 0)
     for _ = 1, 20 do
@@ -159,7 +159,7 @@ do
     check("the " .. view .. " page redraws too", ok and M.state.view == view,
           failures[1] or tostring(M.state.view))
   end
-  for _ = 1, 5 do key(2, 1); key(2, 0) end
+  for _ = 1, 6 do key(2, 1); key(2, 0) end
   check("and K2 walks all the way back to the main screen",
         M.state.view == "global", tostring(M.state.view))
 

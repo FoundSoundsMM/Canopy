@@ -42,12 +42,16 @@ do
   -- master chain's page -- required by Canopy.lua (for the page stack and
   -- its init push) and by screenui (to draw it). §2.11c added send.lua, the
   -- shared effect's page, which every sounding family's own page also reaches
-  -- for its Send row; §2.13 added synth.lua, the FM and VA cells.
+  -- for its Send row; §2.13 added synth.lua, the FM and VA cells. the Blend
+  -- page added blend.lua, required by Canopy.lua (the page stack) and by
+  -- screenui (to draw it) -- the same two reasons colour.lua and send.lua
+  -- are both on this list already.
   local WANT = {
-    "bridge", "cellparam", "clockcell", "colour", "dispatch", "exciter",
-    "fill", "glyph", "gparam", "gridui", "grove", "gust", "gvoice", "lexicon",
-    "lfo", "mixer", "patch", "quantise", "rambler", "sample", "screenui",
-    "send", "state", "synth", "topology", "voice", "weave",
+    "blend", "bridge", "cellparam", "clockcell", "colour", "dispatch",
+    "exciter", "fill", "glyph", "gparam", "gridui", "grove", "gust",
+    "gvoice", "lexicon", "lfo", "mixer", "patch", "quantise", "rambler",
+    "sample", "screenui", "send", "state", "synth", "topology", "voice",
+    "weave",
   }
   check("exactly the expected modules, one copy each",
         table.concat(names, ",") == table.concat(WANT, ","),
