@@ -15,6 +15,7 @@ local topology = wl("topology")
 local state    = wl("state")
 local bridge   = wl("bridge")
 local voice    = wl("voice")
+local blend    = wl("blend") -- the Blend page's Tilt: percussion's own share
 
 local gvoice = {}
 
@@ -209,13 +210,16 @@ function gvoice.level(id)
   return state.get_vparam(id, "level", 0.7) * 1.4
 end
 
--- §8.6 the level with this cell's own trim folded in -- see voice.amp, which
--- this is the drum row's copy of. the six percussion cells span two SynthDefs
--- and, within each, a decay from 60 ms to 400 ms; the trim is what makes
--- Clapper and Knap the same loudness at the same fader.
+-- §8.6 the level with this cell's own trim and the Blend page's Tilt
+-- folded in -- see voice.amp, which this is the drum row's copy of. the six
+-- percussion cells span two SynthDefs and, within each, a decay from 60 ms
+-- to 400 ms; the trim is what makes Clapper and Knap the same loudness at
+-- the same fader. Tilt is the panel-wide argument between this family (and
+-- the modal voices) and the FM/VA pair (lib/blend.lua) -- 1 (untouched)
+-- from centre down, sliding to 0 as the fader leans toward the tonal side.
 function gvoice.amp(id)
   local cell = topology.get(id)
-  return gvoice.level(id) * ((cell and cell.trim) or 1)
+  return gvoice.level(id) * ((cell and cell.trim) or 1) * blend.perc_mult()
 end
 
 function gvoice.param(i)
@@ -231,6 +235,20 @@ end
 
 function gvoice.push_all(id)
   for _, p in ipairs(gvoice.PARAMS) do p.push(id) end
+end
+
+-- Tilt (and anything else that ever needs to reach every drum's Level at
+-- once) re-pushes here rather than waiting for the next per-cell touch --
+-- gust.push_key's shape, one family over.
+function gvoice.push_key(key)
+  for _, p in ipairs(gvoice.PARAMS) do
+    if p.key == key then
+      for id, cell in topology.each() do
+        if cell.type == "GVOICE" then p.push(id) end
+      end
+      return
+    end
+  end
 end
 
 function gvoice.init()

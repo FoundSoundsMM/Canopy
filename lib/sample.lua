@@ -282,18 +282,36 @@ function sample.level(id)
   return state.get_vparam(id, "level", 0.7)
 end
 
--- §8.6 this cell's Level with its RECORDING's trim folded in -- voice.amp's
--- copy for the field recordings, with one wrinkle those do not have.
+-- the Blend page's Samples fader (lib/blend.lua): a plain family volume,
+-- 0 silent to 1 (its default) every cell's own Level untouched. unlike the
+-- gusts' family fader this carries no other meaning, so it stays a straight
+-- multiply with nothing hiding in either half.
+function sample.master()
+  return state.global.smp_master or 1.0
+end
+
+function sample.set_master(v)
+  state.global.smp_master = util.clamp(v, 0, 1)
+  return state.global.smp_master
+end
+
+-- §8.6 this cell's Level with its RECORDING's trim and the family fader
+-- above folded in -- voice.amp's copy for the field recordings, with one
+-- wrinkle those do not have.
 --
 -- the engine SQUARES `level` (it is the fader law for these cells: it keeps
--- the bottom of the travel usable rather than jumping straight to loud). so a
--- trim that is to come out the far side as a plain gain has to go in as its
--- square root, or a 0.22 would land as a 0.05. every trim is at most 1, which
--- is what keeps this inside the engine's own `level.clip(0, 1)` at every
--- position of the knob.
+-- the bottom of the travel usable rather than jumping straight to loud). so
+-- anything that is to come out the far side as a plain gain has to go in as
+-- its square root, or a 0.22 would land as a 0.05 -- which is why the family
+-- fader is folded in under the same sqrt as the recording's own trim rather
+-- than multiplied on afterwards: pulling it to 0.5 halves the loudness, not
+-- the loudness squared. every trim is at most 1 and the family fader tops
+-- out at 1, which is what keeps this inside the engine's own
+-- `level.clip(0, 1)` at every position of both knobs.
 function sample.amp(id)
   local name = sample.file_name(id)
-  return sample.level(id) * math.sqrt((name and sample.FILE_TRIM[name]) or 1)
+  local trim = (name and sample.FILE_TRIM[name]) or 1
+  return sample.level(id) * math.sqrt(trim * sample.master())
 end
 
 -- sounding --------------------------------------------------------------------
@@ -470,6 +488,17 @@ end
 
 function sample.push_all(id)
   for _, p in ipairs(sample.PARAMS) do p.push(id) end
+end
+
+-- the Samples fader re-pushes Level across every cell through here rather
+-- than waiting for the next per-cell touch -- gust.push_key's shape.
+function sample.push_key(key)
+  for _, p in ipairs(sample.PARAMS) do
+    if p.key == key then
+      for _, id in ipairs(sample.each()) do p.push(id) end
+      return
+    end
+  end
 end
 
 -- a register cabled to this cell just stepped, or its last one was just

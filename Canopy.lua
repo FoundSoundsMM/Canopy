@@ -24,6 +24,8 @@
 --     twelve gust cells at once; the family's Decay is the global page's
 --     Decay, which already reaches them, and the delay line they used to own
 --     is on the send page below)
+--   -> blend (Tilt, leaning the drums+modal voices against the FM/VA pair;
+--     the gusts' and samples' own family faders sit here too)
 --   -> mixer (a fader for every Output cell something is cabled to; the list
 --     grows and shrinks with the patch)
 --   -> send (the one delay every voice can reach: Space, Delay, Regen, Tone.
@@ -194,6 +196,7 @@ local lfo      = wl("lfo")    -- §2.12: the four sine LFOs above the gusts
 local sample   = wl("sample") -- §2.5: the eight sample cells, two diagonals
 local fill     = wl("fill") -- §2.3b: four unpatched Fill buttons, loaded for gridui/rambler
 local gparam   = wl("gparam")
+local blend    = wl("blend")  -- the Tilt page between the gusts and the mixer
 local mixer    = wl("mixer")
 local colour   = wl("colour") -- §4.4 the master colour chain, one page past the mixer
 local send     = wl("send")   -- §2.11c the shared send effect and its page
@@ -535,15 +538,22 @@ local k2_solo_press, k3_solo_press = false, false
 -- reference you check rather than a control surface. walking right is walking
 -- downstream.
 --
+-- the Blend page sits between the gusts and the mixer, not with the master
+-- pages past it -- what it moves (a source's own Tilt-scaled Level, a family
+-- fader) is upstream of the mixer's channel faders, the same stage the gusts
+-- page's own macros already occupy. it comes after the gusts rather than
+-- before them because it is the second of two source-level pages, not
+-- because it outranks the first.
+--
 -- §2.11c the Send page sits between the mixer and Colour, which is where its
 -- effect sits in the signal: after the channel faders decide the balance,
 -- before the master chain decides the surface. it is a master page rather
 -- than a family one -- the delay line it drives used to belong to the gusts
 -- and belongs to everything now.
-local VIEW_ORDER = {"global", "gusts", "mixer", "send", "colour", "map"}
+local VIEW_ORDER = {"global", "gusts", "blend", "mixer", "send", "colour", "map"}
 
 -- each page's E1 cursor and its own list, so the encoder handler below drives
--- all four the same way rather than growing a branch per page. the main
+-- all of them the same way rather than growing a branch per page. the main
 -- screen is deliberately not in here: it is the fallthrough, and it is the
 -- one page whose list (gparam) has a nudge with a detented row in it.
 local VIEW_PAGES = {
@@ -551,6 +561,11 @@ local VIEW_PAGES = {
     focus = "guparam_focus",
     count = function() return gust.MACRO_COUNT end,
     nudge = function(i, d, coarse) return gust.macro_nudge(i, d, coarse) end,
+  },
+  blend = {
+    focus = "bparam_focus",
+    count = function() return blend.PARAM_COUNT end,
+    nudge = function(i, d, coarse) return blend.nudge(i, d, coarse) end,
   },
   mixer = {
     focus = "mparam_focus",
@@ -571,8 +586,8 @@ local VIEW_PAGES = {
 
 -- what each page calls itself when you land on it. the main screen says
 -- nothing on the way back to it -- "Canopy" is already the header.
-local VIEW_LABEL = {gusts = "gusts", mixer = "mixer", send = "send",
-                    colour = "colour", map = "map"}
+local VIEW_LABEL = {gusts = "gusts", blend = "blend", mixer = "mixer",
+                    send = "send", colour = "colour", map = "map"}
 
 local function view_index()
   for i, v in ipairs(VIEW_ORDER) do
@@ -702,12 +717,12 @@ function enc(n, d)
   -- there is genuinely nothing under the cursor.
   if state.view == "map" then return end
 
-  -- the gusts page (§2.11b), the mixer (§4.1b) and Colour (§4.4): the same
-  -- E1-select/E2-E3-nudge shape as the global page, over whichever list that
-  -- page owns. one branch for all three, because they differ only in which
-  -- list and which cursor -- see VIEW_PAGES above. the mixer's list can be
-  -- genuinely empty (no cables), so nothing here may assume a row is under
-  -- the cursor.
+  -- the gusts page (§2.11b), Blend (lib/blend.lua), the mixer (§4.1b), Send
+  -- and Colour (§4.4): the same E1-select/E2-E3-nudge shape as the global
+  -- page, over whichever list that page owns. one branch for all of them,
+  -- because they differ only in which list and which cursor -- see
+  -- VIEW_PAGES above. the mixer's list can be genuinely empty (no cables),
+  -- so nothing here may assume a row is under the cursor.
   local page = VIEW_PAGES[state.view]
   if page then
     local count = page.count()

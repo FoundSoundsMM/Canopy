@@ -46,6 +46,7 @@ local topology = wl("topology")
 local state    = wl("state")
 local bridge   = wl("bridge")
 local voice    = wl("voice")
+local blend    = wl("blend") -- the Blend page's Tilt: this pair's own share
 
 local synth = {}
 
@@ -287,8 +288,12 @@ local function cross_row()
   return knob("cross", "Cross", "link", 0.3, "cross")
 end
 
+-- the Blend page's Tilt (lib/blend.lua) folds in here on the way to the
+-- engine, the same way trim folds into voice.amp/gvoice.amp -- the knob
+-- itself still reads the player's own setting; only the push is scaled.
 local function level_row()
-  return knob("level", "Level", "fader", 0.7, "amp")
+  return knob("level", "Level", "fader", 0.7, "amp",
+              function(v) return v * blend.tonal_mult() end)
 end
 
 -- FM ---------------------------------------------------------------------------
@@ -419,6 +424,18 @@ end
 function synth.push_all(id)
   local page = synth.page_for(id)
   if page then page.push_all(id) end
+end
+
+-- Tilt re-pushes Level across both families through here rather than
+-- waiting for the next per-cell touch -- gust.push_key's shape, over the
+-- two PARAMS lists this file keeps instead of one.
+function synth.push_level()
+  for _, id in ipairs(synth.each()) do
+    local page = synth.page_for(id)
+    for _, p in ipairs(page.PARAMS) do
+      if p.key == "level" then p.push(id) end
+    end
+  end
 end
 
 function synth.each(kind)

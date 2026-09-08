@@ -77,6 +77,7 @@ local topology   = wl("topology")
 local patch      = wl("patch")
 local state      = wl("state")
 local gparam     = wl("gparam")
+local blend      = wl("blend")  -- the Tilt page between the gusts and the mixer
 local mixer      = wl("mixer")
 local gust       = wl("gust")   -- §2.11b its family page, not its cell page
 local colour     = wl("colour") -- §4.4 the master colour chain
@@ -515,6 +516,22 @@ function screenui.draw_gusts()
   local pages = math.max(1, math.ceil(gust.MACRO_COUNT / PL_PER_PAGE))
   screenui.draw_header("Gusts", "all twelve", screenui.page_of(focus), pages)
   draw_param_grid(gust.MACROS, focus,
+                  function(q) return q.text() end,
+                  function(q) return q.frac() end,
+                  function(q) return q.glyph_data and q.glyph_data() or nil end)
+end
+
+-- the Blend page (K3 from the gusts) -------------------------------------------
+-- Tilt, and the gusts'/samples' own family faders (lib/blend.lua). three
+-- rows, so like the gusts page this one never has a seam to scroll past --
+-- unlike the gusts page it can never be empty either: there is nothing here
+-- that depends on what the patch is doing.
+
+function screenui.draw_blend()
+  local focus = util.clamp(state.bparam_focus or 1, 1, blend.PARAM_COUNT)
+  local pages = math.max(1, math.ceil(blend.PARAM_COUNT / PL_PER_PAGE))
+  screenui.draw_header("Blend", "perc / tonal", screenui.page_of(focus), pages)
+  draw_param_grid(blend.PARAMS, focus,
                   function(q) return q.text() end,
                   function(q) return q.frac() end,
                   function(q) return q.glyph_data and q.glyph_data() or nil end)
@@ -1732,6 +1749,8 @@ function screenui.redraw()
     screenui.draw_cell(state.cell_edit)
   elseif state.view == "gusts" then
     screenui.draw_gusts()
+  elseif state.view == "blend" then
+    screenui.draw_blend()
   elseif state.view == "mixer" then
     screenui.draw_mixer()
   elseif state.view == "send" then

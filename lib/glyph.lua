@@ -228,6 +228,23 @@ function DRAW.bipolar(x, y, w, h, v, on)
   else bar(cx + 2, my - 1, bw - 4, 2) end
 end
 
+-- crossfade: bipolar lying on its side. Tilt (lib/blend.lua) is the one
+-- fader on the panel you push left or right rather than up or down, so it
+-- is the one shape here drawn sideways -- the picture is a physical throw,
+-- not a borrowed column.
+function DRAW.crossfade(x, y, w, h, v, on)
+  local bh = 11
+  local cy = y + math.floor((h - bh) / 2 + 0.5)
+  local mx = x + math.floor(w / 2 + 0.5)
+  screen.level(lo(on)); frame(x, cy, w, bh)
+  screen.level(md(on)); seg(mx, cy, mx, cy + bh - 1)
+  local d = math.floor((v - 0.5) * 2 * (w / 2 - 2) + 0.5)
+  screen.level(hi(on))
+  if d > 0 then bar(mx, cy + 2, d + 1, bh - 4)
+  elseif d < 0 then bar(mx + d, cy + 2, -d + 1, bh - 4)
+  else bar(mx - 1, cy + 2, 2, bh - 4) end
+end
+
 -- marker: where it sits between the two ends. Tune, Pitch, Pan, a field's
 -- current degree -- a position on a scale rather than an amount of something.
 function DRAW.marker(x, y, w, h, v, on)

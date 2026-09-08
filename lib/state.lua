@@ -72,6 +72,12 @@ state.global = {
   decay_mult = 0.5,  -- global decay multiplier, 0.5 = x1 (voice.lua)
   pitch_offset = 0,  -- global transpose, semitones (grove.lua)
   level = 0.8,       -- K1+E3: master level (the mixer page has no fader for it)
+  -- the Blend page (lib/blend.lua). Tilt is 0.5 = even; the Samples fader is
+  -- a plain 0..1 volume, 1.0 = unity. the gusts fader it sits next to needs
+  -- no entry of its own here -- it is gust_macro.level, already defaulted
+  -- where the rest of that family's macros are.
+  mix_tilt = 0.5,
+  smp_master = 1.0,
   -- §4.3: the ONE flag a freeze lives in, whether it came from K2 or from an
   -- external transport Stop. deliberately not two -- a separate record of
   -- "the transport says stopped" alongside "the gaits are frozen" is two

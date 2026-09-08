@@ -13,6 +13,7 @@
 local topology = wl("topology")
 local state    = wl("state")
 local bridge   = wl("bridge")
+local blend    = wl("blend") -- the Blend page's Tilt: this family's own share
 
 local voice = {}
 
@@ -241,10 +242,12 @@ end
 -- SynthDef and were eleven decibels apart, almost all of it Damp. it belongs
 -- here rather than on the knob because it is not a knob -- the Level row
 -- still reads 0.98 on a fresh cell whichever voice it is, and two voices set
--- to the same number now actually sound the same.
+-- to the same number now actually sound the same. the Blend page's Tilt
+-- (lib/blend.lua) folds in the same way: 1 (untouched) from centre down,
+-- sliding to 0 as the fader leans toward the FM/VA side.
 function voice.amp(id)
   local cell = topology.get(id)
-  return voice.level(id) * ((cell and cell.trim) or 1)
+  return voice.level(id) * ((cell and cell.trim) or 1) * blend.perc_mult()
 end
 
 function voice.param(i)
@@ -261,6 +264,19 @@ end
 
 function voice.push_all(id)
   for _, p in ipairs(voice.PARAMS) do p.push(id) end
+end
+
+-- Tilt re-pushes every modal voice's Level through here rather than waiting
+-- for the next per-cell touch -- gust.push_key's shape, one family over.
+function voice.push_key(key)
+  for _, p in ipairs(voice.PARAMS) do
+    if p.key == key then
+      for id, cell in topology.each() do
+        if cell.type == "voice" then p.push(id) end
+      end
+      return
+    end
+  end
 end
 
 function voice.init()
