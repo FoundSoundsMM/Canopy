@@ -68,6 +68,9 @@ state.global = {
   -- after hearing what the panel does in a scale, not the state you have to
   -- find your way out of on first boot.
   scale_i = 1,
+  -- §4.3 ms to read the transport ahead by (quantise.beats). 0 is the beat
+  -- exactly as norns reports it; an external MIDI clock usually wants some.
+  clock_offset = 0,
   drops = 0,         -- per-strike random pitch offset range
   decay_mult = 0.5,  -- global decay multiplier, 0.5 = x1 (voice.lua)
   pitch_offset = 0,  -- global transpose, semitones (grove.lua)

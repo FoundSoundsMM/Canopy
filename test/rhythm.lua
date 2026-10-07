@@ -284,4 +284,48 @@ do
         string.format("%.3f vs %.3f", loose, tight))
 end
 
+print("\n-- a late scheduler tick does not push a rooted beat a grid line late --")
+do
+  -- a 2ms metro on a busy norns does not run every 2ms. tick at 7ms here --
+  -- well past quantise.CAPTURE -- and every strike must still land within
+  -- one tick of its beat rather than an 8th behind it.
+  local M = fresh(3)
+  M.rambler.set_gait(KNOCKER, "metric")
+  M.state.character[KNOCKER] = 0.5     -- 1 x beat
+  M.rambler.set_rooted(KNOCKER, true)
+  M.patch.add(KNOCKER, KNOCK, 1.0)
+  local step = 0.007
+  for _ = 1, math.floor(20 / step) do
+    T = T + step
+    M.rambler.tick()
+  end
+  check("rate", math.abs(#CALLS.strike - 40) <= 1, "got " .. #CALLS.strike)
+  local worst = 0
+  for _, s in ipairs(CALLS.strike) do
+    local beat = s.t * 2
+    worst = math.max(worst, beat - math.floor(beat))
+  end
+  check("never more than a tick late", worst * 0.5 <= step + 1e-6,
+        string.format("worst %.1f ms late", worst * 500))
+end
+
+print("\n-- the clock offset reads the transport ahead --")
+do
+  local M = fresh(3)
+  M.state.global.clock_offset = 20
+  M.rambler.set_gait(KNOCKER, "metric")
+  M.state.character[KNOCKER] = 0.5
+  M.rambler.set_rooted(KNOCKER, true)
+  M.patch.add(KNOCKER, KNOCK, 1.0)
+  run(M, 10)
+  local sum = 0
+  for _, s in ipairs(CALLS.strike) do
+    local beat = s.t * 2
+    sum = sum + (beat - math.floor(beat + 0.5)) * 500
+  end
+  local mean = sum / #CALLS.strike
+  check("strikes land ~20ms early", math.abs(mean + 20) < 2.5,
+        string.format("mean %.1f ms", mean))
+end
+
 report()

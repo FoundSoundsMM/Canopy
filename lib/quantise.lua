@@ -83,6 +83,29 @@ function quantise.spb()
   return 60 / (clock.get_tempo() or 120)
 end
 
+-- §4.3 the transport as the panel hears it. everything that locks to the
+-- beat (rooted gaits, clock cells, synced LFOs, the grid itself) reads the
+-- beat through here rather than through clock.get_beats(), so one number can
+-- move all of it together.
+--
+-- that number is the clock offset, in ms, and it exists for an external
+-- clock. MIDI clock arrives late -- USB, the sender's own output buffer --
+-- and norns' estimate of the beat trails the 24ppqn ticks it is built from,
+-- and then the sound itself is an audio buffer behind whatever decided to
+-- make it. against a drum machine that is all one steady lag, and the cure
+-- is the one every DAW offers: read the beat a little ahead. positive is
+-- earlier; 0 is the transport exactly as norns reports it.
+quantise.OFFSET_MIN, quantise.OFFSET_MAX = -50, 100
+
+function quantise.offset_ms()
+  return util.clamp(state.global.clock_offset or 0,
+                    quantise.OFFSET_MIN, quantise.OFFSET_MAX)
+end
+
+function quantise.beats()
+  return clock.get_beats() + quantise.offset_ms() / 1000 / quantise.spb()
+end
+
 -- grid selection ------------------------------------------------------------
 
 -- the coarsest division that still fits inside one cycle of a cell running
@@ -154,14 +177,22 @@ end
 --
 -- `period` is the cell's own cycle length in seconds, used to pick its grid;
 -- `gb_override` forces a grid instead (burst passes a whole beat).
-function quantise.snap(now, period, gb_override)
+--
+-- `at_beats`, when the caller knows it, is the beat the emission actually
+-- belongs to -- a rooted gait's wrap, which is a known position on the
+-- transport and not a guess. the grid line is then found from there rather
+-- than from wherever the scheduler happened to notice it. without it, a tick
+-- that ran more than CAPTURE late (and a 2ms metro on a busy norns runs late
+-- all the time) pushed an on-grid beat a whole grid line late: an 8th behind
+-- the clock, on exactly the beats that were already right.
+function quantise.snap(now, period, gb_override, at_beats)
   local chaos = quantise.chaos()
   if chaos >= 1 then return now end
 
   local gb = gb_override or quantise.grid_beats(period)
   local spb = quantise.spb()
-  local beats = clock.get_beats()
-  local line = quantise.next_line(beats, gb, quantise.swing(),
+  local beats = quantise.beats()
+  local line = quantise.next_line(at_beats or beats, gb, quantise.swing(),
                                   quantise.CAPTURE / spb)
   local target = now + (line - beats) * spb
 

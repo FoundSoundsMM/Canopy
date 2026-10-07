@@ -229,7 +229,7 @@ function clockcell.tick(now)
       goto continue
     end
     local ratio = clockcell.ratio(id)
-    local pos = clock.get_beats() * ratio
+    local pos = wl("quantise").beats() * ratio
     local cyc = math.floor(pos)
     -- first tick, or the ratio just changed under us: resync silently rather
     -- than firing a burst of catch-up pulses.

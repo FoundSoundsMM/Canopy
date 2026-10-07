@@ -804,7 +804,7 @@ function lfo.phase(id)
     -- cycle begins on the beat and is still beginning on the beat an hour
     -- later, and two cells at the same ratio are in step with each other and
     -- with every Clock cell without anything having to be reset.
-    ph = (clock.get_beats() * lfo.ratio(id)) % 1.0
+    ph = (wl("quantise").beats() * lfo.ratio(id)) % 1.0
     if ph < 0 then ph = ph + 1 end     -- a transport counting below zero
   elseif last_t[id] == nil then
     ph = 0

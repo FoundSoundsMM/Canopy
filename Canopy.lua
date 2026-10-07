@@ -198,6 +198,7 @@ local fill     = wl("fill") -- §2.3b: four unpatched Fill buttons, loaded for g
 local gparam   = wl("gparam")
 local blend    = wl("blend")  -- the Tilt page between the gusts and the mixer
 local mixer    = wl("mixer")
+local quantise = wl("quantise") -- §4.3: the clock offset param
 local colour   = wl("colour") -- §4.4 the master colour chain, one page past the mixer
 local send     = wl("send")   -- §2.11c the shared send effect and its page
 local rambler  = wl("rambler")
@@ -795,7 +796,23 @@ function clock.transport.reset()
   transport_reset()
 end
 
+-- §4.3 the one transport setting that is the script's rather than norns':
+-- how far ahead of the reported beat everything that locks to it should run
+-- (quantise.beats). lives in the PARAMS menu beside CLOCK, because it is
+-- something you set once against a particular rig and then leave alone.
+local function add_params()
+  if not (params and params.add_number) then return end
+  params:add_separator("canopy_sync", "CANOPY SYNC")
+  params:add_number("clock_offset", "clock offset (ms)",
+                    quantise.OFFSET_MIN, quantise.OFFSET_MAX,
+                    state.global.clock_offset or 0)
+  params:set_action("clock_offset", function(v)
+    state.global.clock_offset = v
+  end)
+end
+
 function init()
+  add_params()
   g = grid.connect()
   g.key = function(x, y, z)
     gridui.on_grid_key(x, y, z, keystate)

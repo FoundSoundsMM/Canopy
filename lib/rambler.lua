@@ -620,7 +620,9 @@ end
 function rambler.emit(r, weight)
   local now = util.time()
   local gait = GAITS[r.gait]
-  local t = quantise.snap(now, period_of(gait, r), gait.quant_grid)
+  -- a rooted wrap knows which beat it belongs to (advance_rooted sets this
+  -- for the length of one fire_wrap); everything else snaps from now.
+  local t = quantise.snap(now, period_of(gait, r), gait.quant_grid, r.wrap_beats)
   if gait.ratchet then gait.ratchet(r, t, util.clamp(weight or 1, 0, 1)) end
   if t <= now + 1e-9 then
     rambler.emit_now(r, weight)
@@ -682,7 +684,7 @@ local function advance_rooted(r, gait)
   -- cells on the same division can sit a fraction of a cycle apart instead of
   -- landing on top of each other.
   local off = gait.read2 and gait.label2 == "Phase" and (gait.read2(r)) or 0
-  local pos = clock.get_beats() * cpb + off
+  local pos = quantise.beats() * cpb + off
   local cyc = math.floor(pos)
   r.phase = pos - cyc
   -- first tick, or the division just changed under us: resync silently.
@@ -691,7 +693,9 @@ local function advance_rooted(r, gait)
   while r.abs < cyc and fired < 4 do
     r.abs = r.abs + 1
     r.cycle = r.abs
+    r.wrap_beats = (r.abs - off) / cpb
     fire_wrap(r, gait)
+    r.wrap_beats = nil
     fired = fired + 1
   end
   r.abs = cyc
